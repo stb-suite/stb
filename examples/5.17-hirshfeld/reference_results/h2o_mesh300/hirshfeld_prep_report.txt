@@ -3,8 +3,8 @@
 [0] RUN METADATA
 ------------------------------------------------------------
 Date/time      : 2026-10-23 18:38:47
-Structure      : /home/carlos/run/stb/4.20/reference_run/relax/h2o/relaxed.fdf
-Calc template  : /home/carlos/Dropbox/dev/stb/examples/5.17-hirshfeld/calc.fdf
+Structure      : /path/to/run/stb/4.20/reference_run/relax/h2o/relaxed.fdf
+Calc template  : /path/to/stb/examples/5.17-hirshfeld/calc.fdf
 Mesh cutoff    : 300 Ry
 Vacuum box     : 20 Ang
 Output dir     : .
@@ -27,7 +27,7 @@ Species | Z | Atoms in combined/ | Neutral folder
 O       | 8 | 1                  | neutral/O     
 H       | 1 | 2                  | neutral/H     
 
-Pseudopotential source: /home/carlos/.anaconda3/envs/stb/lib/python3.12/site-packages/stb/pseudopotentials/dojo
+Pseudopotential source: /path/to/env/lib/python3.12/site-packages/stb/pseudopotentials/dojo
 
 [3] WRITING COMBINED + NEUTRAL-ATOM FOLDERS
 ------------------------------------------------------------

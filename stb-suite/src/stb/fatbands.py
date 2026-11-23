@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -69,6 +69,7 @@ having to know to ask for it.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -89,7 +90,6 @@ from stb.core.band_scatter import (
 )
 
 REPORT_FILE = "stb_fatbands_report.txt"
-BIB_FILE = "references.bib"
 
 CATEGORY_CHOICES = ("l", "ml", "atom", "species", "species_l")
 
@@ -175,7 +175,7 @@ def main():
                "  stb-fatbands --label siesta --shift fermi --projection species --category O Sn\n"
                "  stb-fatbands --label siesta --shift fermi --projection species_l\n"
                "  stb-fatbands --file siesta.bands --wfsx siesta.bands.WFSX --hsx-file siesta.HSX \\\n"
-               "      --shift fermi --save-report --save-gnuplot --view",
+               "      --shift fermi --save-gnuplot --view",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -247,11 +247,11 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write fatbands_<category>.dat/fatbands.gplot (with "
-                             "--save-gnuplot) and stb_fatbands_report.txt/references.bib into "
+                             "--save-gnuplot) into (the report and its references file go to the current folder) "
                              "(default: current directory). Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write fatbands_<category>.dat (one file per category, "
@@ -296,7 +296,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     shift_desc = args.shift if args.shift != "manual" else f"manual ({args.manual_value} eV)"
@@ -442,7 +442,7 @@ def main():
 
     # --- From here on: the numbered, save-able report -------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("fatbands")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-FATBANDS REPORT =====", 'magenta'), f_out)
@@ -547,10 +547,10 @@ def main():
 
     print_section("[5] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status          : OK", f_out)
@@ -563,7 +563,7 @@ def main():
         print_dual(f"Data file       : {path}", f_out)
     if gplot_path:
         print_dual(f"Gnuplot script  : {gplot_path}", f_out)
-    print_dual(f"References      : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References      : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report          : {report_path}", f_out)
 

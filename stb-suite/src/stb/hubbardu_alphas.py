@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -13,6 +13,7 @@
 # extra flag before this change either -- unchanged, just confirmed/reported
 # explicitly now in [0] RUN METADATA.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -26,7 +27,7 @@ from stb.hubbardu import (
     TEMPLATE_STRUCTURE_NAME, TEMPLATE_CALC_NAME, PSEUDO_SNAPSHOT_DIRNAME,
 )
 
-REPORT_FILE = "hubbardu_stage2.txt"
+REPORT_FILE = "stb_hubbarduAlphas_report.txt"
 
 # Default perturbation strengths (eV) for the linear-response fit -- symmetric
 # around zero so the fit isn't skewed by an accidental asymmetry in the
@@ -66,7 +67,7 @@ stb-hubbarduAnalysis.""",
         epilog="Usage example:\n"
                "  %(prog)s --dir hubbardu_runs\n"
                "  %(prog)s --dir hubbardu_runs --alphas -0.2 -0.1 0.1 0.2\n"
-               "  %(prog)s --dir hubbardu_runs --save-report\n"
+               "  %(prog)s --dir hubbardu_runs\n"
     )
 
     parser.add_argument("--dir", type=str, default="hubbardu_runs",
@@ -81,7 +82,7 @@ stb-hubbarduAnalysis.""",
                              f"{DEFAULT_FROZEN_ITERATIONS}; raise this only if "
                              "stb-hubbarduAnalysis finds nothing to parse in those folders).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbarduAlphas {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -118,10 +119,10 @@ stb-hubbarduAnalysis.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("hubbarduAlphas")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

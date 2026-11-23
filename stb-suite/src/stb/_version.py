@@ -6,7 +6,8 @@ tool carries a version of its own.
 Two kinds of branch, set by the constants below:
 
 - a release branch (`main`, `DEV = False`): the version is `RELEASE` exactly, for
-  example `2.0.0`; a bug-fix release raises the last number (`2.0.1`);
+  example `2.0.0`; a bug-fix-only release raises the last number (`2.0.1`), one that
+  changes defaults or adds options the middle one (`2.1.0`);
 - the development branch (`dev`, `DEV = True`): `RELEASE` is the NEXT version and
   the version is `RELEASE.dev<N>` (PEP 440), N being the number of commits since
   the tag `BASE_TAG` of the last release, so it grows with every commit and can be
@@ -30,7 +31,7 @@ import subprocess
 from importlib import metadata
 from pathlib import Path
 
-RELEASE = "2.0.0"
+RELEASE = "2.1.0"
 DEV = False
 BASE_TAG = "v2.0.0"
 

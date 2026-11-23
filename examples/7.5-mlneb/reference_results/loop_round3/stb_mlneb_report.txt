@@ -206,7 +206,7 @@ Each model relaxes its own endpoints and band in the same cell; the foundation m
 
 [10] COMMITTEE UNCERTAINTY
 ------------------------------------------------------------
-Committee         : 3 members of round 3 from /home/carlos/run/stb/5.7/mlff_si/mlff_runs
+Committee         : 3 members of round 3 from /path/to/run/stb/5.7/mlff_si/mlff_runs
 3 committee members on the fine-tuned band (each member's energies relative to its own image 0):
 image | E - E0 (eV) | E spread (eV) | F spread (meV/Ang) | atom | est. F error (meV/Ang) | vs test set
 ------------------------------------------------------------------------------------------------------

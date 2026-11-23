@@ -1,4 +1,5 @@
 output/
-references.bib
+stb_*_references*.bib
 stb_fetch_report.txt
 *.fdf
+stb_*_report*.txt

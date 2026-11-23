@@ -1,6 +1,7 @@
 output/
-references.bib
+stb_*_references*.bib
 stb_bader_report.txt
 *.cube
 Bader-atoms-*.cube
 bader.p
+stb_*_report*.txt

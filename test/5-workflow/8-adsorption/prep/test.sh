@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-adsorb (Adsorption Prep, item 5.8.1)
@@ -69,6 +72,7 @@ RUN=adsorption_run
 
 # --- 2. Single atom, ontop site (default) ---
 echo -e "\n--- Testing a single-atom adsorbate (O), default ontop site ---"
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-intro > log_atom.txt 2>&1
 check_contains "Success:.*1 site folder" log_atom.txt
 check_success $RUN/clean_slab/structure.fdf
@@ -78,7 +82,7 @@ check_contains "kgrid.MonkhorstPack   \[1  1  1\]" $RUN/adsorbate/calc.fdf
 check_contains "Spin.*polarized" $RUN/adsorbate/calc.fdf
 check_success $RUN/sites/site_1_ontop/structure.fdf
 check_contains "NumberofAtoms      3" $RUN/sites/site_1_ontop/structure.fdf
-check_success $RUN/sites/adsorption_sites.txt
+check_success stb_adsorb_report.txt
 check_success $RUN/sites/adsorption_sites.png
 
 echo "Testing: dipole correction is forced (via config_extra.fdf, not calc.fdf directly) on"
@@ -150,6 +154,7 @@ fi
 check_contains "Slab.DipoleCorrection      .true." $RUN/sites/site_1_ontop/config_extra.fdf
 check_contains "\[NOTE\].*'O':.*means the COMBINED" log_nospin.txt
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-intro > log_atom.txt 2>&1
 
 echo "Testing: stb-adsorb no longer writes 'bsse/' at prep time -- that's stb-adsorbBsse's job, "
@@ -163,9 +168,8 @@ else
 fi
 
 # numbered report ([0]-[6], print_section style): printed to console (captured
-# in log_atom.txt) always; sites/adsorption_sites.txt is now a lean machine-
-# readable file (just the SITE_TABLE), NOT gated behind --save-report -- see
-# the --save-report sub-case further below for the full persisted narrative.
+# in log_atom.txt) and written to stb_adsorb_report.txt, always; the site table
+# the later stages read is sites/adsorption_sites.json.
 check_contains "\[0\] RUN METADATA" log_atom.txt
 check_contains "\[1\] REFERENCE FOLDERS" log_atom.txt
 check_contains "\[2\] ADSORPTION SITES: FINDING & COUNT" log_atom.txt
@@ -176,7 +180,8 @@ check_contains "\[6\] LIBRARY WARNINGS" log_atom.txt
 check_contains "Calc template   : calc.fdf" log_atom.txt
 check_contains "Not requested" log_atom.txt
 check_contains "stb-adsorbBsse next" log_atom.txt
-check_contains "SITE_TABLE" $RUN/sites/adsorption_sites.txt
+check_success $RUN/sites/adsorption_sites.json
+check_contains "\[0\] RUN METADATA" stb_adsorb_report.txt
 
 echo "Testing: everything lands under the default adsorption_run/ folder"
 check_contains "Output dir      : adsorption_run" log_atom.txt
@@ -201,27 +206,23 @@ check_contains "WARNING.*own periodic image in the ab-plane" log_atom.txt
 
 echo "Testing: --view-plots shows the generated plots (headless-safe via MPLBACKEND=Agg) without crashing"
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 MPLBACKEND=Agg stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop \
     --view-plots --no-intro > log_view_plots.txt 2>&1
 check_exit_code $? 0
 check_success $RUN/sites/adsorption_sites.png
 check_contains "\[6\] LIBRARY WARNINGS" log_view_plots.txt
 
-echo "Testing: without --save-report, sites/adsorption_sites.txt has no report narrative"
-if grep -q "RUN METADATA" $RUN/sites/adsorption_sites.txt; then
-    echo -e "   -> ${RED}Failed:${NC} adsorption_sites.txt unexpectedly contains the full narrative"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} adsorption_sites.txt has no report narrative (SITE_TABLE only)"
-    PASS=$((PASS+1))
-fi
+echo "Testing: without --save-report, stb_adsorb_report.txt still has the full narrative (always written)"
+check_contains "RUN METADATA" stb_adsorb_report.txt
 
-echo "Testing: --save-report writes adsorption_run/adsorption_prep_report.txt with the full narrative"
+echo "Testing: --save-report writes stb_adsorb_report.txt with the full narrative"
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --save-report --no-intro > log_save_report.txt 2>&1
-check_success $RUN/adsorption_prep_report.txt
-check_contains "\[0\] RUN METADATA" $RUN/adsorption_prep_report.txt
-check_contains "\[6\] LIBRARY WARNINGS" $RUN/adsorption_prep_report.txt
+check_success stb_adsorb_report.txt
+check_contains "\[0\] RUN METADATA" stb_adsorb_report.txt
+check_contains "\[6\] LIBRARY WARNINGS" stb_adsorb_report.txt
 check_contains "Report          : " log_save_report.txt
 
 echo "Testing: -s/--structure and -c/--calc default to structure.fdf/calc.fdf"
@@ -263,6 +264,7 @@ check_contains "Configuration count :" log_molecule.txt
 
 
 # --- 4. --ml-rank --top-k (MACE-MP-0 already cached locally) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-rank --top-k 2 ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type all --all-sites \
@@ -288,7 +290,7 @@ echo "Testing: the written structure.fdf reflects the RELAXED distance, not the 
 python3 -c "
 import glob
 from stb.core import structure_io
-site_dir = sorted(glob.glob('$RUN/sites/site_*'))[0]
+site_dir = sorted(glob.glob('$RUN/sites/site_*/'))[0]
 s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
 ads_z = s.atoms[-1][1][2]
 slab_z = s.atoms[0][1][2]
@@ -309,6 +311,9 @@ else
     echo -e "   -> ${RED}Failed:${NC} expected exactly 2 site folders, found $n_kept"
     FAIL=$((FAIL+1))
 fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: every written site's fractional coordinates are wrapped into [0, 1)"
 echo "  (AdsorbateSiteFinder places the adsorbate via a raw Cartesian offset with no"
@@ -321,7 +326,7 @@ from stb.core import structure_io
 # noise) rounds to the printed string '1.00000000' -- not a real out-of-cell
 # bug, just 8-decimal display rounding at the exact 0/1 boundary.
 bad = []
-for site_dir in sorted(glob.glob('$RUN/sites/site_*')):
+for site_dir in sorted(glob.glob('$RUN/sites/site_*/')):
     s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
     for symbol, frac in s.atoms:
         for c in frac:
@@ -334,6 +339,7 @@ else:
 " > log_frac_wrap_check.txt 2>&1
 check_contains "OK" log_frac_wrap_check.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: a MACE relax that legitimately drifts the adsorbate outside the cell"
 echo "  (e.g. an unstable orientation sliding across a periodic in-plane boundary) is"
 echo "  wrapped back into [0, 1) right after relaxing -- BEFORE the site folder is"
@@ -407,13 +413,16 @@ for atoms in frames:
 print('OK')
 " > log_wrap_xyz_check.txt 2>&1
 check_contains "OK" log_wrap_xyz_check.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: the same wrapped positions are what's actually written to the site folders"
 python3 -c "
 import glob
 from stb.core import structure_io
 bad = []
-for site_dir in sorted(glob.glob('wrap_after_relax_run/sites/site_*')):
+for site_dir in sorted(glob.glob('wrap_after_relax_run/sites/site_*/')):
     s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
     for symbol, frac in s.atoms:
         if not all(-1e-6 <= c <= 1.0 + 1e-6 for c in frac):
@@ -478,6 +487,7 @@ check_contains "OK" log_orientation_unit_check.txt
 # --ml-rank, with a real (multi-atom) H2O adsorbate on the ontop site (MACE
 # -MP-0 already cached locally from section 4 above). Kept small (2x2=4) for
 # test runtime. ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --n-orientations-polar/--n-orientations-azimuthal (live, H2O) ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --all-sites \
@@ -523,6 +533,9 @@ check_exit_code $? 0
 check_contains "site 1/1" log_orientations_singlesite.txt
 check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_success $RUN/sites/orientation_trajectory.xyz
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: --ml-rank without --all-sites and without orientation sampling is still rejected"
 rm -rf $RUN
@@ -531,6 +544,7 @@ stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --site
 check_exit_code $? 2
 check_contains "UNLESS orientation sampling" log_mlrank_singlesite_rejected.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --orientation-top-k caps the number of kept orientations"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --all-sites \
@@ -545,6 +559,9 @@ else
     echo -e "   -> ${RED}Failed:${NC} expected exactly 1 orientation folder, found $n_kept"
     FAIL=$((FAIL+1))
 fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: orientation flags without --ml-rank are rejected"
 rm -rf $RUN
@@ -557,6 +574,7 @@ check_contains "only valid with --ml-rank" log_orientations_no_mlrank.txt
 # --- 4b. --ml-device cuda without a usable GPU: warn and fall back to CPU,
 # not abort (this machine has no GPU, so this exercises the real fallback
 # path rather than a mocked one). ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-device cuda falls back to CPU with a warning (no GPU here) ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --all-sites \
@@ -564,6 +582,9 @@ stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --all-si
 check_exit_code $? 0
 check_contains "\[WARNING\] --ml-device cuda requested, but .* -- falling back to CPU\." log_ml_device_fallback.txt
 check_success $RUN/sites/site_1_ontop/structure.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 4c. A --height large enough to push the adsorbate's fractional z
@@ -617,7 +638,7 @@ check_success $RUN/adsorbate_N/structure.fdf
 check_success $RUN/sites/site_1_ontop_O/structure.fdf
 check_success $RUN/sites/site_1_ontop_N/structure.fdf
 # "Adsorbate:" itself is ANSI-color-wrapped in the raw console log (unlike
-# the old adsorption_sites.txt, print_dual doesn't strip color codes going to
+# the old stb_adsorb_report.txt, print_dual doesn't strip color codes going to
 # stdout), so match the plain text on either side of the color reset instead.
 check_contains "O (1 atom(s))" log_multi_ads.txt
 check_contains "N (1 atom(s))" log_multi_ads.txt
@@ -665,6 +686,7 @@ check_exit_code $? 2
 
 
 # --- 6d. --ml-prerelax (isolated adsorbate) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-prerelax ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --ml-prerelax \
@@ -672,6 +694,9 @@ stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --ml-p
 check_contains "ML pre-relax" log_prerelax.txt
 check_contains "Converged" log_prerelax.txt
 check_success $RUN/adsorbate/structure.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 6e. Overlap/clash warning: --height too small places the adsorbate
@@ -951,6 +976,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.8.1) ---"
 
 echo "Testing: navigate 5.8.1 -> single ontop site -> quit"
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 {
   echo "5.8.1"
   echo "structure.fdf"  # struct_file
@@ -965,9 +991,10 @@ rm -rf $RUN
   echo "0"               # site_index
   echo ""               # force_spin (default Y)
   echo ""               # orient_grid (blank -> skip orientation sampling)
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo "n"               # both_sides_choice
   echo ""               # show_advanced (default -> skip, so output_dir defaults to adsorption_run)
-  echo "y"               # save_report -> yes
   echo "n"               # view_choice -> no (headless)
   echo "n"               # view_plots_choice -> no (headless)
   echo ""               # press enter to continue
@@ -975,8 +1002,8 @@ rm -rf $RUN
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Success:.*1 site folder" log_menu.txt
 check_success $RUN/sites/site_1_ontop/structure.fdf
-check_success $RUN/adsorption_prep_report.txt
-check_contains "\[0\] RUN METADATA" $RUN/adsorption_prep_report.txt
+check_success stb_adsorb_report.txt
+check_contains "\[0\] RUN METADATA" stb_adsorb_report.txt
 
 echo "Testing: navigate 5.8.1 -> two adsorbates + height sweep -> quit"
 rm -rf $RUN
@@ -997,8 +1024,9 @@ rm -rf $RUN
   echo "0"               # site_index
   echo ""               # force_spin (default Y)
   echo ""               # orient_grid (blank -> skip orientation sampling)
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo ""               # show_advanced
-  echo "n"               # save_report -> no
   echo "n"               # view_choice -> no
   echo "n"               # view_plots_choice -> no
   echo ""               # press enter
@@ -1010,6 +1038,7 @@ check_success $RUN/sites/site_1_ontop_N_h2.50/structure.fdf
 check_success $RUN/adsorbate_O/structure.fdf
 check_success $RUN/adsorbate_N/structure.fdf
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: navigate 5.8.1 -> --ml-rank + orientation sampling (H2O) -> quit"
 rm -rf $RUN
 {
@@ -1028,8 +1057,9 @@ rm -rf $RUN
   echo ""               # top_k (blank = keep all)
   echo "2x2"             # orientation grid (polar x azimuthal), merged prompt
   echo "1"               # orient_top_k -> keep only 1
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo ""               # show_advanced (orient_rmsd_tol default applies unasked)
-  echo ""               # save_report
   echo ""               # view_choice
   echo ""               # view_plots_choice
   echo ""               # press enter
@@ -1040,6 +1070,9 @@ check_contains "2x2, top 1" log_menu_orient.txt
 check_contains "4 orientation(s) sampled -> 1 unique kept" log_menu_orient.txt
 check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_contains "DFTD3                   .true." $RUN/sites/site_1_ontop_orient1/config_extra.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: navigate 5.8.1 -> single site + orientation sampling (H2O) -> quit"
 rm -rf $RUN
@@ -1058,8 +1091,9 @@ rm -rf $RUN
   echo ""               # force_spin (default Y)
   echo "2x2"             # orientation grid -> also turns --ml-rank on here
   echo "1"               # orient_top_k -> keep only 1
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo ""               # show_advanced
-  echo ""               # save_report
   echo ""               # view_choice
   echo ""               # view_plots_choice
   echo ""               # press enter
@@ -1069,8 +1103,36 @@ check_contains "ML pre-screen" log_menu_orient_singlesite.txt
 check_contains "ON (single site)" log_menu_orient_singlesite.txt
 check_contains "Orientation sampling" log_menu_orient_singlesite.txt
 check_contains "2x2, top 1" log_menu_orient_singlesite.txt
+if [ "$STB_HAS_ML" = 1 ]; then
 check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_success $RUN/sites/orientation_trajectory.xyz
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
+
+
+# --- 8b. Orientation duplicates (no MACE needed): H2O with its two H swapped, or shifted by a
+#     lattice vector, is ONE geometry -- deduplicate_orientations must drop it; a genuinely
+#     rotated H2O must stay. Before 2.1.0 the RMSD used the file order (swap = 1.24 Ang). ---
+echo -e "\n--- Testing orientation dedup: permutation of equal atoms + minimum image ---"
+python3 - > log_dedup_perm.txt 2>&1 <<'PYEOF'
+import numpy as np
+from ase import Atoms
+from stb.core.adsorption_sites import deduplicate_orientations
+cell = [[8.6, 0, 0], [4.3, 7.45, 0], [0, 0, 25]]
+O = np.array([1.0, 1.0, 12.2])
+def mk(pos, shift=(0, 0, 0)):
+    a = Atoms('Ag', positions=[[0, 0, 10]]) + Atoms('OHH', positions=np.array(pos) + shift)
+    a.set_cell(cell); a.pbc = True
+    return a
+same = mk([O, O + [0.76, 0, 0.59], O + [-0.76, 0, 0.59]])
+swapped = mk([O, O + [-0.76, 0, 0.59], O + [0.76, 0, 0.59]])
+shifted = mk([O, O + [-0.76, 0, 0.59], O + [0.76, 0, 0.59]], shift=(8.6, 0, 0))
+rotated = mk([O, O + [0, 0.76, 0.59], O + [0, -0.76, 0.59]])
+kept = deduplicate_orientations([(-1.0, same), (-1.0, swapped), (-1.0, shifted), (-1.0, rotated)], 1)
+print("kept", kept)
+PYEOF
+check_contains "kept \[0, 3\]" log_dedup_perm.txt
 
 
 popd > /dev/null

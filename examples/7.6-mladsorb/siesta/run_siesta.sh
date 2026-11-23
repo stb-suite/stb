@@ -7,6 +7,6 @@ NP="${NP:-6}"
 for d in "$@"; do
     grep -q "End of run" "$d/siesta.out" 2>/dev/null && { echo "$d: finished, skipped"; continue; }
     echo "$d: $(date +%H:%M:%S)"
-    (cd "$d" && OMP_NUM_THREADS=1 mpirun -np "$NP" siesta < calc.fdf > siesta.out 2> siesta.err)
+    (cd "$d" && OMP_NUM_THREADS=1 mpirun -np "$NP" siesta calc.fdf < /dev/null > siesta.out 2> siesta.err)
 done
 echo "all done $(date +%H:%M:%S)"

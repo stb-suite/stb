@@ -92,14 +92,14 @@ mv unitcell.fdf unitcell_primitive.fdf
 
 echo "Testing: explicit --mode primitive"
 rm -f unitcell.fdf
+rm -f stb_unitcell_report*.txt stb_unitcell_references*.bib
 stb-unitcell -f fcc_ni.fdf --mode primitive --no-intro > log_primitive.txt 2>&1
 check_contains "Output atoms       : 1" log_primitive.txt
 check_success unitcell.fdf
 rm -f unitcell.fdf
 
-echo "Testing: stb_unitcell_report.txt is NOT written unless --save-report is given"
-[ ! -f stb_unitcell_report.txt ] && { echo -e "   -> ${GREEN}Verified:${NC} stb_unitcell_report.txt absent by default"; PASS=$((PASS+1)); } \
-    || { echo -e "   -> ${RED}Failed:${NC} stb_unitcell_report.txt was written without --save-report"; FAIL=$((FAIL+1)); }
+echo "Testing: stb_unitcell_report.txt is always written"
+check_success stb_unitcell_report.txt
 
 
 # --- 2b. Refined mode: conventional-sized cell, positions snapped to symmetry ---
@@ -162,6 +162,7 @@ rm -f unitcell.fdf
 # --- 5. --save-report ---
 echo -e "\n--- Testing --save-report ---"
 
+rm -f stb_unitcell_report*.txt stb_unitcell_references*.bib
 stb-unitcell -f fcc_ni.fdf --save-report --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_success stb_unitcell_report.txt
@@ -170,20 +171,20 @@ check_contains "Reduction factor   : 4x" stb_unitcell_report.txt
 check_contains "\[7\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_unitcell_report.txt
 check_contains "Before/After match exactly, as expected" stb_unitcell_report.txt
 check_contains "Report         : stb_unitcell_report.txt" log_report.txt
-rm -f unitcell.fdf stb_unitcell_report.txt
+rm -f unitcell.fdf stb_unitcell_report*.txt stb_unitcell_references*.bib
 
 
 # --- 6. --ml-relax (needs the optional 'ml' extra) ---
 echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
 
 if python3 -c "import mace" 2>/dev/null; then
-    rm -f unitcell.fdf stb_unitcell_report.txt
+    rm -f unitcell.fdf stb_unitcell_report*.txt stb_unitcell_references*.bib
     stb-unitcell -f fcc_ni.fdf --ml-relax --save-report --no-intro > log_ml_relax.txt 2>&1
     check_exit_code $? 0
     check_contains "\[5\] ML PRE-RELAXATION (MACE)" stb_unitcell_report.txt
     check_success unitcell.fdf
     check_contains "ML pre-relaxed with MACE-MP-0" unitcell.fdf
-    rm -f unitcell.fdf stb_unitcell_report.txt
+    rm -f unitcell.fdf stb_unitcell_report*.txt stb_unitcell_references*.bib
 
     echo "Testing: --ml-relax-cell without --ml-relax is rejected"
     stb-unitcell -f fcc_ni.fdf --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1
@@ -245,7 +246,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (menu 4.7) ---"
 echo "Testing: navigate 4.7 -> invalid file then valid -> default mode -> default symprec -> default output ->"
 echo "         no ml-relax -> no save-report -> no view -> quit"
 rm -f unitcell.fdf
-printf '4.7\ndoes_not_exist.fdf\nfcc_ni.fdf\n\n\n\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '4.7\ndoes_not_exist.fdf\nfcc_ni.fdf\n\n\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
 check_contains "Output atoms       : 1" log_interactive.txt
 check_success unitcell.fdf

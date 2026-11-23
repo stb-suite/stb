@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -39,7 +40,6 @@ from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_secti
 from stb.core.siesta_log import FALLBACK_VALENCE, get_zval_from_output
 
 REPORT_FILE = "stb_bader_report.txt"
-BIB_FILE = "references.bib"
 
 # Below this raw Bader population (electrons), an atom is flagged as suspicious rather
 # than reported at face value. A real atom essentially never integrates to exactly/near
@@ -469,11 +469,26 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
                     "   [WARN] PyBader returned a different number of spin values than charge "
                     "values -- disabling the spin column for this run.", 'yellow'))
                 raw_spins = None
-            if len(raw_volumes) != len(raw_populations) or len(raw_surf_dist) != len(raw_populations):
+            if raw_surf_dist is None:
+                # PyBader's surface_distance() returns None when it finds no basin edge at all:
+                # the whole density is ONE basin, so one atom holds every electron and the
+                # others get none (AlP: the Al pseudo-density has no maximum of its own). Report
+                # the populations with the zero-population warning below instead of crashing on
+                # len(None) as before.
                 print(color_text(
-                    "   [WARN] PyBader returned a different number of volume/surface-distance "
-                    "values than charge values -- disabling those columns for this run.", 'yellow'))
-                raw_volumes = raw_surf_dist = None
+                    "   [WARN] PyBader found no basin edge (the whole density forms a single "
+                    "basin) -- no surface-distance column for this run; see the zero-population "
+                    "warning below.", 'yellow'))
+            if raw_volumes is None or raw_surf_dist is None or len(raw_volumes) != len(raw_populations) \
+                    or len(raw_surf_dist) != len(raw_populations):
+                if raw_volumes is not None and raw_surf_dist is not None:
+                    print(color_text(
+                        "   [WARN] PyBader returned a different number of volume/surface-distance "
+                        "values than charge values -- disabling those columns for this run.", 'yellow'))
+                if raw_volumes is not None and len(raw_volumes) == len(raw_populations):
+                    raw_surf_dist = None
+                else:
+                    raw_volumes = raw_surf_dist = None
 
             for pos in range(n_atoms):
                 orig_i = physical_idx[pos]
@@ -764,10 +779,10 @@ def print_bader_report(results, args, report_path, f_out):
 
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
     print_dual("Bader charge partitioning via PyBader, implementing the grid-based algorithm "
                "of Tang, Sanville & Henkelman (2009); underlying theory: Bader's Atoms-in-"
                "Molecules (AIM) quantum theory (1990) -- see the example README for both.", f_out)
@@ -781,7 +796,7 @@ def print_bader_report(results, args, report_path, f_out):
     if results['export_volumes']:
         print_dual(f"Exported vols. : {results['n_exported']} Bader-atoms-<N>.cube file(s) in "
                    f"{results['output_dir']}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 
@@ -807,18 +822,18 @@ low (near-zero) population.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
                "  %(prog)s --label siesta\n"
-               "  %(prog)s --label siesta --ref relax/siesta.out --save-report\n"
+               "  %(prog)s --label siesta --ref relax/siesta.out\n"
                "  %(prog)s --label siesta --speed fast --threads 8\n"
                "  %(prog)s --label slab --vacuum-tol 1e-3\n"
                "  %(prog)s --label siesta --export-volumes\n"
     )
     parser.add_argument("-l", "--label", required=True, help="SystemLabel used in Siesta")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write the .cube file(s)/references.bib into (and "
-                             f"{REPORT_FILE}, with --save-report; also any --export-volumes "
+                        help="Directory to write the .cube file(s) into (and "
+                             "any --export-volumes "
                              "files) (default: current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--ref", required=False, default=None,
                          help="Path to a specific .out file to read Z_val from (overrides <label>.out)")
     parser.add_argument("--speed", choices=['normal', 'fast'], default='normal',
@@ -870,7 +885,7 @@ low (near-zero) population.""",
         threads=args.threads, vacuum_tol=args.vacuum_tol, keep_cube=args.keep_cube,
         export_volumes=args.export_volumes)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("bader")
     f_out = open(report_path, "w") if report_path else None
 
     print_bader_report(results, args, report_path, f_out)

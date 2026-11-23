@@ -155,7 +155,7 @@ energy per atom (eV)    | -115.0069 .. -114.2504 | -114.9744 .. -114.9629    | i
 
 [9] COMMITTEE UNCERTAINTY
 ------------------------------------------------------------
-Committee         : 3 members of round 2 from /home/carlos/run/stb/5.7/mlff_si/mlff_runs
+Committee         : 3 members of round 2 from /path/to/run/stb/5.7/mlff_si/mlff_runs
 3 committee members on the fine-tuned band (each member's energies relative to its own image 0):
 image | E - E0 (eV) | E spread (eV) | F spread (meV/Ang) | atom | est. F error (meV/Ang) | vs test set
 ------------------------------------------------------------------------------------------------------

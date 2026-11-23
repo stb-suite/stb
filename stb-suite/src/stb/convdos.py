@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -22,7 +23,6 @@ from stb.core import citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_convdos_report.txt"
-BIB_FILE = "references.bib"
 
 # FWHM = 2*sqrt(2*ln2) * sigma, for a Gaussian.
 FWHM_TO_SIGMA = 2 * np.sqrt(2 * np.log(2))
@@ -263,7 +263,7 @@ def main():
                              "plotted regardless of this flag's default; --no-plot turns that "
                              "single plot off too.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-convdos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -292,7 +292,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
     print("\n" + color_text("DOS Convolution Tool:", 'bold'))
     print("-"*60)
@@ -358,8 +358,7 @@ def main():
                          r["sigma_mev"], r["sigma_samples"], r["size"])
             written_files.append(out_path)
 
-    report_path = os.path.join(output_dir if mode == "dir" else (os.path.dirname(args.outfile) or "."),
-                                REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("convdos")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-CONVDOS REPORT =====", 'magenta'), f_out)
@@ -438,13 +437,11 @@ def main():
         print_dual(color_text(f"[OK] Filtered data written to {path}", 'green'), f_out)
 
     print_section("[5] REFERENCES", f_out)
-    bib_dir = output_dir if mode == "dir" else (os.path.dirname(args.outfile) or ".")
-    bib_path = os.path.join(bib_dir, BIB_FILE)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(bib_path, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{bib_path}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -453,7 +450,7 @@ def main():
                                "file(s) (see [1] INPUT DATA)", 'yellow'), f_out)
     for path in written_files:
         print_dual(f"Data file      : {path}", f_out)
-    print_dual(f"References     : {bib_path}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

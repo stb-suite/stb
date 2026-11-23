@@ -2,11 +2,11 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
-# 2.0.1: numbered-section report (matching the other Stage 2 analysis tools);
+# 2.1.0: numbered-section report (matching the other Stage 2 analysis tools);
 # --input-dir now defaults to 'xrd_search' (stb-xrdsearch's own default output
 # folder); --raw-experimental peak-list auto-broadening fix (same bug already
 # fixed in stb-xrd's own --compare-to); gnuplot .dat+.gplot output (ranking bar
@@ -15,6 +15,7 @@
 # one figure) via --view; space group added to the ranking table; final
 # dedicated LIBRARY WARNINGS section.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -29,7 +30,7 @@ from stb.core.cli import (color_text, show_intro, run_with_spinner, print_dual, 
                           print_table, capture_library_noise)
 from stb.core.deps import require_pyxtal
 
-REPORT_FILE = "xrd_rank_report.txt"
+REPORT_FILE = "stb_xrdrank_report.txt"
 
 
 def find_candidates(input_dir):
@@ -206,7 +207,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
                "  %(prog)s --experimental measured.dat\n"
                "  %(prog)s --input-dir candidates --experimental measured.dat \\\n"
                "      --wavelength MoKa --top 5\n"
-               "  %(prog)s --experimental measured.dat --save-gnuplot --view --save-report\n"
+               "  %(prog)s --experimental measured.dat --save-gnuplot --view\n"
     )
 
     parser.add_argument("--input-dir", type=str, default="xrd_search",
@@ -242,8 +243,8 @@ no faster mode), so this can take a while for a large --input-dir.""",
                              "all). The full ranking is always written to --output regardless.")
     parser.add_argument("-o", "--output", type=str, default="xrd_rank.txt",
                         help="Output ranking table file name (default: xrd_rank.txt). Always "
-                             "lists every candidate, regardless of --top. Gnuplot/report files "
-                             "(--save-gnuplot/--save-report) are written alongside it, in the "
+                             "lists every candidate, regardless of --top. Gnuplot files "
+                             "(--save-gnuplot) are written alongside it (the report and its references file go to the current folder), in the "
                              "same directory.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write the ranking as a gnuplot bar chart (xrd_rank.dat + "
@@ -256,8 +257,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
                              "candidate's simulated-vs-experimental overlay, one figure) before "
                              "finishing. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full numbered run report to {REPORT_FILE} "
-                             "(written alongside --output). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-xrdrank {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -272,7 +272,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if not os.path.isdir(args.input_dir):
@@ -284,7 +284,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
 
     output_dir = os.path.dirname(args.output) or "."
     os.makedirs(output_dir, exist_ok=True)
-    report_path = os.path.join(output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("xrdrank")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

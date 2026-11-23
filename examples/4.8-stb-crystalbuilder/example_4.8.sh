@@ -96,9 +96,9 @@ B -- interactive stb-suite menu:
 Every run always writes a numbered report ([0] RUN METADATA ... [10]
 SUMMARY & FILES -- [4] only with --reduce, [5] only with --ml-relax), a
 structure-validation checklist before and after, full symmetry detection,
-and a before/after symmetry comparison table. A full text report
-(--save-report), cell reduction (--reduce), MACE pre-relaxation
-(--ml-relax), and an interactive 3D view (--view) are all off by default.
+and a before/after symmetry comparison table, always saved to
+stb_crystalbuilder_report.txt. Cell reduction (--reduce), MACE pre-relaxation
+(--ml-relax), and an interactive 3D view (--view) are off by default.
 EOF
 pause
 
@@ -245,23 +245,23 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_crystalbuilder_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (also written to stb_crystalbuilder_report.txt
-with --save-report) includes the structure-validation checklist and a
-references.bib with SIESTA:
+with) includes the structure-validation checklist and a
+stb_crystalbuilder_references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
-echo "\$ stb-crystalbuilder --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 --save-report --no-intro"
+echo "\$ stb-crystalbuilder --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 --no-intro"
 (cd "$OUT/full-report" && stb-crystalbuilder --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 \
-    --save-report --no-intro > console.log)
+    --no-intro > console.log)
 echo
 echo "Report sections written to stb_crystalbuilder_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_crystalbuilder_report.txt"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_crystalbuilder_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_crystalbuilder_references.bib"
 pause
 
 echo "=================================================================="
@@ -306,8 +306,8 @@ echo "Driving the same fcc-nickel case through the interactive menu's"
 echo "manual entry mode and checking it reaches the same atom count."
 TMP="$(mktemp -d)"
 echo
-echo "\$ printf '4.8\\nFm-3m\\n3.52\\n\\n\\n\\n\\n\\nNi 0 0 0\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.8\nFm-3m\n3.52\n\n\n\n\n\nNi 0 0 0\n\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '4.8\\nFm-3m\\n3.52\\n\\n\\n\\n\\n\\nNi 0 0 0\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.8\nFm-3m\n3.52\n\n\n\n\n\nNi 0 0 0\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 if grep -q "Output atoms   : 4" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-crystalbuilder command as the CLI walkthrough above"
@@ -333,8 +333,8 @@ skipped if the optional 'ml' extra isn't installed):
   reduce-to-primitive/       out-of-range-error/     ml-relax/
   full-report/               bulk-graphite-to-slab/
 
-Each has references.bib (SIESTA, always); full-report/ additionally has
-stb_crystalbuilder_report.txt; ml-relax/'s references.bib also cites the
+Each has stb_crystalbuilder_references.bib (SIESTA, always); full-report/ additionally has
+stb_crystalbuilder_report.txt; ml-relax/'s stb_crystalbuilder_references.bib also cites the
 MACE architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -355,7 +355,7 @@ Recap of what this walkthrough covered:
   - the fixed "Bad international symbol" bug: out-of-range space group
     numbers now give a clear, direct error message
   - --ml-relax pre-optimizing the final structure
-  - the structure-validation checklist, references.bib, and --save-report
+  - the structure-validation checklist, stb_crystalbuilder_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the built

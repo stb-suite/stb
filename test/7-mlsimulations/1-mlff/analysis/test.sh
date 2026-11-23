@@ -293,11 +293,12 @@ rm -rf cv_round wf_cv.json
 
 # --- 4. --save-report ---
 echo -e "\n--- Testing --save-report (written in the round directory) ---"
+rm -f stb_mlffAnalysis_report*.txt stb_mlffAnalysis_references*.bib
 stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o rep $FAST --name test_model2 --save-report \
     --skip-foundation-comparison --workflow wf_rep.json --no-intro > log_savereport.txt 2>&1
-check_success rep/stb_mlffAnalysis_report.txt
-check_contains "STB-MLFFANALYSIS REPORT" rep/stb_mlffAnalysis_report.txt
-check_contains "\[10\] WARNINGS" rep/stb_mlffAnalysis_report.txt
+check_success stb_mlffAnalysis_report.txt
+check_contains "STB-MLFFANALYSIS REPORT" stb_mlffAnalysis_report.txt
+check_contains "\[10\] WARNINGS" stb_mlffAnalysis_report.txt
 rm -rf rep wf_rep.json
 
 

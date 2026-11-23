@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import os
@@ -28,7 +29,6 @@ from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_secti
 from stb.core.deps import require_mace
 
 REPORT_FILE = "stb_supercell_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-fetch/stb-kgrid/stb-mlrelax
 # (core/kspace.py's other callers) -- used to detect vacuum-padded axes both
@@ -90,7 +90,7 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
         epilog="Usage examples:\n"
                "  %(prog)s -f structure.fdf -d 2 2 2\n"
                "  %(prog)s -f structure.fdf -d 2 0 0 0 2 0 0 0 1 -o big_cell.fdf\n"
-               "  %(prog)s -f structure.fdf -d 2 2 2 --ml-relax --save-report --view\n"
+               "  %(prog)s -f structure.fdf -d 2 2 2 --ml-relax --view\n"
     )
 
     parser.add_argument(
@@ -129,8 +129,7 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry "
-                             f"analysis) to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "structure and the final supercell (page through frames in "
@@ -157,10 +156,10 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("supercell")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-SUPERCELL REPORT =====", 'magenta'), f_out)
@@ -332,16 +331,16 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[9] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Input file     : {args.filename}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

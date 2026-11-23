@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 #     Mechanical Properties Analyzer            #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -32,8 +32,10 @@ persisted-plot mechanism here, matching the rest of this convention), and
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
+import re
 import sys
 import glob
 import argparse
@@ -303,6 +305,76 @@ def find_structure_fdf(folder):
     return None
 
 
+def detect_relax_mode(folders, direction):
+    """stb-strain's --relax-mode for the folders of `direction`, read from the
+    first line of each config_extra.fdf ('... (relax-mode=<mode>)'). None when
+    no folder records it or the folders disagree."""
+    modes = set()
+    for folder in folders:
+        d, _ = siesta_log.parse_strain_folder_name(folder)
+        if d is None or _canonical_direction(d) != direction:
+            continue
+        try:
+            with open(os.path.join(folder, "config_extra.fdf"), errors="replace") as fh:
+                match = re.search(r"relax-mode=([\w-]+)", fh.read(400))
+        except OSError:
+            continue
+        if match:
+            modes.add(match.group(1))
+    return modes.pop() if len(modes) == 1 else None
+
+
+def _final_cell(folder):
+    """Final cell (3x3, Angstrom, rows = vectors) of a finished run: the
+    first three lines of its *.STRUCT_OUT. None when absent or unreadable."""
+    for path in sorted(glob.glob(os.path.join(folder, "*.STRUCT_OUT"))):
+        try:
+            with open(path) as fh:
+                rows = [[float(x) for x in fh.readline().split()[:3]] for _ in range(3)]
+            cell = np.array(rows)
+            if cell.shape == (3, 3) and abs(np.linalg.det(cell)) > 1e-6:
+                return cell
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def transverse_poisson(folders, direction, is_2d, window_pct=2.0):
+    """Poisson's ratio(s) from the cells the runs ended with, for a uniaxial
+    direction whose transverse cell was free to relax: the strain tensor of
+    every folder relative to the least-strained one, then the slope of each
+    transverse normal strain against the axial one inside +-window_pct.
+    Returns [(label, nu, n_points)] -- empty when fewer than 3 final cells
+    are available."""
+    axis = 'xyz'.index(direction[0])
+    cells = []
+    for folder in folders:
+        d, pct = siesta_log.parse_strain_folder_name(folder)
+        if d is None or _canonical_direction(d) != direction or abs(pct) > window_pct + 1e-9:
+            continue
+        cell = _final_cell(folder)
+        if cell is not None:
+            cells.append((pct, cell))
+    if len(cells) < 3:
+        return []
+    reference = min(cells, key=lambda item: abs(item[0]))[1]
+    strains = []
+    for _pct, cell in cells:
+        gradient = np.linalg.solve(reference, cell)
+        strains.append(0.5 * (gradient + gradient.T) - np.eye(3))
+    strains = np.array(strains)
+    axial = strains[:, axis, axis]
+    if np.ptp(axial) < 1e-6:
+        return []
+    out = []
+    for other in range(2 if is_2d else 3):
+        if other == axis:
+            continue
+        slope = np.polyfit(axial, strains[:, other, other], 1)[0]
+        out.append((f"v_{'xyz'[axis]}{'xyz'[other]}", float(-slope), len(cells)))
+    return out
+
+
 def _dimensionality_label(is_2d, is_1d):
     if is_1d:
         return "1D (Wire/Tube)"
@@ -311,7 +383,8 @@ def _dimensionality_label(is_2d, is_1d):
     return "3D (Bulk)"
 
 
-def print_mechanics_block(direction, results, is_2d, is_1d=False, show_yield=False, f_out=None):
+def print_mechanics_block(direction, results, is_2d, is_1d=False, show_yield=False, f_out=None,
+                          relax_mode=None, poisson=None):
     """Prints one direction's mechanical properties via print_dual (console,
     and also the report file when f_out is given) -- shared by the single
     -direction and multi-direction (auto-compared) report paths so the two
@@ -338,11 +411,24 @@ def print_mechanics_block(direction, results, is_2d, is_1d=False, show_yield=Fal
             "(likely nonlinear/plastic at large strain) sweep.", 'cyan'), f_out)
     print_dual(f"{peak_label:<16}: {color_text(peak_str, 'red')}", f_out)
     print_dual(f"Critical Strain : {results['uts_strain']:.4f} %", f_out)
-    if not is_1d:
+    if not is_1d and relax_mode == "stress-constrained":
         print_dual(color_text(
-            "[INFO] Single-direction slope under a clamped transverse cell -- for the "
-            "rigorous small-strain elastic-tensor Young's Modulus, use stb-elasticAnalysis.",
-            'cyan'), f_out)
+            "[INFO] stb-strain --relax-mode stress-constrained: the transverse cell relaxed to zero "
+            "stress at every step, so for a uniaxial direction this slope is the Young's modulus "
+            "along it (2D: the in-plane stiffness), not a clamped-cell constant.", 'cyan'), f_out)
+        for label, nu, n_points in poisson or []:
+            print_dual(f"Poisson's ratio : {label} = {nu:.4f} (transverse strain of the relaxed cells "
+                       f"vs the axial one, {n_points} runs within +-2 %, from *.STRUCT_OUT)", f_out)
+    elif not is_1d and relax_mode == "cell-fixed":
+        print_dual(color_text(
+            "[INFO] Single-direction slope under a clamped transverse cell (stb-strain --relax-mode "
+            "cell-fixed): a stiffness constant C_ii, larger than Young's modulus -- for the "
+            "small-strain elastic tensor use stb-elasticAnalysis.", 'cyan'), f_out)
+    elif not is_1d:
+        print_dual(color_text(
+            "[INFO] Single-direction slope. These folders do not record stb-strain's --relax-mode: "
+            "with the transverse cell clamped it is a stiffness constant C_ii, with the transverse "
+            "cell relaxed it is Young's modulus along this direction.", 'cyan'), f_out)
     if results['uts_at_boundary']:
         print_dual(color_text(
             "[WARNING] Peak occurred at the edge of the tested strain range -- "
@@ -368,13 +454,17 @@ def print_mechanics_block(direction, results, is_2d, is_1d=False, show_yield=Fal
 
     if not is_1d and _is_uniaxial(direction):
         transverse = _transverse_stress_lines(results)
-        if transverse:
-            print_dual("Transverse " + qty + " @ peak (diagnostic, clamped cell): " +
+        if transverse and relax_mode == "stress-constrained":
+            print_dual("Transverse " + qty + " @ peak (should be ~0, the transverse cell relaxed): " +
+                       ", ".join(transverse), f_out)
+        elif transverse:
+            print_dual("Transverse " + qty + " @ peak (diagnostic" +
+                       (", clamped cell" if relax_mode == "cell-fixed" else "") + "): " +
                        ", ".join(transverse), f_out)
             print_dual(color_text(
                 "[INFO] Not a Poisson's ratio (that needs transverse STRAIN, not stress) -- "
-                "just how much elastic response this direction's clamped transverse cell is "
-                "suppressing.", 'cyan'), f_out)
+                "how much stress builds up across this direction when the transverse cell is "
+                "held.", 'cyan'), f_out)
 
 
 def _transverse_stress_lines(results):
@@ -541,7 +631,7 @@ def main():
         description="Mechanical Properties from Stress-Strain Data (Stage 2 of stb-strain).",
         epilog="Example usage:\n"
                "  stb-strainAnalysis --file calc.out\n"
-               "  stb-strainAnalysis --file calc.out --dir strain_runs --save-report --save-gnuplot --view\n"
+               "  stb-strainAnalysis --file calc.out --dir strain_runs --save-gnuplot --view\n"
                "  stb-strainAnalysis --file calc.out --dimensionality 1d --cross-section 45.2\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -581,10 +671,10 @@ def main():
     parser.add_argument("-o", "--output-dir", default=".",
                         help="Directory to write <direction>_curve.dat/.gplot (single direction) or "
                              "comparison_curve.dat/.gplot (multiple directions) into with "
-                             f"--save-gnuplot, and {REPORT_FILE} into with --save-report (default: "
+                             "--save-gnuplot (the report and its references file go to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write the curve data + a companion .gplot script (single "
                              "direction: <direction>_curve.dat/.gplot; multiple directions: "
@@ -605,12 +695,12 @@ def main():
     if args.intro:
         show_intro([
             f"Siesta Tool Box - Mechanical Analysis v{VERSION}",
-            "Developed by Dr. Carlos M. O. Bastos",
+            "Developed by the STB-SUITE team",
             "bastoscmo.github.io"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("strainAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -627,7 +717,6 @@ def main():
     print_dual(f"Output filename   : {args.file}", f_out)
     print_dual(f"Dimensionality    : {args.dimensionality}", f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     print_dual(f"Save gnuplot      : {'yes' if args.save_gnuplot else 'no'}", f_out)
     print_dual(f"View (matplotlib) : {'yes' if args.view else 'no'}", f_out)
     if report_path:
@@ -752,7 +841,10 @@ def main():
     for i, (d, r) in enumerate(results_by_dir.items()):
         if i > 0:
             print_dual("", f_out)
-        print_mechanics_block(d, r, is_2d, is_1d, args.show_yield, f_out)
+        mode = detect_relax_mode(folders, d)
+        poisson = (transverse_poisson(folders, d, is_2d)
+                   if mode == "stress-constrained" and _is_uniaxial(d) and not is_1d else None)
+        print_mechanics_block(d, r, is_2d, is_1d, args.show_yield, f_out, relax_mode=mode, poisson=poisson)
 
     print_section("[4] OUTPUT FILES", f_out)
     written_files = []
@@ -790,10 +882,7 @@ def main():
 
     print_section("[5] SUMMARY & NEXT STEPS", f_out)
     print_dual(color_text("[OK] Analysis complete.", 'green'), f_out)
-    if report_path:
-        print_dual(f"Report saved to   : {report_path}", f_out)
-    else:
-        print_dual("Pass --save-report to persist this report to a file.", f_out)
+    print_dual(f"Report saved to   : {report_path}", f_out)
     if not args.save_gnuplot:
         print_dual("Pass --save-gnuplot to also write the curve data + a gnuplot script.", f_out)
     if not args.view:

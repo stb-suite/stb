@@ -5,11 +5,11 @@
 Date/time         : 2026-10-24 15:30:08
 Software          : stb 1.9.294, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Input file        : /home/carlos/run/stb/5.1/example_ref/nvt300/md_final.fdf
+Input file        : /path/to/run/stb/5.1/example_ref/nvt300/md_final.fdf
 Ensemble          : NVE
 Temperature       : 300.0 K (initial velocities only)
 Timestep / steps  : 1.0 fs / 5000 (+ 0 equilibration)
-Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.2-mlmd/model/mlff_model_compiled.model)
+Model             : custom (/path/to/stb/examples/7.2-mlmd/model/mlff_model_compiled.model)
 Report file       : stb_mlmd_report.txt
 
 [1] STRUCTURE
@@ -25,8 +25,8 @@ Degrees of freedom: 645 (3N - 3: net momentum removed)
 ------------------------------------------------------------
 
 Model card -- identity
-Card file         : /home/carlos/Dropbox/dev/stb/examples/7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
-Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.2-mlmd/model/mlff_model_compiled.model
+Card file         : /path/to/stb/examples/7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /path/to/stb/examples/7.2-mlmd/model/mlff_model_compiled.model
 SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
 Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
 Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)

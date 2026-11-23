@@ -178,27 +178,27 @@ check_contains "row-major" log_help.txt
 # --- 6. Report / symmetry analysis / --save-report ---
 echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
 
-rm -f stb_supercell_report.txt supercell.fdf
+rm -f stb_supercell_report*.txt stb_supercell_references*.bib supercell.fdf
 stb-supercell -f structure.fdf -d 2 2 2 --save-report --no-intro > log_report.txt 2>&1
 check_success stb_supercell_report.txt
 check_contains "===== STB-SUPERCELL REPORT =====" stb_supercell_report.txt
 check_contains "\[6\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_supercell_report.txt
 check_contains "Property.*Before.*After" stb_supercell_report.txt
 check_contains "Report         : stb_supercell_report.txt" log_report.txt
-rm -f stb_supercell_report.txt supercell.fdf
+rm -f stb_supercell_report*.txt stb_supercell_references*.bib supercell.fdf
 
 
 # --- 7. --ml-relax (needs the optional 'ml' extra) ---
 echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
 
 if python3 -c "import mace" 2>/dev/null; then
-    rm -f supercell.fdf stb_supercell_report.txt
+    rm -f supercell.fdf stb_supercell_report*.txt stb_supercell_references*.bib
     stb-supercell -f graphene.fdf -d 2 2 1 --ml-relax --save-report --no-intro > log_ml_relax.txt 2>&1
     check_exit_code $? 0
     check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_supercell_report.txt
     check_success supercell.fdf
     check_contains "ML pre-relaxed with MACE-MP-0" supercell.fdf
-    rm -f supercell.fdf stb_supercell_report.txt
+    rm -f supercell.fdf stb_supercell_report*.txt stb_supercell_references*.bib
 
     echo "Testing: --ml-relax-cell without --ml-relax is rejected"
     stb-supercell -f structure.fdf -d 2 2 2 --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1

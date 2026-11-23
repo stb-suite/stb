@@ -295,9 +295,9 @@ cp graphene.fdf calc.fdf "$OUT/case7-interactive/"
 # -> skip), grid Nx (5), grid Ny (5), gap (blank -> 2.2), D3 (blank -> Y),
 # ML pre-relax (blank -> N), ML preview (blank -> N), advanced settings
 # (blank -> N), save report (blank -> N), "Press Enter to continue", quit.
-echo "\$ printf '5.10.1\\ngraphene.fdf\\ngraphene.fdf\\ncalc.fdf\\n3\\n\\n\\n5\\n5\\n\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+echo "\$ printf '5.10.1\\ngraphene.fdf\\ngraphene.fdf\\ncalc.fdf\\n3\\n\\n\\n5\\n5\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
 (cd "$OUT/case7-interactive" && \
-    printf '5.10.1\ngraphene.fdf\ngraphene.fdf\ncalc.fdf\n3\n\n\n5\n5\n\n\n\n\n\n\n\n0\n' \
+    printf '5.10.1\ngraphene.fdf\ngraphene.fdf\ncalc.fdf\n3\n\n\n5\n5\n\n\n\n\n\n\n0\n' \
     | stb-suite > menu.log 2>&1)
 if diff -rq "$OUT/case1-surface/sf_run/positions" "$OUT/case7-interactive/sf_run/positions" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (5.10.1) produced byte-identical grid folders."

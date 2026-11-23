@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -28,7 +29,7 @@ from stb.core.ase_view import view_structure_interactive
 # also RUN_SUBDIR's default value for --dir (see _default_analysis_dir()).
 RUN_SUBDIR = "sf_run"
 MANIFEST_FILE = "sf_manifest.json"
-REPORT_FILE = "stackingfault_report.txt"
+REPORT_FILE = "stb_stackingfaultAnalysis_report.txt"
 _SHIFT_DIR_RE = re.compile(r'^shift_(\d+)_(\d+)$')
 
 
@@ -387,7 +388,7 @@ def main():
                               "calc.out is flagged as possibly not single-point-converged. "
                               "Advisory only, never blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                          help="Also save the gamma-surface (or line-scan) data as gnuplot .dat "
                               "+ .gplot scripts, under '<dir>/plot/'. Off by default.")
@@ -411,7 +412,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("Analyze a 2D stacking-fault study:", 'bold'))
@@ -435,7 +436,7 @@ def main():
         scan, scan_points = "surface", None
         mode, n_layer1_atoms = 3, None
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("stackingfaultAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== STACKING-FAULT (GAMMA-SURFACE) REPORT =====', 'magenta')}", f_out)
@@ -573,6 +574,15 @@ def main():
         sys.exit(1)
 
     print_section('[2] STACKING FAULT ANALYSIS', f_out)
+    if scan == "surface" and lattice is not None and (grid_nx % 3 or grid_ny % 3):
+        from stb.stackingfault import is_hexagonal_inplane
+        if is_hexagonal_inplane(lattice):
+            print_dual(color_text(
+                f"[WARNING] Hexagonal lattice sampled on a {grid_nx} x {grid_ny} grid: the high-symmetry "
+                "registries AB/BA sit at shifts (1/3, 2/3) and (2/3, 1/3), which are not grid points. The "
+                "minimum, maximum and corrugation below are those of the nearest grid points, not of the "
+                "exact registries (the corrugation is underestimated). Rerun stb-stackingfault with "
+                "divisions that are multiples of 3.", 'yellow'), f_out)
     print_dual(f"[INFO] Interface area (in-plane): {area:.4f} Ang^2 (used to convert relative "
                 "energies to meV/Ang^2)", f_out)
     print_dual(f"Equilibrium stacking (min)    : {min_row.label}  (shift "

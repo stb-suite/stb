@@ -37,7 +37,7 @@ well-chosen points and the segments between them.
 Which points are "high-symmetry", and in what order to connect them, is
 NOT arbitrary -- it depends on the shape of the Brillouin zone, which in
 turn depends on the crystal's Bravais lattice. Setyawan & Curtarolo (2010)
--- the exact reference stb-kpath writes to references.bib -- standardized
+-- the exact reference stb-kpath writes to stb_kpath_references.bib -- standardized
 this into one path convention per Bravais lattice type, now used across
 essentially every DFT code for reproducible band-structure plots. ASE
 implements that exact convention (Cell.bandpath) and extends it to 1D/2D
@@ -91,8 +91,8 @@ echo " output/silicon/  --  bulk silicon (3D)"
 echo "=================================================================="
 mkdir -p "$OUT/silicon"
 cp structure.fdf "$OUT/silicon/"
-echo "\$ stb-kpath --file structure.fdf --save-report --no-intro"
-(cd "$OUT/silicon" && stb-kpath --file structure.fdf --save-report --no-intro > console.log)
+echo "\$ stb-kpath --file structure.fdf --no-intro"
+(cd "$OUT/silicon" && stb-kpath --file structure.fdf --no-intro > console.log)
 grep -E "Bravais lattice|Space group|Crystal system|^Path :" "$OUT/silicon/console.log"
 echo
 echo "Notice the mismatch: the Bravais lattice (CUB) comes from the plain"
@@ -112,8 +112,8 @@ for case in chain graphene; do
     echo "=================================================================="
     mkdir -p "$OUT/$case"
     cp "$struct" "$OUT/$case/"
-    echo "\$ stb-kpath --file $struct --save-report --no-intro"
-    (cd "$OUT/$case" && stb-kpath --file "$struct" --save-report --no-intro > console.log)
+    echo "\$ stb-kpath --file $struct --no-intro"
+    (cd "$OUT/$case" && stb-kpath --file "$struct" --no-intro > console.log)
     grep -E "Dimensionality|Bravais lattice|Space group|may not reflect|^Path :" "$OUT/$case/console.log"
     pause
 done
@@ -214,7 +214,7 @@ echo "=================================================================="
 cat <<EOF
 Three self-contained folders were generated under output/ (silicon/,
 chain/, graphene/), each with kpath_bs.fdf, stb_kpath_report.txt, and
-references.bib (SIESTA + Setyawan-Curtarolo citations). output/molecule/
+stb_kpath_references.bib (SIESTA + Setyawan-Curtarolo citations). output/molecule/
 deliberately has none of those -- 0D is a hard error.
 
 As a next step, try on your own:

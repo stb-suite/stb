@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -24,6 +24,7 @@ too small, thermal expansion 4x too small) and printed the static B0 in eV/Ang^3
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -40,7 +41,9 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io, kspace, model_card
 from stb.core.cli import (color_text, show_intro, print_dual, print_table,
                           capture_library_noise, display_available, Sections, run_gnuplot)
-from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ
+from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ, THERMAL_FREQ_MIN_THZ
+
+_QHA_LOW_T_K = 150.0   # a negative-expansion region that starts above this is not the low-temperature one
 
 REPORT_FILE = "stb_mlphonons_report.txt"
 PLOT_DIR = "plot"
@@ -171,12 +174,13 @@ def run_phonon_pipeline(atoms_ref, calc, args, f_out, tag, noise, quiet=False):
 
     # with_eigenvectors + no mesh symmetry: the projected DOS needs per-atom character
     with capture_library_noise(noise, tag):
-        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False)
+        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False, is_gamma_center=True)
         phonon.run_total_dos()
         dos = phonon.get_total_dos_dict()
         phonon.run_projected_dos()
         proj = phonon.get_projected_dos_dict()['projected_dos']
-        phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+        phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep,
+                                      cutoff_frequency=THERMAL_FREQ_MIN_THZ)
         tp = phonon.get_thermal_properties_dict()
     res["mesh_freqs"] = np.array(phonon.mesh.frequencies)
     res["mesh_q"] = np.array(phonon.mesh.qpoints)
@@ -930,6 +934,23 @@ def report_comparison(main, found, f_out):
 
 # ---- QHA ----------------------------------------------------------------------------
 
+def _negative_expansion_blocks(T, alpha_V):
+    """(low, others): the contiguous runs of alpha_V < 0 as index lists; `low` is the first if it starts at or below
+    _QHA_LOW_T_K (the transverse-acoustic region), else None, and `others` the runs that are not."""
+    blocks, current = [], []
+    for i, a in enumerate(alpha_V):
+        if a < 0:
+            current.append(i)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    if blocks and T[blocks[0][0]] <= _QHA_LOW_T_K:
+        return blocks[0], blocks[1:]
+    return None, blocks
+
+
 def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
     """Quasi-harmonic approximation: the single-volume pipeline (no bands, no PDOS) at --n-volumes
     isotropically scaled volumes, then phonopy's PhonopyQHA on the INPUT cell: per-primitive-cell
@@ -964,8 +985,9 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
             phonon.symmetrize_force_constants(show_drift=False)
             e_i = relaxed.get_potential_energy()
             v_i = relaxed.get_volume()
-            phonon.run_mesh(args.mesh)
-            phonon.run_thermal_properties(t_min=args.tmin, t_max=t_max_grid, t_step=args.tstep)
+            phonon.run_mesh(args.mesh, is_gamma_center=True)
+            phonon.run_thermal_properties(t_min=args.tmin, t_max=t_max_grid, t_step=args.tstep,
+                                          cutoff_frequency=THERMAL_FREQ_MIN_THZ)
         tp = phonon.thermal_properties
         if factor is None:
             factor = mace_phonons.cell_factor(phonon)
@@ -1072,11 +1094,15 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
         print_dual(f"  Thermal expansion : {q['alpha_V'][k]:.4e} 1/K volumetric, {q['alpha_L'][k]:.4e} 1/K linear", f_out)
         print_dual(f"  Bulk modulus      : {q['B_T'][k]:.2f} GPa", f_out)
         print_dual(f"  Gibbs free energy : {q['G_T'][k]:.6f} eV per cell", f_out)
-    neg = T[q["alpha_V"] < 0]
-    if len(neg):
-        print_dual(f"Negative expansion: below {neg.max():.0f} K (minimum alpha_L {q['alpha_L'].min() * 1e6:.3f} 1e-6/K at "
-                   f"{T[np.argmin(q['alpha_L'])]:.0f} K) -- modes that soften under compression (gamma < 0, e.g. transverse "
+    low, others = _negative_expansion_blocks(T, q["alpha_V"])
+    if low:
+        k_min = low[int(np.argmin(q["alpha_L"][low]))]
+        print_dual(f"Negative expansion: {T[low[0]]:.0f}-{T[low[-1]]:.0f} K (minimum alpha_L {q['alpha_L'][k_min] * 1e6:.3f} "
+                   f"1e-6/K at {T[k_min]:.0f} K) -- modes that soften under compression (gamma < 0, e.g. transverse "
                    "acoustic) win at low temperature", f_out)
+    for b in others:
+        warn(f"QHA: alpha_V < 0 at {T[b[0]]:.0f}-{T[b[-1]]:.0f} K, away from the low-temperature region: check V(T) in "
+             "qha_thermal_expansion.dat before trusting the expansion there (a noisy scan: try more volumes).")
     v_lo, v_hi = min(volumes), max(volumes)
     out = T[(q["V_T"] < v_lo) | (q["V_T"] > v_hi)]
     if len(out):
@@ -1239,7 +1265,7 @@ def build_parser():
                              "Grueneisen parameters vs. T, mode Grueneisen parameters). No "
                              "foundation-model comparison in this mode. Off by default.")
     parser.add_argument("--n-volumes", type=int, default=5,
-                        help="Number of volume points for --qha, >= 4 (default: 5).")
+                        help="Number of volume points for --qha, >= 5 (default: 5).")
     parser.add_argument("--strain-range", type=float, default=3.0,
                         help="Volume range around equilibrium for --qha, +/- %% (default: 3.0).")
     parser.add_argument("--eos", choices=["vinet", "murnaghan", "birch_murnaghan"], default="vinet",
@@ -1309,7 +1335,7 @@ def build_parser():
     parser.add_argument("--save-data", action="store_true",
                         help="Also write the raw numeric data (.dat) behind each plot. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlphonons {VERSION}")
     return parser
@@ -1320,9 +1346,11 @@ def main():
     args = parser.parse_args()
     card = model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
-    if args.qha and args.n_volumes < 4:
-        parser.error("--n-volumes must be at least 4 -- vinet/murnaghan/birch_murnaghan all "
-                     "fit 4 parameters (E0, V0, B0, B0'), so need at least 4 volumes.")
+    if args.qha and args.n_volumes < 5:
+        parser.error("--n-volumes must be at least 5: the equation of state has 4 parameters (E0, V0, "
+                     "B0, B0') and the entropy S(V) is fitted with a polynomial of degree 4, which "
+                     "needs 5 volumes (with 4 the run used to fail at the very end, after every "
+                     "volume had been computed).")
     for flag_name, flag_val in (("--freeze-unstable-mode", args.freeze_unstable_mode),
                                 ("--animate-mode", args.animate_mode is not None)):
         if args.qha and flag_val:
@@ -1349,11 +1377,11 @@ def main():
             "Siesta ToolBox Suite - ML Phonons",
             "Bands, DOS, and thermal properties, driven entirely by a MACE potential",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlphonons")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()
@@ -1488,7 +1516,7 @@ def main():
         if report_path:
             print_dual(f"Report            : {report_path}", f_out)
         not_asked = [f for f, on in (("--save-gnuplot", args.save_gnuplot), ("--save-data", args.save_data),
-                                     ("--show", args.show), ("--save-report", args.save_report)) if not on]
+                                     ("--show", args.show)) if not on]
         if not_asked:
             print_dual(f"Also available    : {' '.join(not_asked)}", f_out)
         print_dual(f"Wall time         : {time.monotonic() - t_start:.1f} s", f_out)

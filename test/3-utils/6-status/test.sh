@@ -5,7 +5,7 @@
 #
 # Fixtures are 3 real, distinctly-typed SIESTA runs:
 #   singlepoint/  -- Sn3O4.out (calc.out/calc.fdf), single-point, shared with
-#                    the other 5-utils fixtures.
+#                    the other 3-utils fixtures.
 #   aimd/         -- the same 5-step Verlet AIMD run used by stb-ani2traj's
 #                    own fixtures (5 steps, final Temp_ion = 9917.825 K).
 #   relax/        -- a real 3-step CG relaxation (isolated O2, converges to
@@ -28,6 +28,16 @@ check_contains() {
     else
         echo -e "   -> ${RED}Failed:${NC} '$1' NOT found in '$2'"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -65,30 +75,43 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Single-point folder ---
 echo -e "\n--- Testing single-point folder (auto-detects SystemLabel=Sn3O4) ---"
+rm -f stb_status_report*.txt stb_status_references*.bib
 stb-status --no-intro --path singlepoint > log_singlepoint.txt 2>&1
+check_exit_code $? 0
 check_contains "SystemLabel       : Sn3O4" log_singlepoint.txt
-check_contains "Run type          : single-point" log_singlepoint.txt
-check_contains "SCF converged     : yes" log_singlepoint.txt
-check_contains "Free energy (eV)  : -4054.427104" log_singlepoint.txt
+check_contains "State             : .*FINISHED" log_singlepoint.txt
+check_contains "Run type          : single point" log_singlepoint.txt
+check_contains "Converged steps   : 1 of 1" log_singlepoint.txt
+check_contains "Total energy      : -4054.427104 eV" log_singlepoint.txt
+check_contains "Mesh cutoff       : 320 Ry required, 325.4 Ry used" log_singlepoint.txt
+check_contains "Verdict           : FINISHED -- result usable" log_singlepoint.txt
+echo "Testing: the report is always written, in the current folder, with its references file"
+check_success stb_status_report.txt
+check_contains "STB-STATUS REPORT" stb_status_report.txt
+check_success stb_status_references.bib
 
 
 # --- 3. AIMD folder ---
-echo -e "\n--- Testing AIMD folder (5 steps, final Temp_ion) ---"
+echo -e "\n--- Testing AIMD folder (5 MD steps, per-step table) ---"
 stb-status --no-intro --path aimd > log_aimd.txt 2>&1
 check_contains "SystemLabel       : aimd" log_aimd.txt
-check_contains "Run type          : aimd" log_aimd.txt
-check_contains "Steps             : 5" log_aimd.txt
-check_contains "Final temperature : 9917.825 K" log_aimd.txt
-check_contains "AIMD trajectory     : .*yes" log_aimd.txt
+check_contains "Run type          : MD (Verlet MD run)" log_aimd.txt
+check_contains "MD steps          : 5 of 5" log_aimd.txt
+check_contains "5    | 6       | -857.5875 | 3.5559" log_aimd.txt
+check_contains "MD/relaxation trajectory | aimd.ANI | stb-ani2traj (3.5)" log_aimd.txt
+echo "Testing: a second run never overwrites the first report (numbered _1)"
+check_success stb_status_report_1.txt
 
 
 # --- 4. Relaxation folder ---
-echo -e "\n--- Testing relaxation folder (3 CG opt. moves) ---"
+echo -e "\n--- Testing relaxation folder (2 CG moves after the input geometry) ---"
 stb-status --no-intro --path relax > log_relax.txt 2>&1
 check_contains "SystemLabel       : relax" log_relax.txt
-check_contains "Run type          : relaxation" log_relax.txt
-check_contains "Steps             : 3" log_relax.txt
-check_contains "Max force (eV/Ang): 0.044366" log_relax.txt
+check_contains "Run type          : relaxation (CG coord. optimization)" log_relax.txt
+check_contains "Moves             : 2 of at most 10 (plus the input geometry)" log_relax.txt
+check_contains "Relaxation        : converged ('Relaxed atomic coordinates')" log_relax.txt
+check_contains "Max force (last)  : 0.0444 eV/Ang vs tolerance 0.05 (ok)" log_relax.txt
+check_contains "Max force         : 0.044366 eV/Ang" log_relax.txt
 
 
 # --- 5. --label override ---
@@ -100,20 +123,20 @@ check_contains "SystemLabel       : Sn3O4" log_labelover.txt
 # --- 6. Batch mode (glob matching all 3 folders) ---
 echo -e "\n--- Testing batch mode (--path matching all 3 folders) ---"
 stb-status --no-intro --path "*" > log_batch.txt 2>&1
-check_contains "3 director" log_batch.txt
-check_contains "singlepoint" log_batch.txt
-check_contains "aimd" log_batch.txt
-check_contains "relax" log_batch.txt
+check_contains "Target            : \* -- 3 folder(s)" log_batch.txt
+check_contains "\[1\] FOLDERS" log_batch.txt
+check_contains "aimd        | FINISHED | MD " log_batch.txt
+check_contains "relax       | FINISHED | relaxation (relaxed) | 2 " log_batch.txt
+check_contains "singlepoint | FINISHED | single point " log_batch.txt
+check_contains "States            : 3 FINISHED" log_batch.txt
 check_contains "Folders inspected : 3" log_batch.txt
 
 
-# --- 7. --save-report ---
-echo -e "\n--- Testing --save-report ---"
-rm -f stb_status_report.txt
+# --- 7. --save-report is a hidden, ignored option (old scripts keep working) ---
+echo -e "\n--- Testing the old --save-report flag ---"
 stb-status --no-intro --path aimd --save-report > log_savereport.txt 2>&1
-check_success stb_status_report.txt
-check_contains "STB-STATUS REPORT" stb_status_report.txt
-rm -f stb_status_report.txt
+check_exit_code $? 0
+check_contains "Status check complete" log_savereport.txt
 
 
 # --- 8. Missing directory ---
@@ -125,9 +148,11 @@ check_contains "is not a directory" log_missing.txt
 
 # --- 9. Interactive path (stb-suite, shortcut 3.6) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.6) ---"
-printf '3.6\naimd\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
-check_contains "Run type          : aimd" log_interactive.txt
+# Prompts in order: folder, recursive, label, CSV file
+printf '3.6\naimd\nn\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+check_contains "Run type          : MD (Verlet MD run)" log_interactive.txt
 check_contains "Status check complete" log_interactive.txt
+check_not_contains "Traceback" log_interactive.txt
 
 
 popd > /dev/null

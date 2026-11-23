@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77", "wheel"]   # >=77: SPDX license expression below
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,24 +7,49 @@ name = "stb_suite"
 # One version for the whole suite (2.0.0 on main, <next>.dev<N> on dev), computed by
 # src/stb/_version.py (see its docstring); STB_VERSION overrides it.
 dynamic = ["version"]
-description = "Siesta ToolBox (STB) suite with softwares pre and pos processing for Siesta code."
+description = "Command-line tools for every stage of a SIESTA DFT project: inputs, structures, post-processing and property workflows."
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "STB-SUITE team"}]
+keywords = ["SIESTA", "DFT", "density functional theory", "materials science", "computational chemistry",
+            "phonons", "elastic constants", "adsorption", "NEB", "machine-learning potentials", "MACE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+# 3.9 is out: phonopy does not build there (pip failed late, inside its build).
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy",
     "ase",
     "matplotlib",
-    "pymatgen",
+    "pymatgen>=2026.9.24",  # older: wrong mirror planes for planar molecules (stb-symmetry); icet 4 API (stb-sqs)
     "spglib>=2.2.0",  # >=2.1.0 for get_layergroup(), >=2.2.0 for its Hall-number fixes (stb-symmetry)
     "sisl",
     "pybader",
     "setuptools",
     "scipy",
-    "phonopy",
+    "phonopy>=4.7.1",  # exclude_gamma_acoustic of run_thermal_displacement_matrices (stb-phononsPos)
     "pandas",
     "icet",
     "pyxtal"
 ]
+
+[project.urls]
+Homepage = "https://stb-suite.github.io/stb/"
+Documentation = "https://stb-suite.github.io/stb/"
+Source = "https://github.com/stb-suite/stb"
+Changelog = "https://stb-suite.github.io/stb/changelog/"
+Issues = "https://github.com/stb-suite/stb/issues"
 
 [project.optional-dependencies]
 # Heavy (PyTorch-based) stack for stb-mlrelax's ML pre-relaxation, kept out
@@ -140,4 +165,4 @@ version = {attr = "stb._version.__version__"}
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship
 # inside the wheel/sdist, not just be present on disk during editable dev.
-stb = ["pseudopotentials/*/*"]
+stb = ["pseudopotentials/*/*", "pseudopotentials/*/*/*"]

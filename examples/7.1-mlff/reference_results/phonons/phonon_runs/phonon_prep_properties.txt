@@ -8,7 +8,7 @@ Calc file         : calc.fdf
 Supercell dim     : 5 x 5 x 1
 Displacement dist.: 0.01 Ang
 Symmetry precision: 0.01 Ang (symprec, see [3])
-Pseudopotentials  : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
+Pseudopotentials  : /path/to/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
 Dimensionality    : 2D (e.g., a slab or surface)
 
 [1] SINGLE-POINT SCF ENFORCEMENT
@@ -33,7 +33,7 @@ config_extra.fdf (written into every generated folder):
 [2] PSEUDOPOTENTIALS
 ------------------------------------------------------------
 Elements in unit cell : C
-Searching in          : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
+Searching in          : /path/to/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
 Found all required    : C.psf
 
 [3] SYMMETRY REDUCTION

@@ -54,6 +54,16 @@ def read_iterations(path):
     return head, np.array(data)
 
 
+def analysis_report(d):
+    """The stb-hirshfeldAnalysis report of a study: stb_hirshfeldAnalysis_report.txt, or the
+    stb_hirshfeldAnalysis_report.txt name of the reference runs made before 2.1.0."""
+    for name in ("stb_hirshfeldAnalysis_report.txt", "stb_hirshfeldAnalysis_report.txt"):
+        path = os.path.join(d, "analysis", name)
+        if os.path.isfile(path):
+            return path
+    return os.path.join(d, "analysis", "stb_hirshfeldAnalysis_report.txt")
+
+
 def read_report(path):
     txt = strip(open(path).read())
     out = {}
@@ -151,7 +161,7 @@ def main():
         if not os.path.isdir(d):
             continue
         dat = read_dat(os.path.join(d, "analysis", "hirshfeld_charges.dat"))
-        rep = read_report(os.path.join(d, "analysis", "hirshfeld_analysis_report.txt"))
+        rep = read_report(analysis_report(d))
         tight = os.path.join(d, "analysis_tight", "hirshfeld_charges.dat")
         hi_conv = species_mean(read_dat(tight), "hi") if os.path.isfile(tight) else {}
         bader = read_bader(os.path.join(d, "bader", "stb_bader_report.txt"))
@@ -187,7 +197,7 @@ def main():
         if not os.path.isfile(os.path.join(d, "analysis", "hirshfeld_charges.dat")):
             return None
         dat = read_dat(os.path.join(d, "analysis", "hirshfeld_charges.dat"))
-        rep = read_report(os.path.join(d, "analysis", "hirshfeld_analysis_report.txt"))
+        rep = read_report(analysis_report(d))
         o = [r for r in dat if r["el"] == "O"][0]
         bader = read_bader(os.path.join(d, "bader", "stb_bader_report.txt"))
         return {"tag": tag, "mesh": mesh_used(d), "spacing": rep["spacing"], "voronoi": o["voronoi"],

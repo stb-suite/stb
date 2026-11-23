@@ -5,6 +5,7 @@ spintexture_Sz.dat
 spintexture.gplot
 spintexture.pdf
 stb_spintexture_report.txt
-references.bib
+stb_*_references*.bib
 calc.HSX
 calc.out
+stb_*_report*.txt

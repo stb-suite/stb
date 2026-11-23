@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -96,6 +96,7 @@ same code:
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -114,7 +115,6 @@ from stb.core.broadening import sigma_ev_from_args
 from stb.stm import resolve_axis, check_axis_alignment
 
 REPORT_FILE = "stb_sts_report.txt"
-BIB_FILE = "references.bib"
 
 
 def main():
@@ -125,7 +125,7 @@ def main():
                "  stb-sts --label siesta --xy 0 0 --height 3.0 --erange -3 3 --sigma 50\n"
                "  stb-sts --label siesta --point 1.2 0.7 12.0 --erange -5 5 --fwhm 100\n"
                "  stb-sts --label siesta --xy 0 0 --height 3.0 --erange -5 5 --sigma 50 "
-               "--shift fermi --fermi-file calc.out --save-report --save-gnuplot --view\n",
+               "--shift fermi --fermi-file calc.out --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -186,11 +186,11 @@ def main():
                         help="Gaussian broadening full width at half maximum, in meV.")
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write sts.dat (and, with --save-gnuplot/--save-report, "
-                             "the .gplot script/report/references.bib) into (default: current "
+                        help="Directory to write sts.dat (and, with --save-gnuplot, "
+                             "the .gplot script) into (the report and its references file go to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a real .gplot script alongside sts.dat. Off by default -- "
                              "this tool used to write the .dat file unconditionally but never wrote "
@@ -247,7 +247,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("STS: reading input data", 'bold'))
@@ -395,7 +395,7 @@ def main():
             f.writelines(lines)
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("sts")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-STS REPORT =====", 'magenta'), f_out)
@@ -456,17 +456,17 @@ def main():
 
     print_section("[5] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.TERSOFF_HAMANN]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Data           : {out_path}", f_out)
     if gplot_path:
         print_dual(f"Gnuplot script : {gplot_path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

@@ -101,6 +101,50 @@ def get_int_input(prompt: str, default: int | None = None) -> int:
             print(color_text("Please enter a valid integer", 'red'))
 
 
+REPORT_NAME_TEMPLATE = "stb_{tool}_report.txt"
+REPORT_LOCATION_HELP = ("in the folder you run the command from, as stb_<tool>_report.txt (_1, _2, ... "
+                        "when that name is taken, so no report is ever overwritten)")
+
+
+def report_name(tool: str) -> str:
+    """Base file name of the report of a tool, e.g. 'stb_adsorbAnalysis_report.txt' for
+    'adsorbAnalysis' (the console command without its 'stb-' prefix)."""
+    tool = tool[4:] if tool.startswith("stb-") else tool
+    return REPORT_NAME_TEMPLATE.format(tool=tool)
+
+
+def new_report_path(tool: str) -> str:
+    """Where a tool writes its report: ALWAYS the current working folder, under the tool's own
+    name, never overwriting -- 'stb_<tool>_report.txt', else '_1', '_2', ... The file is
+    created empty here (exclusive create), so two runs started together never share a name.
+
+    Its references file, stb_<tool>_references.bib with the same number, is registered here and
+    written when the process exits (core.citations).
+
+    Suite rule: a report is for the user to read. Nothing a later stage needs is ever read
+    back from a report: data that flows between stages goes into a JSON file of the run
+    folder, written and read by the tools."""
+    from stb.core import citations
+    base = report_name(tool)
+    stem, ext = os.path.splitext(base)
+    n = 0
+    while True:
+        candidate = base if n == 0 else f"{stem}_{n}{ext}"
+        bib = citations.references_name(tool, n)
+        if os.path.exists(bib):          # keep the report and its references paired by number
+            n += 1
+            continue
+        try:
+            with open(candidate, "x"):
+                pass
+        except FileExistsError:
+            n += 1
+            continue
+        # The references file of the run: same number, written when the process exits.
+        citations.register_run(tool, bib)
+        return candidate
+
+
 def print_dual(text: str, file_handle=None) -> None:
     """Prints to stdout with color, writes to file without color."""
     print(text)
@@ -215,6 +259,17 @@ def finish_progress_line() -> None:
         sys.stderr.flush()
 
 
+def ignore_cuda_probe_warning():
+    """On a CPU-only node with an old NVIDIA driver torch prints, at its first
+    CUDA probe, 'UserWarning: CUDA initialization: The NVIDIA driver on your
+    system is too old'. It says nothing a CPU run needs, and a run that asks
+    for the GPU gets its own clear error from mace_relax.resolve_device."""
+    warnings.filterwarnings("ignore", message=r"CUDA initialization", category=UserWarning)
+
+
+ignore_cuda_probe_warning()
+
+
 @contextlib.contextmanager
 def capture_library_noise(collector, label):
     """Captures stdout prints and warnings.warn() calls made by external
@@ -242,6 +297,7 @@ def capture_library_noise(collector, label):
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            ignore_cuda_probe_warning()
             with contextlib.redirect_stdout(buf):
                 yield
     finally:

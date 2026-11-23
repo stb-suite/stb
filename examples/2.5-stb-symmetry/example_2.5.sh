@@ -54,9 +54,8 @@ documented limitations (no rod-group detection for a wire, the distortion
 metric's dependence on --symprec, etc.).
 
 Every run prints a numbered [0]...[11] report, the same style every
-newer tool in this suite uses. --save-report additionally persists that
-report to stb_symmetry_report.txt -- off by default, so a plain run only
-ever writes references.bib, no text report file. The tool used to always
+newer tool in this suite uses, and it is always saved to
+stb_symmetry_report.txt in the current folder. The tool used to always
 write symmetry.dat unconditionally; that's gone now (a stale one from an
 older run is cleaned up automatically instead).
 EOF
@@ -172,31 +171,24 @@ awk '/\[1\] DIMENSIONALITY/{flag=1} /\[2\] SPACE/{flag=0} flag' "$OUT/limitation
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report (off by default)"
+echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[11] report to the console.
---save-report additionally persists it to stb_symmetry_report.txt -- off
-by default, so a plain run only ever writes references.bib, no text
+It is always saved to stb_symmetry_report.txt in the current folder, so a plain run only ever writes stb_symmetry_references.bib, no text
 report file at all:
 EOF
 mkdir -p "$OUT/full-report"
 cp nacl.fdf "$OUT/full-report/"
 echo
-echo "\$ stb-symmetry --file nacl.fdf --format fdf --no-intro   # default: no report file"
+echo "\$ stb-symmetry --file nacl.fdf --format fdf --no-intro"
 (cd "$OUT/full-report" && stb-symmetry --file nacl.fdf --format fdf \
-    --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "\.fdf$\|console"
-echo "(no symmetry.dat, no stb_symmetry_report.txt -- only references.bib)"
-echo
-echo "\$ stb-symmetry --file nacl.fdf --format fdf --save-report --no-intro"
-(cd "$OUT/full-report" && stb-symmetry --file nacl.fdf --format fdf \
-    --save-report --no-intro > console_saved.log 2>&1)
+    --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_symmetry_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_symmetry_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-symmetry run analyzes a SIESTA structure file):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_symmetry_references.bib -- SIESTA (every stb-symmetry run analyzes a SIESTA structure file):"
+grep "^@" "$OUT/full-report/stb_symmetry_references.bib"
 pause
 
 echo "=================================================================="
@@ -215,8 +207,8 @@ EOF
 TMP="$(mktemp -d)"
 cp nacl.fdf "$TMP/"
 echo
-echo "\$ printf '2.5\\nnacl.fdf\\n1\\n\\n\\n\\n\\n\\n\\n\\n\\n' | stb-suite     # format=fdf, all other prompts default/skip"
-(cd "$TMP" && printf '2.5\nnacl.fdf\n1\n\n\n\n\n\n\n\n\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.5\\nnacl.fdf\\n1\\n\\n\\n\\n\\n\\n\\n\\n' | stb-suite     # format=fdf, all other prompts default/skip"
+(cd "$TMP" && printf '2.5\nnacl.fdf\n1\n\n\n\n\n\n\n\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Fm-3m" "$OUT/bulk-nacl/console.log" | head -1)
 MENU_LINE=$(grep "Fm-3m" "$TMP/session.log" | head -1)
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -249,8 +241,8 @@ Six self-contained folders were generated under output/:
   bulk-nacl/       scan-symprec/    layer-group/
   point-group/     limitation-wire/ full-report/
 
-Each has references.bib; full-report/ additionally has
-stb_symmetry_report.txt (only from its --save-report run).
+Each has stb_symmetry_references.bib; full-report/ additionally has
+stb_symmetry_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - space group, Wyckoff orbits, symmetry operations, and per-atom
@@ -260,10 +252,10 @@ Recap of what this walkthrough covered:
     GROUP instead of trusting the plain 3D SPACE GROUP (see the README
     for the theory behind each)
   - the documented "no rod group" limitation for a 1D wire
-  - the numbered [0]...[11] report, --save-report, references.bib
+  - the numbered [0]...[11] report (always saved), stb_symmetry_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA structure:
-  stb-symmetry --file my_calc.fdf --format fdf --scan-symprec --save-report
+  stb-symmetry --file my_calc.fdf --format fdf --scan-symprec
   stb-symmetry --file my_calc.fdf --format fdf --compare-to my_relaxed.STRUCT_OUT --compare-format struct_out
 EOF

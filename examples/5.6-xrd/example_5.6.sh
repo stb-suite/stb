@@ -253,7 +253,7 @@ Both stages are reachable via stb-suite's interactive menu (dotted codes
 EOF
 mkdir -p "$OUT/case9-interactive"
 echo "\$ stb-suite  (5.6.1: Si8, group 227, no MACE relax, no pseudo-dir)"
-(cd "$OUT/case9-interactive" && printf '5.6.1\nSi 8\n\n227\n\nn\n\nn\nn\n\n\nn\nn\n\n0\n' | stb-suite 2>&1 \
+(cd "$OUT/case9-interactive" && printf '5.6.1\nSi 8\n\n227\n\nn\n\nn\nn\n\n\nn\n\n0\n' | stb-suite 2>&1 \
     | sed -n '/\[2\] CANDIDATE CASTING/,/\[3\] MACE/p')
 cp "$DIR/experimental.dat" "$OUT/case9-interactive/"
 echo "\$ stb-suite  (5.6.2: default input folder, experimental.dat)"

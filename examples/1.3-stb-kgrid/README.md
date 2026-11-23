@@ -22,7 +22,7 @@ of sampled k-points: too few, and the result is a poor approximation that
 keeps changing as you add more; enough, and it converges to a stable value.
 
 **Monkhorst-Pack** (Monkhorst & Pack, 1976 — the exact reference
-`stb-kgrid` writes to `references.bib`, see below) is the standard
+`stb-kgrid` writes to `stb_kgrid_references.bib`, see below) is the standard
 convention for *how* to lay out that finite set: a uniform mesh of
 `N1 x N2 x N3` points along the three reciprocal lattice directions,
 instead of picking points ad hoc.
@@ -99,9 +99,9 @@ command underneath. `example_1.3.sh` proves both paths agree.
 ./example_1.3.sh
 ```
 
-Every case below is generated with `--save-report`, each into its own
+Every case below is generated each into its own
 folder under `output/` — `stb_kgrid_report.txt` (the exact console report)
-plus `references.bib` (SIESTA + Monkhorst-Pack citations):
+plus `stb_kgrid_references.bib` (SIESTA + Monkhorst-Pack citations):
 
 | Folder            | Structure                          | Dimensionality | Grid (density 0.2) |
 |--------------------|-------------------------------------|:---:|:---------------------|
@@ -158,17 +158,17 @@ table above.
 ## Flag reference
 
 ```
-stb-kgrid --file <structure.fdf> --density <value> [--vacuum-gap <Ang>] [--save-report]
+stb-kgrid --file <structure.fdf> --density <value> [--vacuum-gap <Ang>]
 ```
 
 - `-f/--file` (required): path to a SIESTA structure file (`.fdf` only).
 - `-d/--density` (required): target k-point density, in 1/Ang.
 - `--vacuum-gap` (optional, default `10.0`): minimum empty span (Ang) along
   an axis, wrapped periodically, to treat it as vacuum-padded.
-- `--save-report` (optional): also persist the report to
-  `stb_kgrid_report.txt`. Off by default.
+- **Report** — always saved to `stb_kgrid_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
-`references.bib` (SIESTA + Monkhorst-Pack citations) is always written —
+`stb_kgrid_references.bib` (SIESTA + Monkhorst-Pack citations) is always written —
 there's no flag for it.
 
 Run `stb-kgrid --help` for the full list of options.

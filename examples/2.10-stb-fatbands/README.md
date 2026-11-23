@@ -153,7 +153,7 @@ orbital-count match, and an eigenvalue cross-check (`--k-tol`, default
 `--label` (auto-pairs same-run files) over hand-picking `--file`/`--wfsx`
 from different calculations.
 
-## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+## The report: console output, `--save-gnuplot`, `--view`
 
 Every run prints a numbered report, the same `[0]...[6]` style every newer
 tool in this suite uses:
@@ -165,11 +165,11 @@ tool in this suite uses:
 | `[2] BAND GAP ANALYSIS (k-path)` | VBM/CBM, direct/indirect gap, gap type — spin-resolved (+ half-metallic flag) for `nspin=2` |
 | `[3] ORBITAL PROJECTION` | categories found/used, `l > 3` exclusions (if any), spin-split note, and a per-category table (orbital count, mean/max weight) |
 | `[4] WRITING OUTPUT FILES` | whether `fatbands_<category>.dat`/`.gplot` were written |
-| `[5] REFERENCES` | writes `references.bib` (SIESTA) |
+| `[5] REFERENCES` | writes `stb_fatbands_references.bib` (SIESTA) |
 | `[6] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — persist the (text) report to
-  `stb_fatbands_report.txt`. Off by default.
+- **Report** — always saved to `stb_fatbands_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** — write `fatbands_<category>.dat` (one file per
   category — `k_position`/`energy(eV)`/`value` columns) + `fatbands.gplot`
   (all categories overlaid) together. Off by default — this tool used to
@@ -211,7 +211,7 @@ Both paths call the exact same underlying tool and produce the exact same
 output — `example_2.10.sh` proves this directly at the end. The menu
 additionally defaults `--shift` to Fermi level and `--projection` to
 `species_l` (just press Enter through both), plus separate `y/N` prompts
-for `--save-report`/`--save-gnuplot`/`--view`.
+for `--save-gnuplot`/`--view`.
 
 ## Files in this folder
 
@@ -258,13 +258,13 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `category-filter/`         | `--category` restricting the output to specific species/orbital combinations |
 | `accuracy-fallback/`       | No `.HSX` available: the approximate (`\|c\|^2`) fallback, via `--geometry-file` |
 | `spin-polarized/`          | The real spin-polarized fixture: spin-resolved gap analysis AND `<category>_up`/`<category>_down` splitting |
-| `full-report/`             | Default (no report/data files) vs. `--save-report --save-gnuplot`, `references.bib` |
+| `full-report/`             | `--save-gnuplot`, the report, `stb_fatbands_references.bib` |
 
 ## Try it yourself
 
 ```bash
 # Your own finished SIESTA calculation (needs WFS.Write.For.Bands T -- see above)
-stb-fatbands --label my_calc --shift fermi --save-report --save-gnuplot
+stb-fatbands --label my_calc --shift fermi --save-gnuplot
 
 # Which orbital character dominates each band, split by species AND l
 stb-fatbands --label my_calc --shift fermi --projection species_l --category Fe-d O-p
@@ -287,8 +287,7 @@ stb-fatbands --label my_magnetic_calc --shift fermi --view
 | `--projection`      | `l` / `ml` / `atom` / `species` / `species_l` (default).               |
 | `--category`        | Restrict output to specific category values (default: all found).      |
 | `--k-tol`           | `.bands`/`.WFSX` eigenvalue cross-check tolerance, eV (default `0.001`).|
-| `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
-| `--save-report`     | Persist the full report to `stb_fatbands_report.txt`.                  |
+| `-o/--output-dir`   | Where all generated files (and `stb_fatbands_references.bib`) land.                 |
 | `--save-gnuplot`    | Also write `fatbands_<category>.dat`/`fatbands.gplot`.                 |
 | `--view`            | Show an interactive matplotlib preview.                                |
 

@@ -270,17 +270,13 @@ output — `example_2.4.sh` proves this directly at the end.
 - **A numbered report** (`[0] RUN METADATA` … `[11] SUMMARY & FILES`)
   printed to the console.
 - **`rdf.dat`** — the full g(r) curve, unless `--no-rdf` is given.
-- **`references.bib`** — SIESTA (every structure file analyzed here is
+- **`stb_structural_references.bib`** — SIESTA (every structure file analyzed here is
   SIESTA input/output).
 
 ## Optional (off by default)
 
-- **`--save-report`** — also persists the full numbered report to
-  `stb_structural_report.txt`. Without it, only `rdf.dat` and
-  `references.bib` are written — no text report file at all (the old,
-  always-on `structural_information.dat` this tool used to write
-  unconditionally is gone; a stale one left by an older run is cleaned up
-  automatically instead of being mistaken for current output).
+- **Report** — always saved to `stb_structural_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--no-rdf`** — skip the radial distribution function entirely.
 - **`--rdf-rmax`** — g(r) cutoff radius in Å (default `10.0`).
 
@@ -314,13 +310,13 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `mode-mean/`          | Full-structure analysis: ECN (4 methods) per species, bond distances/angles, distortion, connectivity |
 | `mode-list/`          | `--mode list --list 1,7`: ECN/distortion scoped to 2 atoms, same-species distance/connectivity still whole-structure |
 | `rdf/`                | g(r), and hand-integrating its first O-Sn peak to independently recover the ECN section's coordination number |
-| `full-report/`        | Default (no report file) vs. `--save-report` (`stb_structural_report.txt`), `references.bib` |
+| `full-report/`        | The report file (`stb_structural_report.txt`), `stb_structural_references.bib` |
 
 ## Try it yourself
 
 ```bash
 # Your own finished (or pre-relaxation) SIESTA structure
-stb-structural --file my_calc.fdf --format fdf --mode mean --save-report
+stb-structural --file my_calc.fdf --format fdf --mode mean
 
 # Focus on specific atoms (e.g. a defect site you just built)
 stb-structural --file my_calc.fdf --format fdf --mode list --list 12,45
@@ -334,10 +330,9 @@ stb-structural --file my_calc.fdf --format fdf --mode list --list 12,45
 | `--format`         | `fdf` (SIESTA input) or `struct_out` (post-relaxation `.STRUCT_OUT`).  |
 | `--mode`           | `mean` (whole structure, per species) or `list` (specific atoms).      |
 | `--list`           | Comma-separated 1-based atom indices. Required with `--mode list`.     |
-| `-o/--output-dir`  | Where to write `rdf.dat`/`references.bib` (and the report, with `--save-report`). |
+| `-o/--output-dir`  | Where to write `rdf.dat`/`stb_structural_references.bib`. |
 | `--no-rdf`         | Skip the radial distribution function (`rdf.dat` not written).         |
 | `--rdf-rmax`       | g(r) cutoff radius, Å (default `10.0`).                                |
-| `--save-report`    | Persist the full numbered report to `stb_structural_report.txt`.       |
 
 ## What's next
 

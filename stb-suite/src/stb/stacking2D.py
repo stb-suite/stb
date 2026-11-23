@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -13,6 +13,7 @@ and stacks them into a van der Waals heterostructure.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -35,8 +36,7 @@ warnings.filterwarnings("ignore")
 # ANSI Colors for terminal
 from stb.core.cli import COLORS, color_text, print_dual, print_section, print_table, show_intro
 
-REPORT_FILE = "stb_2dstacking_report.txt"
-BIB_FILE = "references.bib"
+REPORT_FILE = "stb_2Dstacking_report.txt"
 
 # Same default vacuum-gap threshold as stb-fetch/stb-kgrid (core/kspace.py's
 # other callers) -- used to detect the out-of-plane vacuum axis for the
@@ -162,7 +162,7 @@ def main():
     
     match_group = parser.add_mutually_exclusive_group()
     match_group.add_argument("-i", "--interactive", action="store_true", help="Interactive mode: shows table to select match ID")
-    match_group.add_argument("-id", "--match_id", type=int, default=0, help="Directly select a specific match ID (default: 0)")
+    match_group.add_argument("-id", "--match_id", type=int, default=None, help="Directly select a specific match ID (default: 0)")
     
     parser.add_argument("--batch_sym", action="store_true", help="Generate all high-symmetry stackings automatically")
     
@@ -179,8 +179,7 @@ def main():
     parser.add_argument("-o", "--output", default="stacked_structure.fdf", help="Output .fdf base file name")
     parser.add_argument("-sp", "--symprec", type=float, default=0.01, help="Symmetry tolerance in Angstroms (default: 0.01)")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry analysis) "
-                             f"to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view of the final heterostructure(s) (via ASE) "
                              "after writing the output file(s). Needs a display. Off by default.")
@@ -221,10 +220,10 @@ def main():
             "Siesta ToolBox Suite - Monolayer Stacker",
             "ZSL Heteroepitaxy Algorithm & Geometric Control",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("2Dstacking")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-2DSTACKING REPORT =====", 'magenta'), f_out)
@@ -271,7 +270,7 @@ def main():
         layer1, layer2, gaps=gaps, target_vacuum=args.vacuum,
         max_area=args.max_area, max_strain=args.max_strain,
         shift_x=args.shift_x, shift_y=args.shift_y, twist_angle=args.twist,
-        strain_mode=args.strain_mode, match_id=args.match_id,
+        strain_mode=args.strain_mode, match_id=args.match_id or 0,
         interactive=args.interactive, batch_sym=args.batch_sym
     )
     print_dual(f"Heterostructure(s) built: {len(results)}", f_out)
@@ -390,10 +389,10 @@ def main():
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status                    : OK", f_out)
@@ -403,7 +402,7 @@ def main():
         print_dual(f"Output file               : {of}", f_out)
     if len(output_files) > len(shown_files):
         print_dual(f"                            ... and {len(output_files) - len(shown_files)} more", f_out)
-    print_dual(f"References                : {BIB_FILE}", f_out)
+    print_dual(f"References                : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report                    : {report_path}", f_out)
 

@@ -113,13 +113,13 @@ output — `example_4.5.sh` proves this directly at the end.
 
 - **A numbered report** (`[0] RUN METADATA` … `[7] SUMMARY & FILES` — `[4]`
   only appears with `--ml-relax`/`--ml-rank`) printed to the console and,
-  with `--save-report`, also saved to `stb_defect_report.txt`.
+  always saved to `stb_defect_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density — run once on the input structure and once per output
   structure.
 - **A before/after symmetry comparison table** per output structure —
   crystal system, 3D space group, layer group, point group, Hall symbol.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_defect_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax`/`--ml-rank` was used.
 - **A provenance header** written into every output `.fdf`: the defect
   type, which atom(s)/site were involved, and MACE convergence/energy
@@ -137,8 +137,8 @@ output — `example_4.5.sh` proves this directly at the end.
 - **`--ml-relax`** (+ `--ml-relax-cell`, `--model`/`--custom-model`) —
   pre-relax the output structure(s) generically, any selection mode.
   Mutually exclusive with `--ml-rank`.
-- **`--save-report`** — also persists the full report to
-  `stb_defect_report.txt`.
+- **Report** — always saved to `stb_defect_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the input structure and every output structure in
   ASE's interactive 3D viewer (`ase-gui`), as pageable frames. Needs a
   local display. Never exercised by `example_4.5.sh` itself.
@@ -152,7 +152,7 @@ output — `example_4.5.sh` proves this directly at the end.
   (No. 227) — Fe on two genuinely distinct sites (tetrahedral,
   octahedral), O on one.
 - `example_4.5.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_defect_references.bib`, and
   `stb_defect_report.txt`.
 
 ## Running the walkthrough
@@ -175,7 +175,7 @@ are skipped, with a hint, if the optional `ml` extra isn't installed):
 | `all-inequivalent-sites/`     | Magnetite's 2 distinct Fe sites, found automatically                |
 | `ml-rank/`                    | Ranking those 2 Fe sites by MACE-relaxed energy (octahedral wins)   |
 | `ml-relax/`                   | Generic MACE pre-relaxation of a single chosen vacancy               |
-| `full-report/`                | `--save-report` + the validation checklist + `references.bib`       |
+| `full-report/`                | the report + the validation checklist + `stb_defect_references.bib`       |
 
 ## Try it yourself
 
@@ -217,7 +217,6 @@ stb-defect -f si64.fdf --type vacancy --index 1
 | `--custom-model`           | Path to a custom fine-tuned `.model` file                             |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`               | Output `.fdf` file name (default `defect.fdf`)                        |
-| `--save-report`            | Persist the full report (incl. symmetry table) to disk                |
 | `--view`                    | Open the input and output structure(s) in ASE's interactive viewer    |
 
 ## What's next

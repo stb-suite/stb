@@ -33,7 +33,10 @@ pre-exists in a real calc.fdf, this tool needs to force a pure
 SINGLE-POINT SCF (no ionic or cell relaxation at all -- there is no
 --relax-mode here, every generated folder is single-point, since the
 imposed strain itself must stay exactly at the sampled geometry) by
-overriding MD.TypeOfRun/MD.Steps/MD.VariableCell --
+overriding MD.TypeOfRun/MD.Steps/MD.VariableCell (since 2.1.0 the cell is
+always fixed and --ions chooses what the atoms do: 'relaxed', the default,
+a CG relaxation at the strained cell; 'clamped', a single point; 'both',
+the two series side by side under <output-dir>/relaxed and /clamped) --
 directives that ARE commonly already set in a real relaxation calc.fdf
 (e.g. this repo's own examples/5.1-strain/calc.fdf has all three). SIESTA's
 fdf reader is first-occurrence-wins for duplicate labels (verified in
@@ -48,6 +51,7 @@ case for a real relaxation template.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -56,10 +60,11 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core.structure_io import read_md_state, is_siesta_true, prepend_include
 
-REPORT_FILE = "elastic_stage1.txt"
+REPORT_FILE = "stb_elasticInputs_report.txt"
+SCAN_FILE = "elastic_scan.json"
 EXTRA_FDF_FILE = "config_extra.fdf"
 REFERENCE_FILE = "reference_structure.fdf"
 
@@ -181,12 +186,15 @@ def main():
     parser = argparse.ArgumentParser(
         description="Stage 1 of 2: applies one or more canonical Voigt strains to a SIESTA "
                     "structure and writes one ready-to-run folder (structure + calc.fdf + "
-                    "config_extra.fdf + pseudopotentials) per scanned strain value, forcing a "
-                    "pure single-point SCF at each imposed strain. Doesn't run SIESTA -- run "
-                    "each folder yourself, then use stb-elasticAnalysis.",
+                    "config_extra.fdf + pseudopotentials) per scanned strain value. The cell is "
+                    "fixed at each imposed strain; the atoms relax inside it by default "
+                    "(relaxed-ion constants, --ions). Doesn't run SIESTA -- run each folder "
+                    "yourself, then use stb-elasticAnalysis.",
         epilog="Example usage:\n"
                "  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --dirs all\n"
-               "  stb-elasticInputs -s structure.fdf -c calc.fdf --dirs xx yy xy --max 1.5 --steps 6 --save-report\n",
+               "  stb-elasticInputs -s structure.fdf -c calc.fdf --dirs xx yy xy --max 1.5 --steps 6\n"
+               "  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --ions both      # relaxed/ and clamped/\n"
+               "  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --ions clamped   # single points, as 2.0.0\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -201,11 +209,11 @@ def main():
                              "the structure file above by name. Copied into every generated "
                              "folder with one line added: '%%include config_extra.fdf', "
                              "prepended at the very top (see [4] of the report for why) -- this "
-                             "forces every generated folder to a pure single-point SCF, "
-                             "regardless of what MD settings this template itself contains.")
+                             "fixes the cell and sets what the atoms do (--ions), regardless "
+                             "of what MD settings this template itself contains.")
     parser.add_argument("-p", "--pseudo-dir", default="",
                         help="Pseudopotentials source (optional): a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder path. If given, the required "
+                             f"({BANK_HELP}) or a folder path. If given, the required "
                              "pseudopotential for every species in the structure is copied into "
                              "every generated folder, so it's immediately ready for SIESTA.")
     parser.add_argument("--method", choices=["stress", "energy"], default="stress",
@@ -233,6 +241,25 @@ def main():
                              "the point group's independent elastic constants (greedy rank "
                              "selection) -- catches hexagonal/trigonal reductions too. Must "
                              "match the --symmetry-method passed to stb-elasticAnalysis later.")
+    parser.add_argument("--ions", choices=["relaxed", "clamped", "both"], default="relaxed",
+                        help="What the atoms do at each strained cell (default: relaxed).\n"
+                             "'relaxed': the atoms relax inside the fixed strained cell (CG) --\n"
+                             "relaxed-ion constants, the ones an experiment measures and the\n"
+                             "ones stb-mlelastic reports. 'clamped': a single point, atoms at\n"
+                             "the positions the strain alone gives them (what 2.0.0 always\n"
+                             "wrote) -- cheaper, and exact when symmetry leaves no force on\n"
+                             "the atoms (fcc/bcc metals, rock salt; NOT diamond, zincblende,\n"
+                             "graphene, hBN, wurtzite, perovskites under shear). 'both': the\n"
+                             "two series in <output-dir>/relaxed and <output-dir>/clamped;\n"
+                             "stb-elasticAnalysis on each then tabulates the contribution of\n"
+                             "the internal relaxation.")
+    parser.add_argument("--relax-steps", type=int, default=200,
+                        help="--ions relaxed/both: maximum number of CG steps, MD.Steps "
+                             "(default: 200).")
+    parser.add_argument("--fmax", type=float, default=0.01,
+                        help="--ions relaxed/both: force tolerance of the relaxation in eV/Ang, "
+                             "MD.MaxForceTol (default: 0.01). The stress converges only to first "
+                             "order in the residual force, so keep it tight.")
     parser.add_argument("--max", type=float, default=2.0, help="Max strain %% (default: 2.0)")
     parser.add_argument("--steps", type=int, default=4, help="Steps per direction (default: 4)")
     parser.add_argument("-o", "--output-dir", default="elastic_runs",
@@ -257,7 +284,7 @@ def main():
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                              "default), same use as --symprec.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticInputs {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -269,6 +296,17 @@ def main():
             "[ERROR] --method energy always auto-selects its own strain patterns (pure and "
             "combined) from the structure's point group -- an explicit --dirs list isn't "
             "supported yet. Omit --dirs (or pass --dirs all, the default) to use it.", 'red'))
+
+    if args.relax_steps < 1:
+        sys.exit(color_text("[ERROR] --relax-steps must be at least 1 (use --ions clamped for a "
+                            "single point).", 'red'))
+    if args.fmax <= 0:
+        sys.exit(color_text("[ERROR] --fmax must be positive.", 'red'))
+    ion_modes = ["relaxed", "clamped"] if args.ions == "both" else [args.ions]
+    # One series: folders directly under --output-dir, as always. Two: one
+    # complete, self-contained run directory per series.
+    series_dirs = {mode: (os.path.join(args.output_dir, mode) if args.ions == "both" else args.output_dir)
+                   for mode in ion_modes}
 
     if not os.path.isfile(args.structure):
         sys.exit(color_text(f"[ERROR] Structure file '{args.structure}' not found.", 'red'))
@@ -288,7 +326,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("elasticInputs")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -308,11 +346,13 @@ def main():
     print_dual(f"Directions        : {' '.join(args.dirs)}", f_out)
     if args.method == "stress":
         print_dual(f"Symmetry method   : {args.symmetry_method}", f_out)
+    print_dual(f"Ions              : {args.ions}"
+               + (f" (CG, at most {args.relax_steps} steps, force tolerance {args.fmax} eV/Ang)"
+                  if args.ions != "clamped" else " (single point)"), f_out)
     print_dual(f"Strain range      : +/-{args.max}%, {args.steps} steps", f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
     print_dual(f"Vacuum-gap        : {args.vacuum_gap} Ang", f_out)
     print_dual(f"Symmetry tol      : symprec={args.symprec}, angle-tolerance={args.angle_tolerance} deg", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 
@@ -355,7 +395,9 @@ def main():
     # -direction), matching where stb-elasticAnalysis's own
     # --reference-structure default expects to find it.
     try:
-        shutil.copy(args.structure, os.path.join(args.output_dir, REFERENCE_FILE))
+        for series_dir in series_dirs.values():
+            os.makedirs(series_dir, exist_ok=True)
+            shutil.copy(args.structure, os.path.join(series_dir, REFERENCE_FILE))
     except OSError:
         pass  # best-effort; stb-elasticAnalysis just skips symmetry detection without it
 
@@ -522,7 +564,7 @@ def main():
 
     print_dual(f"\nModes: {dirs_to_run}", f_out)
 
-    print_section("[4] SINGLE-POINT SCF ENFORCEMENT", f_out)
+    print_section("[4] FIXED CELL, IONS: " + args.ions.upper(), f_out)
     with open(args.calc) as f:
         original_calc_text = f.read()
     structure_basename = os.path.basename(args.structure)
@@ -535,31 +577,64 @@ def main():
             "own convention) so SIESTA picks up the strained geometry in each generated folder.",
             'yellow'), f_out)
 
+    from stb.core.fdf_directives import filter_caution
+    caution = filter_caution(original_calc_text)
+    if caution:
+        print_dual(color_text(f"[WARNING] {caution}", 'yellow'), f_out)
+
     before = read_md_state(original_calc_text)
     steps_label = f"{before['steps_key']}={before['steps']}" if before['steps_key'] else "(absent)"
     print_dual("Calc template (current state, before forcing):", f_out)
     print_dual(f"  MD.TypeOfRun={before['typeofrun'] or '(absent)'}  Steps: {steps_label}  "
                f"MD.VariableCell={before['variablecell'] or '(absent)'}", f_out)
     print_dual(
-        "Every generated folder is forced to a pure single-point SCF -- NO ionic relaxation, "
-        "NO cell relaxation -- regardless of the state above, since the imposed strain must "
-        "stay exactly at the sampled geometry for the stress/energy fit to be meaningful. "
+        "The cell of every generated folder is fixed at the imposed strain (MD.VariableCell "
+        "false), whatever the template says: the fit needs the stress/energy AT that strain.",
+        f_out)
+    if args.ions != "clamped":
+        print_dual(
+            "Ions RELAXED: the atoms relax inside the strained cell, so the fit gives the "
+            "relaxed-ion constants. A strain that leaves forces on the atoms (any atom off an "
+            "inversion centre: diamond, zincblende, graphene, hBN, wurtzite) is followed by an "
+            "internal relaxation in the real crystal; constants with the atoms held are larger "
+            "(Si C44: ~100 GPa clamped, ~75 GPa relaxed).", f_out)
+    if args.ions != "relaxed":
+        print_dual(
+            "Ions CLAMPED: a single point, atoms at the positions the homogeneous strain gives "
+            "them. Equal to the relaxed-ion constants only when symmetry leaves no force on the "
+            "atoms; stb-elasticAnalysis warns when the forces say otherwise.", f_out)
+    print_dual(
         f"Forced via '%include {EXTRA_FDF_FILE}' PREPENDED at the very top of every generated "
         f"{calc_basename} (before your own directives, including the structure %include) -- "
-        "SIESTA's fdf reader is first-occurrence-wins for duplicate labels, so this ordering "
-        "guarantees the forced values win even if your own template already sets any of them "
-        "(the common case for a real relaxation calc.fdf).", f_out)
+        "SIESTA's fdf reader is first-occurrence-wins for duplicate labels, so the forced "
+        "values win even if your own template already sets any of them.", f_out)
 
-    extra_fdf_text = (
-        "# Auto-generated by stb-elasticInputs -- forces a pure single-point SCF (no ionic or\n"
-        "# cell relaxation) at the imposed-strain geometry, regardless of --calc's own settings.\n"
-        "MD.TypeOfRun       CG\n"
-        "MD.Steps           0\n"
-        "MD.VariableCell    false\n"
-    )
-    print_dual(f"\n{EXTRA_FDF_FILE} (written into every generated folder):", f_out)
-    for line in extra_fdf_text.rstrip("\n").split("\n"):
-        print_dual(f"  {line}", f_out)
+    extra_fdf_texts = {
+        "clamped": (
+            "# Auto-generated by stb-elasticInputs (--ions clamped): single-point SCF, no ionic\n"
+            "# or cell relaxation, at the imposed-strain geometry, regardless of --calc's settings.\n"
+            "MD.TypeOfRun       CG\n"
+            "MD.Steps           0\n"
+            "MD.VariableCell    false\n"
+        ),
+        "relaxed": (
+            "# Auto-generated by stb-elasticInputs (--ions relaxed): the atoms relax inside the\n"
+            "# imposed-strain cell, which stays fixed, regardless of --calc's own settings.\n"
+            "MD.TypeOfRun       CG\n"
+            f"MD.Steps           {args.relax_steps}\n"
+            "MD.VariableCell    false\n"
+            f"MD.MaxForceTol     {args.fmax:g} eV/Ang\n"
+        ),
+    }
+    for mode in ion_modes:
+        print_dual(f"\n{EXTRA_FDF_FILE} of the {mode} series (in every folder of "
+                   f"'{series_dirs[mode]}'):", f_out)
+        for line in extra_fdf_texts[mode].rstrip("\n").split("\n"):
+            print_dual(f"  {line}", f_out)
+    if before['typeofrun'] and before['typeofrun'].lower() not in ("cg",) and args.ions != "clamped":
+        print_dual(color_text(
+            f"[NOTE] The template's MD.TypeOfRun {before['typeofrun']} is overridden by CG.",
+            'yellow'), f_out)
     forced_calc_text = prepend_include(original_calc_text, EXTRA_FDF_FILE)
 
     print_section("[5] PSEUDOPOTENTIALS", f_out)
@@ -588,7 +663,7 @@ def main():
 
     folder_rows = []
     per_direction_count = {}
-    for d in dirs_to_run:
+    for mode, d in [(m, d) for m in ion_modes for d in dirs_to_run]:
         for s in strains:
             if abs(s) < 1e-9:
                 s = 0.0
@@ -598,7 +673,7 @@ def main():
             new_lattice = np.dot(lattice, def_matrix)
 
             folder = os.path.join(
-                args.output_dir, d, f"strain_{d}_{'m' if s < 0 else ''}{abs(s):.2f}")
+                series_dirs[mode], d, f"strain_{d}_{'m' if s < 0 else ''}{abs(s):.2f}")
             os.makedirs(folder, exist_ok=True)
 
             output_structure = os.path.join(folder, structure_basename)
@@ -607,30 +682,57 @@ def main():
             with open(os.path.join(folder, calc_basename), "w") as fh:
                 fh.write(forced_calc_text)
             with open(os.path.join(folder, EXTRA_FDF_FILE), "w") as fh:
-                fh.write(extra_fdf_text)
+                fh.write(extra_fdf_texts[mode])
 
             for sym in species:
                 copy_pseudo(args.pseudo_dir, sym, folder)
 
             volume = abs(np.linalg.det(new_lattice)) * structure.lattice_constant ** 3
-            folder_rows.append(([folder, d, f"{s:+.2f}",
+            folder_rows.append(([folder, d, mode, f"{s:+.2f}",
                                 f"{structure_basename}, {calc_basename}, {EXTRA_FDF_FILE}",
                                 f"{volume:.4f}"], None))
-            per_direction_count[d] = per_direction_count.get(d, 0) + 1
+            if mode == ion_modes[0]:
+                per_direction_count[d] = per_direction_count.get(d, 0) + 1
 
-    print_table(["Folder", "Direction", "Strain (%)", "Files", "Volume (Ang^3)"], folder_rows, f_out)
+    print_table(["Folder", "Direction", "Ions", "Strain (%)", "Files", "Volume (Ang^3)"], folder_rows, f_out)
 
     print_section("[7] SUMMARY & NEXT STEPS", f_out)
     print_dual(f"{len(folder_rows)} folder(s) written under '{args.output_dir}' "
-               f"({len(per_direction_count)} direction(s)):", f_out)
+               f"({len(per_direction_count)} direction(s)"
+               + (", two series: relaxed and clamped" if args.ions == "both" else f", ions {args.ions}")
+               + "); per series:", f_out)
     for d, n in per_direction_count.items():
         print_dual(f"  {d}: {n} folder(s)", f_out)
+    # The plan, always written (the report only with --save-report): stb-elasticAnalysis reads the symmetry
+    # method from it, since folders reduced with 'full' analysed with 'basic' gave zero constants with no error.
+    import json
+    for mode in ion_modes:
+        try:
+            with open(os.path.join(series_dirs[mode], SCAN_FILE), "w") as fh:
+                json.dump({"tool": "stb-elasticInputs", "version": VERSION, "symmetry_method": args.symmetry_method,
+                           "method": getattr(args, "method", "stress"), "ions": mode,
+                           "directions": list(per_direction_count)}, fh, indent=1)
+        except OSError:
+            pass
     if report_path:
         print_dual(f"Report            : {report_path}", f_out)
     print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-    print_dual(f"  1. Run SIESTA (single-point) in every "
-               f"'{args.output_dir}/<direction>/strain_*/' folder.", f_out)
-    print_dual(f"  2. Once they're done: cd {args.output_dir} && stb-elasticAnalysis", f_out)
+    kind = {"relaxed": "a CG relaxation at fixed cell", "clamped": "a single point",
+            "both": "relaxed/: CG at fixed cell, clamped/: single point"}[args.ions]
+    if args.ions == "both":
+        print_dual(f"  1. Run SIESTA in every '{args.output_dir}/<series>/<direction>/strain_*/' "
+                   f"folder ({kind}).", f_out)
+        print_dual(f"  2. Once they're done: stb-elasticAnalysis -d {series_dirs['relaxed']}   and   "
+                   f"stb-elasticAnalysis -d {series_dirs['clamped']}", f_out)
+        print_dual("     The second of the two also prints the internal-relaxation contribution "
+                   "(relaxed minus clamped).", f_out)
+    else:
+        print_dual(f"  1. Run SIESTA in every '{args.output_dir}/<direction>/strain_*/' folder "
+                   f"({kind}).", f_out)
+        print_dual(f"  2. Once they're done: cd {args.output_dir} && stb-elasticAnalysis", f_out)
+    if args.ions != "clamped":
+        print_dual("     A folder whose relaxation did not reach the force tolerance is flagged "
+                   "there; rerun it from its .XV (MD.UseSaveXV) or raise --relax-steps.", f_out)
 
     if f_out:
         f_out.close()

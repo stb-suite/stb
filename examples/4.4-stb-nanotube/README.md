@@ -131,8 +131,7 @@ output — `example_4.4.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[9] SUMMARY & FILES` — `[4]`
-  only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_nanotube_report.txt`.
+  only appears with `--ml-relax`) printed to the console and saved to `stb_nanotube_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density — run once on the input monolayer and once on the output
   tube/ribbon.
@@ -142,7 +141,7 @@ output — `example_4.4.sh` proves this directly at the end.
   genuinely 1D-periodic, and spglib has no 1D rod-group classification) —
   the opposite contrast from `4.3-stb-slab/`, where it's the *bulk* input
   that lacks one.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_nanotube_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: chirality, mode,
   translation vector, `N_cells`, geometry (diameter/width, axial period),
@@ -162,8 +161,8 @@ output — `example_4.4.sh` proves this directly at the end.
   relax the axial period — the vacuum-padded width/thickness axes always
   stay exactly fixed. `--model small/medium/large` (default `small`) or
   `--custom-model PATH` picks which MACE potential to use.
-- **`--save-report`** — also persists the full report to
-  `stb_nanotube_report.txt`.
+- **Report** — always saved to `stb_nanotube_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the input monolayer and the final tube/ribbon in
   ASE's interactive 3D viewer (`ase-gui`), as pageable frames. Needs a
   local display. Never exercised by `example_4.4.sh` itself.
@@ -176,7 +175,7 @@ output — `example_4.4.sh` proves this directly at the end.
   (`a` = 3.87 Å, 0.22 Å buckling between the 2 basis atoms) — for the
   `corrugated/` case.
 - `example_4.4.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_nanotube_references.bib`, and
   `stb_nanotube_report.txt`.
 
 ## Running the walkthrough
@@ -200,7 +199,7 @@ are skipped, with a hint, if the optional `ml` extra isn't installed):
 | `passivate/`           | A closed tube has 0 dangling bonds; a ribbon's two edges genuinely do  |
 | `ml-relax/`            | MACE pre-relaxation measurably releasing curvature strain               |
 | `corrugated/`          | A buckled (silicene-like) sheet rolls into a genuinely corrugated tube |
-| `full-report/`         | `--save-report` + the validation checklist + `references.bib`          |
+| `full-report/`         | the report + the validation checklist + `stb_nanotube_references.bib`          |
 
 ## Try it yourself
 
@@ -241,7 +240,6 @@ stb-nanotube -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 6 --passiva
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input monolayer and final tube/ribbon in ASE's interactive viewer |
 
 ## What's next

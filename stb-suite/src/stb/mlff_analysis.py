@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -500,6 +501,7 @@ _THEORY_KEYS = [("XC.functional", ("xcfunctional",)), ("XC.authors", ("xcauthors
                 ("PAO.BasisSize", ("paobasissize",)), ("PAO.EnergyShift", ("paoenergyshift",)),
                 ("Mesh.Cutoff", ("meshcutoff",)), ("ElectronicTemperature", ("electronictemperature",)),
                 ("Spin", ("spin", "spinpolarized")), ("DFTD3", ("dftd3",)),
+                ("Slab.DipoleCorrection", ("slabdipolecorrection",)),
                 ("SCF tolerance", ("scfdmtolerance", "dmtolerance"))]
 
 
@@ -1082,7 +1084,7 @@ def main():
                              "loadable by LAMMPS's 'pair_style mace' (via mace_create_lammps_model, "
                              "part of mace-torch) -- '<model>-lammps.pt'. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE} (in the round directory). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlffAnalysis {VERSION}")
 
@@ -1093,7 +1095,7 @@ def main():
             "Siesta ToolBox Suite - Custom ML Force Field (Train)",
             "Fine-tune MACE-MP on real SIESTA data",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- TRAIN:", 'bold'))
@@ -1185,7 +1187,7 @@ def main():
             fail(f"--init-from: '{args.init_from}' is neither foundation/previous nor a model file.")
         init_models = [args.init_from] * len(seeds)
     os.makedirs(work_dir, exist_ok=True)
-    report_path = os.path.join(work_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlffAnalysis")
     f_out = open(report_path, "w") if report_path else None
     device = args.device or ("cuda" if _cuda_available() else "cpu")
     t_start = time.monotonic()
@@ -1314,7 +1316,20 @@ def main():
                    f"({max(1, round(len(atoms_list) * args.valid_fraction))} config(s), different for each seed)", f_out)
     if init_models[0] is not None:
         print_dual("Starting weights  : " + "; ".join(f"seed {sd} <- {m_}" for sd, m_ in zip(seeds, init_models)), f_out)
-    if stress_ok and args.no_stress_training:
+    d3_caution = None
+    if labels_d3 and stress_ok:
+        d3_caution = siesta_log.d3_stress_caution(
+            next((v for v in (_siesta_version(a.info["folder"]) for a in atoms_list[:5]) if v), None),
+            "The stress labels are therefore wrong by twice the D3 stress, and the loss weights them "
+            f"{args.stress_weight:g} times: train with --no-stress-training (energies and forces still "
+            "carry E(V) when the set has several volumes), or relabel with a SIESTA version without the "
+            "defect. Check on your own runs: stb-eosAnalysis compares the SIESTA pressure with -dE/dV.")
+    if d3_caution and train_stress:
+        warn("Setup: " + d3_caution)
+    if stress_ok and args.no_stress_training and d3_caution:
+        print_dual(color_text("[OK] --no-stress-training with DFT-D3 labels: the stress of these runs is not "
+                              "used (its D3 part is unreliable in this SIESTA version).", 'green'), f_out)
+    elif stress_ok and args.no_stress_training:
         warn("Setup: --no-stress-training although every config has a stress: the volume response is not fitted.")
     elif not stress_ok:
         warn("Setup: stress missing in some configs -- trained on energy + forces only; the volume "

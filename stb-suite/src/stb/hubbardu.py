@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -16,6 +16,7 @@
 # elastic_inputs.py/phonons_create.py already use, instead of being embedded
 # directly inline in calc.fdf.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -26,13 +27,13 @@ import argparse
 from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 from stb.core.dftu_data import SHELL_NAMES, DEFAULT_SHELL, ldau_proj_block as _base_ldau_proj_block
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, resolve_pseudo_source, refuse_unusable_pseudo
 from stb.core.symmetry import find_inequivalent_sites
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 _EXISTING_LDAU_RE = re.compile(r'LDAU\.proj|LDAU\.PotentialShift|DFTU\.proj|DFTU\.PotentialShift', re.IGNORECASE)
 
-REPORT_FILE = "hubbardu_stage1.txt"
+REPORT_FILE = "stb_hubbardu_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 TEMPLATE_STRUCTURE_NAME = "_template_structure.fdf"
 TEMPLATE_CALC_NAME = "_template_calc.fdf"
@@ -204,7 +205,7 @@ def copy_pseudopotentials(src_dir, dest_dir, species=None):
     If `species` is given (an iterable of chemical symbols), only files
     whose base name (before any '-'/'_' suffix, e.g. the "Ga" in
     "Ga-gga.nosemicore.psf") case-insensitively matches one of them are
-    copied. src_dir is frequently one of the bundled banks (BANKS,
+    copied. src_dir is frequently one of the bundled banks (
     ~70-80 elements each) -- without this filter every element in the bank
     gets copied into the run folder instead of just the ones the structure
     actually needs.
@@ -227,8 +228,11 @@ def copy_pseudopotentials(src_dir, dest_dir, species=None):
                 continue
         src = os.path.join(src_dir, name)
         if os.path.isfile(src):
+            refuse_unusable_pseudo(src)             # ekb = 0 projectors: [ERROR], nothing copied
             shutil.copy(src, os.path.join(dest_dir, name))
             copied.append(name)
+    if copied:
+        note_pseudo_folder(dest_dir)
     return copied
 
 
@@ -284,7 +288,7 @@ REFERENCE_U sanity check, ...).""",
                "  %(prog)s --species Mn\n"
                "  %(prog)s --species Fe --shell 3d --j 0.5\n"
                "  %(prog)s --species Mn --pseudo-dir ./pseudos\n"
-               "  %(prog)s --species Mn --pseudo-dir dojo --save-report\n"
+               "  %(prog)s --species Mn --pseudo-dir dojo\n"
                "  %(prog)s --species Mn --atom-index 1  "
                "# Mn appears twice in structure.fdf\n"
     )
@@ -312,7 +316,7 @@ REFERENCE_U sanity check, ...).""",
                          help="Exchange J (eV), fixed across the whole workflow (default: 0.0).")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="", metavar="DIR",
                          help="Where to get the pseudopotential files (.psf/.psml) SIESTA needs -- "
-                              f"a bundled bank ({', '.join(BANKS)}) or a folder path. Only the "
+                              f"a bundled bank ({BANK_HELP}) or a folder path. Only the "
                               "species actually present in --structure are copied into 'reference/' "
                               "now, and into every scf_alpha_*/frozen_alpha_* folder later by "
                               "stb-hubbarduAlphas. If omitted, you must copy them into every run "
@@ -320,7 +324,7 @@ REFERENCE_U sanity check, ...).""",
     parser.add_argument("-o", "--output-dir", type=str, default="hubbardu_runs",
                         help="Output directory for the run folders (default: hubbardu_runs).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbardu {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -350,11 +354,11 @@ REFERENCE_U sanity check, ...).""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("hubbardu")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

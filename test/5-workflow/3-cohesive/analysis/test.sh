@@ -75,15 +75,15 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Real fixture: single-atom-in-cell synthetic FreeEng values (no
 #     atoms_bsse/ here -- uncorrected-only path) ---
 echo -e "\n--- Testing default run (synthetic 1-atom fixture, no BSSE data) ---"
-rm -f cohesive_results.dat cohesive_correction.png
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib cohesive_correction.png
 stb-cohesiveAnalysis -o calc.out -d . --save-report --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
-check_success cohesive_results.dat
+check_success stb_cohesiveAnalysis_report.txt
 
 echo "Verifying the cohesive energy arithmetic (E_bulk - E_isolated) / N_atoms"
 check_contains "Total atoms | 1" log_default.txt
 check_contains "Uncorrected.*-450.1111.*-450.1111" log_default.txt
-check_contains "Uncorrected.*-450.1111.*-450.1111" cohesive_results.dat
+check_contains "Uncorrected.*-450.1111.*-450.1111" stb_cohesiveAnalysis_report.txt
 
 echo "Verifying the BSSE caveat note appears when atoms_bsse/ isn't present"
 check_contains "NOTE. This result is NOT corrected for BSSE" log_default.txt
@@ -142,7 +142,7 @@ check_contains "Residual force.*0.6893 eV/Ang .within --force-tolerance 1.0" log
 echo -e "\n--- Testing with atoms_bsse/ present and complete ---"
 mkdir -p atoms_bsse/C
 echo "siesta: FreeEng =     -50.512345" > atoms_bsse/C/calc.out
-rm -f cohesive_results.dat cohesive_correction.png
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib cohesive_correction.png
 stb-cohesiveAnalysis -o calc.out -d . --save-report --no-intro > log_bsse.txt 2>&1
 check_exit_code $? 0
 check_contains "BSSE reference.*found" log_bsse.txt
@@ -152,7 +152,7 @@ echo "Verifying the BSSE-corrected cohesive energy (E_bulk - E_atom_BSSE) is les
 check_contains "Uncorrected.*-450.1111.*-450.1111" log_bsse.txt
 check_contains "BSSE-corrected.*-449.6111.*-449.6111" log_bsse.txt
 check_contains "BSSE correction per atom: +0.5000 eV/atom" log_bsse.txt
-check_contains "BSSE-corrected" cohesive_results.dat
+check_contains "BSSE-corrected" stb_cohesiveAnalysis_report.txt
 
 echo "Verifying [4] CORRECTION PLOT is built and saved when BSSE data is complete"
 check_contains "OK. Saved:.*cohesive_correction.png" log_bsse.txt
@@ -169,7 +169,7 @@ check_contains "shown interactively via --view" log_view.txt
 #     with a warning -- never blocks the (still valid) uncorrected result. ---
 echo -e "\n--- Testing with atoms_bsse/ present but incomplete ---"
 rm -f atoms_bsse/C/calc.out
-rm -f cohesive_results.dat
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib
 stb-cohesiveAnalysis -o calc.out -d . --no-intro > log_bsse_incomplete.txt 2>&1
 check_exit_code $? 0
 check_contains "WARNING. Could not find 'calc.out' or results for the BSSE-corrected isolated atom: C" log_bsse_incomplete.txt
@@ -234,6 +234,21 @@ check_contains "6.0 Ang.*-449.5111.*.0.1000" log_scan.txt
 check_contains "8.0 Ang.*-449.4735.*.0.1377" log_scan.txt
 check_contains "Last step change: .0.0377 eV/atom .cutoff 6.0 -> 8.0 Ang." log_scan.txt
 check_success cohesive_correction.png
+echo "Testing: the summary [5] also gives the largest-cutoff value, not only the base one"
+check_contains "Cohesive energy per atom (BSSE, largest cutoff 8.0 Ang): -449.4735 eV/atom (+0.1377 vs base" log_scan.txt
+echo "Testing: [2] states the expected sign of 'Delta BSSE' (negative: the ghosts lower the atom)"
+check_contains "a negative 'Delta BSSE' here is" log_scan.txt
+
+echo "Testing: a BSSE reference with ZERO ghost atoms is flagged in [3] (its correction is zero by construction)"
+printf 'NumberOfSpecies 1\n%%block ChemicalSpeciesLabel\n 1 6 C\n%%endblock ChemicalSpeciesLabel\n' > atoms_bsse/C/structure.fdf
+stb-cohesiveAnalysis -o calc.out -d . --no-intro > log_zero_ghost.txt 2>&1
+check_exit_code $? 0
+check_contains "BSSE reference with ZERO ghost atoms: C" log_zero_ghost.txt
+check_contains "zero ghosts: see the warning in \[3\]" log_zero_ghost.txt
+printf 'NumberOfSpecies 2\n%%block ChemicalSpeciesLabel\n 1 6 C\n 2 -6 C_ghost\n%%endblock ChemicalSpeciesLabel\n' > atoms_bsse/C/structure.fdf
+stb-cohesiveAnalysis -o calc.out -d . --no-intro > log_with_ghost.txt 2>&1
+check_not_contains "ZERO ghost atoms" log_with_ghost.txt
+rm -f atoms_bsse/C/structure.fdf
 
 echo "Testing: an incomplete scan point (missing calc.out) is skipped with a warning, others unaffected"
 rm -f atoms_bsse_check_8.0/C/calc.out
@@ -362,18 +377,28 @@ check_contains "force-tolerance" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.3.2) ---"
 
 echo "Testing: navigate 5.3.2 -> calc.out -> dir '.' -> default force-tolerance -> save report (y) -> view (n)"
-rm -f cohesive_results.dat
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib
 # Prompts in order: out_file, dir_path ('.', since the CLI's own new default
 # 'cohesive_runs' doesn't exist in this flat fixture), force-tolerance (blank
 # -> default 0.05), save report (y), view (n), then the "Press Enter to
 # continue" pause, then quit.
-printf '5.3.2\ncalc.out\n.\n\ny\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
+printf '5.3.2\ncalc.out\n.\n\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_contains "Force tolerance.*0.05 eV/Ang" log_menu.txt
-check_contains "Save report.*yes" log_menu.txt
+check_not_contains "Save report" log_menu.txt
 check_contains "Uncorrected.*-450.1111.*-450.1111" log_menu.txt
-check_success cohesive_results.dat
+check_success stb_cohesiveAnalysis_report.txt
 
+
+# --- N8: the solid's -T*S (metal smearing) is not reported as an isolated-atom artefact ---
+echo -e "\n--- Testing: -T*S of the full structure gets its own note (Ag-like metal), no atom warning ---"
+rm -rf ts_run && mkdir -p ts_run/structure ts_run/atoms/C
+cp "$FIXTURE_DIR/structure/structure.fdf" ts_run/structure/
+printf 'siesta: Etot    =    -500.120000\nsiesta: FreeEng =    -500.121500\n' > ts_run/structure/calc.out
+printf 'siesta: Etot    =     -50.012345\nsiesta: FreeEng =     -50.012345\n' > ts_run/atoms/C/calc.out
+stb-cohesiveAnalysis -o calc.out -d ts_run --no-intro > log_ts.txt 2>&1
+check_contains "The full structure has -T\*S = -1.5 meV" log_ts.txt
+check_not_contains "For an isolated atom it comes from" log_ts.txt
 
 popd > /dev/null
 

@@ -426,7 +426,6 @@ and takes a few seconds.
 | `-l`, `--label LABEL` | from each folder's `.fdf` | SystemLabel override for every folder |
 | `--details` | off | with several folders, also the full report of each |
 | `--csv FILE` | none | also write the summary table as CSV |
-| `--save-report` | off | also write `stb_status_report.txt` (current folder) |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 
 ## 14. What's next

@@ -125,19 +125,19 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Real fixture: --shift fermi, default (no report file, no --save-report) ---
 echo -e "\n--- Testing --shift fermi (real fixture, 182 bands x 501 k-points, nspin=1) ---"
-rm -f bands_gnuplot.dat bands.gplot bands_analysis.txt stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot bands_analysis.txt stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta.bands --shift fermi --no-intro > log_fermi.txt 2>&1
 check_exit_code $? 0
 check_success bands_gnuplot.dat
 check_success bands.gplot
-check_success references.bib
+check_success stb_bands_references.bib
 
-echo "Testing: no report file is written without --save-report (neither the old nor the new name)"
+echo "Testing: the old bands_analysis.txt is gone; the report is always written"
 check_absent bands_analysis.txt
-check_absent stb_bands_report.txt
+check_success stb_bands_report.txt
 
-echo "Verifying references.bib has the SIESTA citation"
-check_contains "@article{Soler2002," references.bib
+echo "Verifying stb_bands_references.bib has the SIESTA citation"
+check_contains "@article{Soler2002," stb_bands_references.bib
 
 echo "Verifying high-symmetry labels are not quoted in the gnuplot script"
 check_contains "set xtics" bands.gplot
@@ -151,7 +151,7 @@ check_column_count bands_gnuplot.dat 2
 
 # --- 2b. --save-report: numbered [0]...[7] sections, stb_bands_report.txt ---
 echo -e "\n--- Testing --save-report (numbered report, stb_bands_report.txt) ---"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta.bands --shift fermi --save-report --no-intro > log_save_report.txt 2>&1
 check_exit_code $? 0
 check_success stb_bands_report.txt
@@ -190,7 +190,7 @@ check_exit_code $? 2
 
 # --- 4. Edge-case fixture: nbands mod 10 == 1 (old parser dropped a value here) ---
 echo -e "\n--- Testing continuation-line edge case (21 bands, trailing 1-value line) ---"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta_edge_nbands21.bands --shift fermi --save-report --no-intro > log_edge.txt 2>&1
 check_exit_code $? 0
 check_success bands_gnuplot.dat
@@ -216,7 +216,7 @@ check_not_contains "'GAMMA'" bands.gplot
 
 # --- 4b. Synthetic nspin=2 fixture: half-metallic (spin-up metallic, spin-down 2 eV gap) ---
 echo -e "\n--- Testing spin-polarized bands (nspin=2, half-metallic synthetic fixture) ---"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta_spin2.bands --shift fermi --save-report --no-intro > log_spin2.txt 2>&1
 check_exit_code $? 0
 check_success bands_gnuplot.dat
@@ -238,6 +238,7 @@ check_contains "Half-metallic : Yes" stb_bands_report.txt
 check_contains "Half-metallic character detected" stb_bands_report.txt
 
 echo "Testing: --gap-tol tightened below the synthetic up-channel gap (no longer half-metallic)"
+rm -f stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta_spin2.bands --shift fermi --gap-tol 0.0001 --save-report --no-intro > log_spin2_tol.txt 2>&1
 check_exit_code $? 0
 check_contains "Half-metallic : No" stb_bands_report.txt
@@ -248,7 +249,7 @@ check_contains "Half-metallic : No" stb_bands_report.txt
 # energy, same nbands/nspin) but samples the full SCF k-mesh (89 points)
 # instead of just the high-symmetry path.
 echo -e "\n--- Testing --eig-file (mesh vs line gap comparison) ---"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta.bands --eig-file Sn3O4.EIG --shift fermi --save-report --no-intro > log_eig.txt 2>&1
 check_exit_code $? 0
 check_success stb_bands_report.txt
@@ -269,14 +270,14 @@ check_contains "Mesh gap is smaller than the line gap" stb_bands_report.txt
 check_contains "Best fundamental (indirect) gap: 2.102492 eV (Indirect), from the k-mesh" stb_bands_report.txt
 
 echo "Testing: --file without --eig-file still shows a MESH section, explicitly marked unavailable"
-rm -f stb_bands_report.txt
+rm -f stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta.bands --shift fermi --save-report --no-intro > log_no_eig.txt 2>&1
 check_contains "\[4\] MESH VS LINE COMPARISON" stb_bands_report.txt
 check_contains "Not available -- no k-mesh eigenvalues were given" stb_bands_report.txt
 check_not_contains "Indirect gap diff" stb_bands_report.txt
 
 echo "Testing: --eig-file with a spin-polarized mesh reports the mesh per-spin section too"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta_spin2.bands --eig-file siesta_spin2_mesh.EIG --shift fermi --save-report --no-intro > log_eig_spin.txt 2>&1
 check_exit_code $? 0
 check_occurrences "Spin up:" stb_bands_report.txt 2
@@ -286,7 +287,7 @@ check_contains "Half-metallic : Yes" stb_bands_report.txt
 
 # --- 4c-bis. --label: auto-detect <label>.bands + <label>.EIG from a shared label ---
 echo -e "\n--- Testing --label (auto-detects .bands + .EIG together) ---"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 cp Sn3O4.EIG siesta.EIG
 stb-bands --label siesta --shift fermi --save-report --no-intro > log_label.txt 2>&1
 check_exit_code $? 0
@@ -297,7 +298,7 @@ check_contains "Indirect gap diff" stb_bands_report.txt
 rm -f siesta.EIG
 
 echo "Testing: --label without a matching .EIG still computes the bands, mesh gap just unavailable"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --label siesta_edge_nbands21 --shift fermi --save-report --no-intro > log_label_no_eig.txt 2>&1
 check_exit_code $? 0
 check_success stb_bands_report.txt
@@ -315,7 +316,7 @@ check_exit_code $? 2
 # known-by-hand extrema: VBM/direct gap at k-index 1 (0.1,0.2,0.3 1/Ang),
 # CBM at k-index 2 (0.4,0.1,0.0 1/Ang); indirect gap 0.9 eV, direct gap 1.1 eV.
 echo -e "\n--- Testing --kp-file (mesh k-points reported as kx,ky,kz instead of a bare index) ---"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib stb_bands_report*.txt stb_bands_references*.bib
 stb-bands --file siesta.bands --eig-file mesh_kxkyz.EIG --kp-file mesh_kxkyz.KP --shift fermi --save-report --no-intro > log_kp.txt 2>&1
 check_exit_code $? 0
 check_success stb_bands_report.txt
@@ -360,22 +361,22 @@ check_contains "stb-bands" log_version.txt
 
 echo "Testing: --help documents --save-report"
 stb-bands --help > log_help.txt 2>&1
-check_contains "save-report" log_help.txt
-check_contains "stb_bands_report.txt" log_help.txt
+check_not_contains "save-report" log_help.txt
+check_contains "the report and its references file go to the current folder" log_help.txt
 
 
 # --- 6. Interactive path (stb-suite, shortcut 2.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.1) ---"
 
 echo "Testing: navigate 2.1 -> label 'siesta' -> shift by Fermi level -> output dir '.' -> no save-report -> quit"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
-printf '2.1\nsiesta\n3\n.\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib references.bib
+printf '2.1\nsiesta\n3\n.\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_success bands_gnuplot.dat
-check_absent stb_bands_report.txt
+check_success stb_bands_report.txt
 
 echo "Testing: navigate 2.1 -> label 'siesta' -> shift by Fermi level -> output dir '.' -> save-report yes -> quit"
-rm -f bands_gnuplot.dat bands.gplot stb_bands_report.txt references.bib
-printf '2.1\nsiesta\n3\n.\ny\n\n0\n' | stb-suite > log_menu_report.txt 2>&1
+rm -f bands_gnuplot.dat bands.gplot stb_bands_report*.txt stb_bands_references*.bib references.bib
+printf '2.1\nsiesta\n3\n.\n\n0\n' | stb-suite > log_menu_report.txt 2>&1
 check_success bands_gnuplot.dat
 check_success stb_bands_report.txt
 

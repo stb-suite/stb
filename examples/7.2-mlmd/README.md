@@ -601,7 +601,6 @@ Nothing but the report, the trajectory and `md_final.fdf` is written by default.
 | `--show` | the same dashboard on screen (needs a display; without one it is a warning, not an error) |
 | `--save-data` | `<stem>_md_thermo.dat` (12 columns per sampled frame: t, T, `E_pot`, `E_kin`, `E_tot` per atom, P, V/atom, a, b, c, `d_min`, `F_max`), `<stem>_md_rdf.dat` (r, g, N), `<stem>_md_msd.dat` (lag, MSD) |
 | `--save-gnuplot` | the data files plus `<stem>_md.gplot`: `gnuplot <stem>_md.gplot` draws the same six panels into `<stem>_md.pdf` |
-| `--save-report` | the report as `stb_mlmd_report.txt` |
 
 `<stem>` is the input file name without `.fdf`.
 
@@ -629,7 +628,7 @@ Nothing but the report, the trajectory and `md_final.fdf` is written by default.
 stb-mlmd --file si8.fdf --supercell 3 3 3 \
          --custom-model model/mlff_model_compiled.model --custom-model-card model/mlff_model_card.json \
          --ensemble nvt --temperature 300 --equilibration-steps 1000 --n-steps 10000 \
-         --device cuda --seed 1 --png --save-gnuplot --save-report
+         --device cuda --seed 1 --png --save-gnuplot
 ```
 
 **Interactive menu:** run `stb-suite` and type `7.2`. It asks, in this order:
@@ -700,7 +699,7 @@ The runs:
 ```bash
 stb-mlmd --file si216.fdf --custom-model model/mlff_model_compiled.model --custom-model-card model/mlff_model_card.json \
          --ensemble nvt --temperature 300 --equilibration-steps 1000 --n-steps 10000 --device cuda --seed 1 \
-         --png --save-gnuplot --save-report
+         --png --save-gnuplot
 ```
 
 Report sections `[6]`–`[8]`, abridged (`reference_results/nvt300/stb_mlmd_report.txt`):
@@ -1164,8 +1163,7 @@ their error bars, not to the last digit.
    - Then the numbers of `[6]`–`[7]` with their error bars.
 7. **Check one frame against SIESTA** when the result matters, especially if `[8]` says `OUTSIDE` anywhere: a
    single point at the same level of theory (`siesta_calc.fdf` and `siesta_check.py` here show how).
-8. **Keep the data:** `--save-data` or `--save-gnuplot` writes the time series behind every number, and
-   `--save-report` writes the report.
+8. **Keep the data:** `--save-data` or `--save-gnuplot` writes the time series behind every number; the report is always written.
 
 ## 9. Files in this folder
 
@@ -1205,7 +1203,7 @@ both) · `--ensemble {nve,nvt,npt}` (default nvt) · `--temperature K` (default 
 100) · `--taup fs` (NPT, default 500) · `--compressibility 1/bar` (NPT, default 4.57e-5, water's placeholder) ·
 `--stride N` (default 10) · `--vacuum-gap Å` (default 10) · `-of {xsf,pdb,xyz}` · `-o FILE` (trajectory, default
 `<stem>_md_traj.<ext>`) · `--output-structure FILE` (default `md_final.fdf`) · `--device {cpu,cuda}` · `--seed N` ·
-`--png [FILE]` · `--show` · `--save-gnuplot` · `--save-data` · `--save-report` · `--no-intro` · `-v`.
+`--png [FILE]` · `--show` · `--save-gnuplot` · `--save-data` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

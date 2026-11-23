@@ -111,13 +111,14 @@ fi
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/vac_initial.fdf" "$FIXTURE_DIR/vac_final.fdf" "$TEST_DIR/"
-cp "$FIXTURE_DIR/../3-mlelastic/si8.fdf" "$TEST_DIR/si8.fdf"
+cp "$FIXTURE_DIR/../4-mlelastic/si8.fdf" "$TEST_DIR/si8.fdf"
 echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
 # --- 1. Basic run with every output ---
 echo -e "\n--- 1. Basic NEB run (MACE-MP-0 small, 7 images, every output) ---"
+rm -f stb_mlneb_report*.txt stb_mlneb_references*.bib
 stb-mlneb --initial vac_initial.fdf --final vac_final.fdf --model small --n-images 7 \
     --save-images --save-report --save-data --save-gnuplot --no-intro -o vac_neb > log_neb.txt 2>&1
 check_exit_code $? 0
@@ -139,7 +140,7 @@ check_not_contains "Traceback" log_neb.txt
 check_success vac_neb/neb_profile.png
 check_success vac_neb/neb_path.xyz
 check_success vac_neb/neb_band.dat
-check_success vac_neb/stb_mlneb_report.txt
+check_success stb_mlneb_report.txt
 check_success vac_neb/image_00.fdf
 check_success vac_neb/image_06.fdf
 check_missing vac_neb/image_07.fdf
@@ -152,12 +153,12 @@ if command -v gnuplot > /dev/null; then
 else
     check_contains "gnuplot is not installed" log_neb.txt.plain
 fi
-check_contains "STB-MLNEB REPORT" vac_neb/stb_mlneb_report.txt
-check_not_contains $'\x1b\[' vac_neb/stb_mlneb_report.txt
+check_contains "STB-MLNEB REPORT" stb_mlneb_report.txt
+check_not_contains $'\x1b\[' stb_mlneb_report.txt
 
 check_py "the report's numbers: barrier 0.05-3 eV, forward = backward, reaction energy ~0, saddle at image 3 and 50 % of the path" <<'PY'
 import re, sys
-t = open("vac_neb/stb_mlneb_report.txt").read()
+t = open("stb_mlneb_report.txt").read()
 fwd = float(re.search(r"barrier ([\d.]+) eV forward", t).group(1))
 bwd = float(re.search(r"([\d.]+) eV backward", t).group(1))
 de = float(re.search(r"reaction energy ([-+]?[\d.]+) eV", t).group(1))
@@ -172,7 +173,7 @@ check_py "neb_band.dat: 7 images, E starts at 0, peaks at image 3 with the repor
 import re
 import numpy as np
 d = np.loadtxt("vac_neb/neb_band.dat")
-t = open("vac_neb/stb_mlneb_report.txt").read()
+t = open("stb_mlneb_report.txt").read()
 img = float(re.search(r"forward  \(initial -> final\)\s*\|\s*[\d.]+\s*\|\s*([\d.]+)", t).group(1))
 assert d.shape == (7, 6), d.shape
 assert abs(d[0, 2]) < 1e-9 and int(np.argmax(d[:, 2])) == 3
@@ -214,7 +215,7 @@ stb-mlneb --initial vac_initial.fdf --final vac_final.fdf --model small --n-imag
     --save-images --save-data --no-intro -o vac_five > log_five.txt 2>&1
 check_exit_code $? 0
 plain log_five.txt
-check_contains "Band              : 5 images (endpoints included), linear interpolation, atoms" log_five.txt.plain
+check_contains "Band              : 5 images (endpoints included), linear interpolation" log_five.txt.plain
 check_not_contains "+ IDPP" log_five.txt.plain
 check_success vac_five/image_04.fdf
 check_missing vac_five/image_05.fdf
@@ -252,23 +253,24 @@ check_contains "different composition" log_mismatch.txt
 
 echo "Testing: a lattice mismatch warns and adopts the INITIAL lattice"
 sed 's/5\.43000000/5.45000000/g' vac_final.fdf > vac_final_stretched.fdf
+rm -f stb_mlneb_report*.txt stb_mlneb_references*.bib
 stb-mlneb --initial vac_initial.fdf --final vac_final_stretched.fdf --model small --n-images 5 \
     --save-report --no-intro -o vac_stretched > log_lattice.txt 2>&1
 check_exit_code $? 0
 plain log_lattice.txt
 check_contains "different lattices" log_lattice.txt.plain
 check_contains "INITIAL structure's lattice is adopted" log_lattice.txt.plain
-check_contains "different lattices" vac_stretched/stb_mlneb_report.txt
+check_contains "different lattices" stb_mlneb_report.txt
 echo "Testing: matching lattices (section 1) do NOT warn"
 check_not_contains "different lattices" log_neb.txt.plain
 rm -rf vac_stretched vac_final_stretched.fdf
 
-echo "Testing: identical endpoints -- no transition, no barrier, both said in WARNINGS"
+echo "Testing: identical endpoints are refused -- there is no path, so no barrier"
 stb-mlneb --initial vac_initial.fdf --final vac_initial.fdf --model small --n-images 5 \
     --no-intro -o vac_same > log_same.txt 2>&1
-check_exit_code $? 0
+check_exit_code $? 1
 plain log_same.txt
-check_contains "No atom moves more than 0.1 Ang" log_same.txt.plain
+check_contains "no atom moves more than" log_same.txt.plain
 check_contains "nearly identical" log_same.txt.plain
 check_contains "no barrier along this band" log_same.txt.plain
 rm -rf vac_same
@@ -549,6 +551,7 @@ check_exit_code $? 2
 check_contains "custom-model-card" log_custommodel_nocard.txt
 stb-mlneb --version > log_version.txt 2>&1
 check_contains "stb-mlneb" log_version.txt
+rm -f stb_mlneb_report*.txt stb_mlneb_references*.bib
 stb-mlneb --help > log_help.txt 2>&1
 for opt in --initial --final --n-images --custom-model-card --skip-foundation-comparison --mlff-workflow \
            --no-committee --committee-models --siesta-check --siesta-check-images --calc --pseudo-dir --kgrid \
@@ -561,26 +564,28 @@ done
 echo -e "\n--- 9. Interactive path via stb-suite (shortcut 7.5) ---"
 echo "Testing: foundation model, gnuplot files asked for"
 # initial, final, custom (none), size, device, images, freeze, output, show, gnuplot, data, images, report, Enter, exit
-printf '7.5\nvac_initial.fdf\nvac_final.fdf\n\nsmall\n\n5\nn\ninteractive_out\nn\ny\nn\nn\nn\n\n0\n' \
+rm -f stb_mlneb_report*.txt stb_mlneb_references*.bib
+printf '7.5\nvac_initial.fdf\nvac_final.fdf\n\nsmall\n\n5\nn\ninteractive_out\nn\ny\nn\nn\n\n0\n' \
     | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/neb_profile.png
 check_success interactive_out/plot/neb_profile.gplot
 check_success interactive_out/neb_path.xyz
-check_missing interactive_out/stb_mlneb_report.txt
+check_success stb_mlneb_report.txt
 
 if [ -f "$MODEL_DIR/mlff_model_compiled.model" ]; then
     echo "Testing: custom model (card offered as default), device asked, workflow + --siesta-check from the menu"
     # initial, final, custom, card (default), size, device, images, freeze, compare (n), workflow, siesta-check (y),
     # all images (n), to-mlff (n), output, show, gnuplot, data, images, report (y), Enter, exit
-    printf '7.5\nvac_initial.fdf\nvac_final.fdf\n%s\n\nsmall\ncpu\n5\nn\nn\nwf/mlff_workflow.json\ny\nn\nn\ninteractive_custom\nn\nn\nn\nn\ny\n\n0\n' \
+    rm -f stb_mlneb_report*.txt stb_mlneb_references*.bib
+    printf '7.5\nvac_initial.fdf\nvac_final.fdf\n%s\n\nsmall\ncpu\n5\nn\nn\nwf/mlff_workflow.json\ny\nn\nn\ninteractive_custom\nn\nn\nn\nn\n\n0\n' \
         "$MODEL_DIR/mlff_model_compiled.model" | stb-suite > log_menu_custom.txt 2>&1
     check_exit_code $? 0
-    check_success interactive_custom/stb_mlneb_report.txt
-    check_contains "Device            : cpu" interactive_custom/stb_mlneb_report.txt
-    check_contains "Model card -- identity" interactive_custom/stb_mlneb_report.txt
-    check_contains "SIESTA CHECK" interactive_custom/stb_mlneb_report.txt
-    check_not_contains "FINE-TUNED vs FOUNDATION" interactive_custom/stb_mlneb_report.txt
+    check_success stb_mlneb_report.txt
+    check_contains "Device            : cpu" stb_mlneb_report.txt
+    check_contains "Model card -- identity" stb_mlneb_report.txt
+    check_contains "SIESTA CHECK" stb_mlneb_report.txt
+    check_not_contains "FINE-TUNED vs FOUNDATION" stb_mlneb_report.txt
     check_success interactive_custom/siesta_check/image_02/calc.fdf
 fi
 rm -rf wf

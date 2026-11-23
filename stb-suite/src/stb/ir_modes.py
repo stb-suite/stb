@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -20,7 +21,7 @@ import yaml
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, force_born_charge_run
-from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, get_gamma_modes, displace_along_mode,
@@ -35,7 +36,8 @@ from stb.core.ir_symmetry import classify_ir_modes
 # staying well under realistic low-frequency vibrational modes).
 _DEFAULT_ROTATIONAL_MODE_TOL_THZ = 2.0
 
-REPORT_FILE = "ir_stage2.txt"
+REPORT_FILE = "stb_irModes_report.txt"
+MODES_FILE = "ir_modes.json"        # <directory>/: what stb-irAnalysis reads
 
 # Default Berry-phase k-point grid for the bulk (3D) Born-effective-charge
 # path -- row-major 3x3, one row per lattice vector (diagonal = 1D
@@ -126,6 +128,7 @@ def write_ir_folder(out_dir, atoms, structure_filename, calc_text, pseudos):
         f.write(calc_text)
     for pseudo_path in pseudos:
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
+    note_pseudo_folder(out_dir)
 
 
 
@@ -283,7 +286,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("IR SPECTRUM WORKFLOW -- STAGE 2: MODES & DIPOLE/BORN-CHARGE DISPLACEMENTS", 'bold'))
@@ -327,7 +330,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
     output_root = args.directory
     dipole_root = os.path.join(output_root, "dipole_disp")
     born_charge_root = os.path.join(output_root, "born_charge_disp")
-    report_path = os.path.join(output_root, REPORT_FILE)
+    report_path = new_report_path("irModes")
 
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== IR STAGE 2 REPORT (MODES & DISPLACEMENTS) =====', 'magenta')}", f_out)
@@ -613,8 +616,8 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 seen_groups = {}  # id(IRModeSymmetry) -> representative k
                 for k, freq, band_idx in selected:
                     ms = band_to_symmetry.get(band_idx)
-                    if ms is None or len(ms.band_indices) <= 1:
-                        continue
+                    if ms is None or len(ms.band_indices) <= 1 or not ms.is_real_irrep:
+                        continue     # an accidental degeneracy has no common intensity: every band runs
                     group_key = id(ms)
                     if group_key not in seen_groups:
                         seen_groups[group_key] = k
@@ -791,14 +794,18 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 "being IR-active (see [1b] above). Nothing further to do for this structure's "
                 "IR spectrum.", 'yellow'), f_out)
 
-        f_out.write("\n# MODE_TABLE -- parsed by stb-irAnalysis, do not reorder the "
-                     "first 7 columns\n")
-        f_out.write(f"# {'label':<22}{'mode_index':<12}{'band_index':<12}{'frequency_thz':<16}"
-                     f"{'path':<8}{'sign':<8}{'dir':<24}{'derived_from'}\n")
-        for label, k, band_idx, freq, path_kind, sign_name, mode_dir, derived_from in report_rows:
-            derived_str = "-" if derived_from is None else str(derived_from)
-            f_out.write(f"{label:<24}{k:<12}{band_idx:<12}{freq:<16.6f}{path_kind:<8}{sign_name:<8}"
-                         f"{mode_dir}  {derived_str}\n")
+        with open(os.path.join(output_root, MODES_FILE), "w") as f_json:
+            json.dump({
+                "schema": "stb_ir_modes_v1",
+                "displacement_ang": float(args.displacement),
+                "vacuum_axes": [bool(v) for v in vacuum_axes],
+                "lattice_ang": [[float(x) for x in vec] for vec in lattice_ang],
+                "modes": [{"label": label, "mode_index": int(k), "band_index": int(band_idx),
+                           "frequency_thz": float(freq), "path": path_kind, "sign": sign_name,
+                           "dir": mode_dir, "derived_from": derived_from}
+                          for label, k, band_idx, freq, path_kind, sign_name, mode_dir, derived_from
+                          in report_rows]}, f_json, indent=2)
+        print_dual(f"Stage-3 record       : {os.path.join(output_root, MODES_FILE)}", f_out)
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

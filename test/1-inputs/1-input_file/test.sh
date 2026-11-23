@@ -370,7 +370,7 @@ check_contains "%include structure.fdf" calc.fdf
 check_not_contains "%include subdir/structure.fdf" calc.fdf
 mv calc.fdf calc_subdir.fdf
 
-echo -n "Testing: degenerate lattice (zero volume) -> handled error, no crash"
+echo -n "Testing: degenerate lattice (zero volume) -> handled [ERROR], exit 1, no crash"
 cat > structure_zero_volume.fdf << 'EOF'
 NumberOfSpecies    1
 NumberofAtoms      1
@@ -396,14 +396,14 @@ EOF
 rm -f calc.fdf
 stb-inputfile structure_zero_volume.fdf -t relax --no-intro > log_zero_volume.txt 2>&1
 EXIT_CODE=$?
-if [ "$EXIT_CODE" -eq 0 ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} process did not crash (exit 0, error handled internally)"
+if [ "$EXIT_CODE" -eq 1 ] && ! grep -q "Traceback" log_zero_volume.txt; then
+    echo -e "   -> ${GREEN}Verified:${NC} handled error: exit 1, no traceback"
     PASS=$((PASS+1))
 else
-    echo -e "   -> ${RED}Failed:${NC} process exited with $EXIT_CODE (expected 0 with a handled error)"
+    echo -e "   -> ${RED}Failed:${NC} process exited with $EXIT_CODE (expected 1 with a handled error, no traceback)"
     FAIL=$((FAIL+1))
 fi
-check_contains "ERROR" log_zero_volume.txt
+check_contains "Cell volume is zero" log_zero_volume.txt
 if [ ! -s calc.fdf ]; then
     echo -e "   -> ${GREEN}Verified:${NC} calc.fdf was not created after the error"
     PASS=$((PASS+1))
@@ -478,6 +478,35 @@ check_contains "DFTD3                   .true." calc.fdf
 check_contains "Spin                polarized" calc.fdf
 mv calc.fdf calc_interactive.fdf
 
+
+# --- Li needs the non-perturbative polarization scheme (LiF, DZP: SIESTA's perturbative
+#     polarization orbital of the Li 2s fails to generate). ---
+echo -e "\n--- Testing the Li non-perturbative polarization block (LiF) ---"
+rm -rf lif_in && mkdir -p lif_in
+cat > lif_in/structure.fdf <<'FDFEOF'
+NumberOfAtoms 2
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1 3 Li
+ 2 9 F
+%endblock ChemicalSpeciesLabel
+LatticeConstant 4.03 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0 0.0 0.0 1
+ 0.5 0.5 0.5 2
+%endblock AtomicCoordinatesAndAtomicSpecies
+FDFEOF
+(cd lif_in && stb-inputfile structure.fdf -t relax -p dojo --no-intro > ../log_lif.txt 2>&1)
+check_contains "Li: PAO.PolarizationScheme non-perturbative written" log_lif.txt
+check_contains "^  Li non-perturbative" lif_in/calc.fdf
+echo "Testing: no Li -> no PAO.PolarizationScheme block"
+check_not_contains "PAO.PolarizationScheme" calc.fdf
 
 popd > /dev/null
 

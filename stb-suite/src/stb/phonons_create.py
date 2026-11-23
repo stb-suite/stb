@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -19,14 +20,14 @@ from ase import Atoms
 from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
 from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_section,
                           print_table, capture_library_noise)
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace, mace_relax
 from stb.core.deps import require_mace
 from stb.core.phonon_workflow import (build_phonon_displacements, write_displacement_folders,
                                      write_perfect_supercell, PERFECT_DIR)
 from stb.core.structure_io import read_md_state, prepend_include
 
-REPORT_FILE = "phonon_prep_properties.txt"
+REPORT_FILE = "stb_phononsCreate_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 
@@ -83,7 +84,7 @@ def main():
                         help="Input calculation parameters file (default: calc.fdf)")
 
     parser.add_argument("-p", "--pseudo-dir", type=str, default=".",
-                        help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                        help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                              "folder path (default: current directory).")
 
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
@@ -135,7 +136,7 @@ def main():
                              "residual forces -- from every displacement's, which a small relaxation residual "
                              "otherwise turns into errors of several THz at Gamma.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -156,7 +157,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("PHONON CALCULATION (VIA PHONOPY):", 'bold'))
@@ -197,7 +198,7 @@ def main():
         sys.exit(1)
     os.makedirs(output_root, exist_ok=True)
 
-    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("phononsCreate")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== PHONON PREP REPORT =====', 'magenta')}", f_out)

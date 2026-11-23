@@ -74,19 +74,19 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. --format fdf, mode mean (14-atom Sn3O4 structure) ---
 echo -e "\n--- Testing --format fdf --mode mean ---"
-rm -f stb_structural_report.txt structural_information.dat warnings.log rdf.dat references.bib
+rm -f stb_structural_report*.txt stb_structural_references*.bib structural_information.dat warnings.log rdf.dat stb_structural_report*.txt stb_structural_references*.bib
 stb-structural --file structure.fdf --format fdf --mode mean --no-intro > log_fdf_mean.txt 2>&1
 check_exit_code $? 0
 
-echo "Verifying the old structural_information.dat is no longer written unconditionally, and no report file without --save-report"
-if [ -e structural_information.dat ] || [ -e stb_structural_report.txt ]; then
+echo "Verifying the old structural_information.dat is no longer written unconditionally (the report is always written)"
+if [ -e structural_information.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} a report file exists without --save-report"
     FAIL=$((FAIL+1))
 else
     echo -e "   -> ${GREEN}Verified:${NC} no structural_information.dat, no stb_structural_report.txt"
     PASS=$((PASS+1))
 fi
-check_success references.bib
+check_success stb_structural_references.bib
 
 echo "Verifying no warnings.log is written, and CrystalNN's expected, non-actionable 'no oxidation states' warnings don't print either"
 if [ -e warnings.log ]; then
@@ -168,19 +168,19 @@ echo "Verifying atomic positions are cleanly formatted (fixed-width columns, not
 check_contains "^1    | Sn      | 4.574068  | 3.168518 | 4.142994" log_fdf_mean.txt
 check_not_contains "\[4.57406764" log_fdf_mean.txt
 
-echo "Verifying references.bib has the SIESTA citation"
-check_contains "@article{Soler2002," references.bib
+echo "Verifying stb_structural_references.bib has the SIESTA citation"
+check_contains "@article{Soler2002," stb_structural_references.bib
 
 
 # --- 2b. --save-report persists the exact same report to disk ---
 echo -e "\n--- Testing --save-report ---"
-rm -f stb_structural_report.txt
+rm -f stb_structural_report*.txt stb_structural_references*.bib
 stb-structural --file structure.fdf --format fdf --mode mean --save-report --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
 check_success stb_structural_report.txt
 check_contains "\[0\] RUN METADATA" stb_structural_report.txt
 check_contains "\[11\] SUMMARY & FILES" stb_structural_report.txt
-check_contains "Report         : ./stb_structural_report.txt" stb_structural_report.txt
+check_contains "Report         : stb_structural_report.txt" stb_structural_report.txt
 check_contains "CrystalNN | 2.956" stb_structural_report.txt
 
 
@@ -222,10 +222,11 @@ check_contains "1    | Sn      | 0.910   | 1429.050" log_list.txt
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---
 echo -e "\n--- Testing --output-dir ---"
 rm -rf out_dir
+rm -f stb_structural_report*.txt stb_structural_references*.bib
 stb-structural --file structure.fdf --format fdf --mode mean --output-dir out_dir --save-report --no-intro > log_outdir.txt 2>&1
 check_exit_code $? 0
-check_success out_dir/stb_structural_report.txt
-check_success out_dir/references.bib
+check_success stb_structural_report.txt
+check_success stb_structural_references.bib
 if [ -e out_dir/warnings.log ]; then
     echo -e "   -> ${RED}Failed:${NC} out_dir/warnings.log was written (should not be)"
     FAIL=$((FAIL+1))
@@ -325,10 +326,10 @@ check_contains "stb-structural" log_version.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.4) ---"
 
 echo "Testing: navigate 2.4 -> structure.fdf -> format=1(fdf) -> mode=1(mean) -> default output dir -> default RDF -> save-report=N (default)"
-rm -f stb_structural_report.txt structural_information.dat warnings.log rdf.dat
-printf '2.4\nstructure.fdf\n1\n1\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
+rm -f stb_structural_report*.txt stb_structural_references*.bib structural_information.dat warnings.log rdf.dat
+printf '2.4\nstructure.fdf\n1\n1\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success rdf.dat
-if [ -e stb_structural_report.txt ] || [ -e structural_information.dat ]; then
+if [ -e structural_information.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} a report file was created despite the default (N) save-report answer"
     FAIL=$((FAIL+1))
 else
@@ -337,11 +338,11 @@ else
 fi
 check_contains "Select input file format:" log_menu.txt
 check_contains "Select analysis mode:" log_menu.txt
-check_contains "Also save a text report to file?" log_menu.txt
+check_not_contains "Also save a text report to file?" log_menu.txt
 
 echo "Testing: navigate 2.4 -> siesta.STRUCT_OUT -> format=2(struct_out) -> mode=2(list) -> atoms 1,7 -> RDF=n -> save-report=y"
-rm -f stb_structural_report.txt structural_information.dat warnings.log rdf.dat
-printf '2.4\nsiesta.STRUCT_OUT\n2\n2\n\n1,7\nn\ny\n' | stb-suite > log_menu_list.txt 2>&1
+rm -f stb_structural_report*.txt stb_structural_references*.bib structural_information.dat warnings.log rdf.dat
+printf '2.4\nsiesta.STRUCT_OUT\n2\n2\n\n1,7\nn\n' | stb-suite > log_menu_list.txt 2>&1
 check_success stb_structural_report.txt
 if [ -e rdf.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} rdf.dat was created despite answering 'n' to the RDF prompt"

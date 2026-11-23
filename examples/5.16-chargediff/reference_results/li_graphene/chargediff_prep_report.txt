@@ -4,11 +4,11 @@
 ------------------------------------------------------------
   Tool            : stb-chargediffPrep 1.9.289
   Date            : 2026-10-23 12:40
-  Structure file  : /home/carlos/run/cdd_ref/relax/li_graphene/relaxed.fdf
+  Structure file  : /path/to/run/cdd_ref/relax/li_graphene/relaxed.fdf
   Calc template   : calc_graphene.fdf
-  Output dir      : /home/carlos/run/cdd_ref/li_graphene
+  Output dir      : /path/to/run/cdd_ref/li_graphene
   View fragments  : no
-  Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo (from --pseudo-dir 'dojo')
+  Pseudo source   : /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo (from --pseudo-dir 'dojo')
 
 [1] COMBINED STRUCTURE
 ------------------------------------------------------------
@@ -65,22 +65,22 @@ combined/  | all 19 real | none        | C, Li                                | 
 fragment1/ | 18 real     | 1 ghost     | C_frag1, Li_frag2_ghost              | 5    
 fragment2/ | 1 real      | 18 ghost    | C_frag1_ghost, Li_frag2              | 5    
   Each folder holds: structure.fdf, calc.fdf, config_extra.fdf and one pseudopotential per species label (a ghost label reuses its element's pseudopotential, with the electrons switched off).
-  Fragment manifest: /home/carlos/run/cdd_ref/li_graphene/chargediff_manifest.json (read by stb-chargediffAnalysis)
+  Fragment manifest: /path/to/run/cdd_ref/li_graphene/chargediff_manifest.json (read by stb-chargediffAnalysis)
 
 [6] REFERENCES
 ------------------------------------------------------------
-[OK] Citations written to '/home/carlos/run/cdd_ref/li_graphene/references.bib'.
+[OK] Citations written to '/path/to/run/cdd_ref/li_graphene/references.bib'.
 
 [7] SUMMARY & NEXT STEPS
 ------------------------------------------------------------
-  Folder(s) written: 3 (1 combined + 2 fragment(s)) under '/home/carlos/run/cdd_ref/li_graphene'
+  Folder(s) written: 3 (1 combined + 2 fragment(s)) under '/path/to/run/cdd_ref/li_graphene'
   Cost             : 3 independent single-point SCF runs; the combined one is the slowest (the fragments have the same basis, so about the same cost).
   Settings         : identical cell, MeshCutoff (300 Ry) and level of theory in all of them.
-  Report           : /home/carlos/run/cdd_ref/li_graphene/chargediff_prep_report.txt
+  Report           : /path/to/run/cdd_ref/li_graphene/chargediff_prep_report.txt
 
   Next steps:
     1. Run SIESTA in every folder, e.g.:
-         for d in /home/carlos/run/cdd_ref/li_graphene/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+         for d in /path/to/run/cdd_ref/li_graphene/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
     2. Check that each run converged, then:
-         stb-chargediffAnalysis --dir /home/carlos/run/cdd_ref/li_graphene --png --save-data
+         stb-chargediffAnalysis --dir /path/to/run/cdd_ref/li_graphene --png --save-data
        (add --profile --axis N for a planar average, --3d --iso-min X for a point cloud, --show to open the dashboard; the report also gives the counterpoise interaction energy.)

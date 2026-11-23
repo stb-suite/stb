@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-phononsCreate (Phonons Prep, item 5.4.1)
@@ -115,6 +118,7 @@ else
 fi
 echo "Testing: --no-perfect-supercell skips it and says so"
 mkdir -p noperf && cp structure.fdf calc.fdf Sn.psf O.psf noperf/
+rm -f noperf/stb_phononsCreate_report*.txt noperf/stb_phononsCreate_references*.bib
 (cd noperf && stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-perfect-supercell --no-intro > ../log_noperf.txt 2>&1)
 check_contains "not written (--no-perfect-supercell)" log_noperf.txt
 if [ ! -e noperf/phonon_runs/perfect_supercell ]; then
@@ -123,10 +127,10 @@ else
     echo -e "   -> ${RED}Failed:${NC} perfect_supercell/ written despite --no-perfect-supercell"; FAIL=$((FAIL+1))
 fi
 rm -rf noperf
-check_success phonon_runs/phonon_prep_properties.txt
-check_contains "RUN METADATA" phonon_runs/phonon_prep_properties.txt
-check_contains "Displacements needed" phonon_runs/phonon_prep_properties.txt
-check_contains "42 (of 84 without symmetry reduction)" phonon_runs/phonon_prep_properties.txt
+check_success stb_phononsCreate_report.txt
+check_contains "RUN METADATA" stb_phononsCreate_report.txt
+check_contains "Displacements needed" stb_phononsCreate_report.txt
+check_contains "42 (of 84 without symmetry reduction)" stb_phononsCreate_report.txt
 
 echo "Verifying the symmetry section: default symprec, highlighted space group, print_table format"
 check_contains "Symmetry precision: 0.01 Ang" log_create.txt
@@ -194,6 +198,7 @@ rm -rf phonon_runs
 
 # --- 3. --ml-prerelax pre-flight check (MACE-MP-0 already cached locally --
 #     fast, no network needed) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-prerelax ---"
 rm -rf phonon_runs
 stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --ml-prerelax --no-intro > log_ml_prerelax.txt 2>&1
@@ -208,6 +213,9 @@ check_not_contains "cuequivariance" ml_section_only.txt
 check_contains "\[6\] LIBRARY WARNINGS" log_ml_prerelax.txt
 check_contains "\[MACE import\]" log_ml_prerelax.txt
 check_contains "cuequivariance" log_ml_prerelax.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 4. Error and robustness cases ---
@@ -260,12 +268,13 @@ rm -rf phonon_runs
 # pseudo source (blank -> skip, uses '.'), ML pre-flight check (n),
 # advanced settings (n -> skip), save report (y), then the "Press Enter to
 # continue" pause, then quit.
-printf '5.4.1\n\n\n1 1 1\n\n\n\nn\nn\ny\n\n0\n' | stb-suite > log_menu.txt 2>&1
+rm -f stb_phononsCreate_report*.txt stb_phononsCreate_references*.bib
+printf '5.4.1\n\n\n1 1 1\n\n\n\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Supercell k-grid \[7 6 4\]:" log_menu.txt
 check_contains "Displacement folders : 42" log_menu.txt
 check_contains "Supercell k-grid  : 7 6 4 (explicit --kgrid)" log_menu.txt
 check_success phonon_runs/phonopy_disp.yaml
-check_success phonon_runs/phonon_prep_properties.txt
+check_success stb_phononsCreate_report.txt
 
 echo "Testing: navigate 5.4.1 -> explicit k-grid '3 3 3' -> advanced settings (y) -> custom symprec 1e-5 -> save report (n) -> quit"
 rm -rf phonon_runs
@@ -274,7 +283,7 @@ rm -rf phonon_runs
 # pre-flight check (n), advanced settings (y), vacuum-gap (blank ->
 # default), symprec ('1e-5'), save report (n), then "Press Enter to
 # continue", then quit.
-printf '5.4.1\n\n\n1 1 1\n3 3 3\n\n\nn\ny\n\n1e-5\nn\n\n0\n' | stb-suite > log_menu_symprec.txt 2>&1
+printf '5.4.1\n\n\n1 1 1\n3 3 3\n\n\nn\ny\n\n1e-5\n\n0\n' | stb-suite > log_menu_symprec.txt 2>&1
 check_contains "Symmetry precision: 1e-05 Ang" log_menu_symprec.txt
 check_contains "Displacement folders : 84" log_menu_symprec.txt
 check_contains "Supercell k-grid  : 3 3 3 (explicit --kgrid)" log_menu_symprec.txt

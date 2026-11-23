@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -33,7 +34,6 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.deps import require_pyxtal, require_mace
 
 REPORT_FILE = "stb_crystalcast_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-unitcell/stb-supercell/stb-fetch/
 # stb-kgrid/stb-mlrelax (core/kspace.py's other callers) -- used to detect
@@ -477,7 +477,7 @@ stb-symmetry or stb-unitcell.)""",
                "  %(prog)s --substitute Cl:F -f rocksalt.fdf -o rocksalt_f.fdf\n"
                "  %(prog)s --subgroup -f spinel_1.fdf --count 5 -o distorted.fdf\n"
                "  %(prog)s --supergroup --target-group 225 -f distorted_1.fdf -o parent.fdf\n"
-               "  %(prog)s --group 225 --species Ni O --num-ions 4 8 --save-report --view\n"
+               "  %(prog)s --group 225 --species Ni O --num-ions 4 8 --view\n"
     )
 
     parser.add_argument("--substitute", nargs="+", default=None, metavar="OLD:NEW",
@@ -610,8 +610,7 @@ stb-symmetry or stb-unitcell.)""",
                              "matches stb-symmetry/stb-unitcell).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry "
-                             f"analysis) to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) of every structure written "
                              "by this run (for --substitute/--subgroup/--supergroup, the input "
@@ -678,10 +677,10 @@ stb-symmetry or stb-unitcell.)""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("crystalcast")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-CRYSTALCAST REPORT =====", 'magenta'), f_out)
@@ -842,17 +841,17 @@ stb-symmetry or stb-unitcell.)""",
 
         print_section("[7] REFERENCES", f_out)
         bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.PYXTAL]
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         print_section("[8] SUMMARY & FILES", f_out)
         print_dual(f"Status         : {'OK' if len(written) == len(names) else 'PARTIAL'}", f_out)
         print_dual(f"Structures     : {len(written)} of {len(names)} written", f_out)
         print_dual(f"Input file     : {args.file}", f_out)
         print_dual(f"Output file(s) : {', '.join(written)}", f_out)
-        print_dual(f"References     : {BIB_FILE}", f_out)
+        print_dual(f"References     : {citations.run_references_path()}", f_out)
         if report_path:
             print_dual(f"Report         : {report_path}", f_out)
 
@@ -1093,16 +1092,16 @@ stb-symmetry or stb-unitcell.)""",
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[8] SUMMARY & FILES", f_out)
     print_dual(f"Status         : {'OK' if len(written) == args.count else 'PARTIAL'}", f_out)
     print_dual(f"Structures     : {len(written)} of {args.count} written", f_out)
     print_dual(f"Output file(s) : {', '.join(written)}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

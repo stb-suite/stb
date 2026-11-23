@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 # Guided example: stb-wfdensity (code 2.12 in the stb-suite menu)
 #
 # Not an automated test (see test/2-analysis/12-wfdensity/test.sh for that,
@@ -65,7 +68,7 @@ occupied band and k-point (that's exactly what stb-density's own .RHO
 -based total density already is). This tool is a diagnostic for one state
 at a time, not a substitute for that.
 
-Every run prints a numbered [0]...[6] report. --save-report persists it;
+Every run prints a numbered [0]...[6] report. It is always saved;
 --save-gnuplot writes the slice/profile .dat + a real .gplot script (off
 by default -- this tool used to write the .dat unconditionally but never
 actually wrote a .gplot at all, despite its own docstring calling this
@@ -212,34 +215,26 @@ grep -A1 "Normalization" "$OUT/grid-resolution/console_0.2.log"
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
---save-report additionally persists it to stb_wfdensity_report.txt, and
---save-gnuplot writes the slice .dat + a real .gplot script -- both off
-by default, so a plain run only ever writes the .cube file + references.bib:
+It is always saved to stb_wfdensity_report.txt; --save-gnuplot writes the slice .dat + a real .gplot script -- both off
+by default, so a plain run only ever writes the .cube file + stb_wfdensity_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp siesta.bands.WFSX calc.fdf structure.fdf calc.out Cr.ion Cr.ion.xml S.ion S.ion.xml "$OUT/full-report/"
 echo
 echo "\$ stb-wfdensity --label siesta --geometry-file calc.fdf --band vbm --fermi-file calc.out \\"
-echo "      --spacing 0.2 --no-intro   # default: no report, no slice data/gnuplot"
+echo "      --spacing 0.2 --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-wfdensity --label siesta --geometry-file calc.fdf --band vbm \
-    --fermi-file calc.out --spacing 0.2 --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "^siesta\|^calc\|^structure\|console"
-echo "(only the .cube file + references.bib -- no slice .dat/.gplot, no stb_wfdensity_report.txt)"
-echo
-echo "\$ stb-wfdensity --label siesta --geometry-file calc.fdf --band vbm --fermi-file calc.out \\"
-echo "      --spacing 0.2 --save-report --save-gnuplot --no-intro"
-(cd "$OUT/full-report" && stb-wfdensity --label siesta --geometry-file calc.fdf --band vbm \
-    --fermi-file calc.out --spacing 0.2 --save-report --save-gnuplot --no-intro \
+    --fermi-file calc.out --spacing 0.2 --save-gnuplot --no-intro \
     > console_saved.log 2>&1)
 echo "Report sections written to stb_wfdensity_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_wfdensity_report.txt"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_wfdensity_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_wfdensity_references.bib"
 if command -v gnuplot > /dev/null; then
     (cd "$OUT/full-report" && gnuplot wfdensity_k139_b22_slice.gplot)
     echo "(rendered wfdensity_k139_b22_slice.pdf with the real, installed gnuplot)"
@@ -265,8 +260,8 @@ EOF
 TMP="$(mktemp -d)"
 cp siesta.bands.WFSX calc.fdf structure.fdf calc.out Cr.ion Cr.ion.xml S.ion S.ion.xml "$TMP/"
 echo
-echo "\$ printf '2.12\\nsiesta\\ncalc.fdf\\n1\\n0\\n1\\n0.3\\n\\n\\n\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.12\nsiesta\ncalc.fdf\n1\n0\n1\n0.3\n\n\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.12\\nsiesta\\ncalc.fdf\\n1\\n0\\n1\\n0.3\\n\\n\\n\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.12\nsiesta\ncalc.fdf\n1\n0\n1\n0.3\n\n\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Eigenvalue" "$OUT/basic-run/console.log")
 MENU_LINE=$(grep "Eigenvalue" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -286,9 +281,9 @@ Six self-contained folders were generated under output/:
   basic-run/            label-plus-geometry/   vbm-cbm/
   slice-position/       grid-resolution/       full-report/
 
-Each has references.bib and a .cube file; the --save-gnuplot runs
+Each has stb_wfdensity_references.bib and a .cube file; the --save-gnuplot runs
 additionally have the slice .dat/.gplot, and full-report/ has
-stb_wfdensity_report.txt (only from its --save-report run).
+stb_wfdensity_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - LCAO wavefunctions evaluated at real-space points, |psi|^2, and why
@@ -309,8 +304,8 @@ Recap of what this walkthrough covered:
     atoms; fixed to auto-detect the |psi|^2 peak instead, with --pos for
     manual override
   - --spacing vs. the normalization warning, demonstrated flipping live
-  - the numbered [0]...[6] report, --save-report, --save-gnuplot (now
-    with a REAL .gplot script, previously missing entirely), references.bib
+  - the numbered [0]...[6] report (always saved), --save-gnuplot (now
+    with a REAL .gplot script, previously missing entirely), stb_wfdensity_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA calculation:

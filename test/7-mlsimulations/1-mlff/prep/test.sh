@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-mlff (Custom ML Force Field Prep, item 7.1.1)
@@ -256,6 +259,7 @@ rm -rf extras
 
 
 # --- 2e. Foundation-model screen (one shared 'unphysical' threshold) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-screen (MACE-MP small) ---"
 stb-mlff -o mlscreen --file calc.fdf --n-configs 2 --stdev 0.05 0.6 --pseudo-dir . --ml-screen --ml-model small \
     --no-plots --no-intro > log_mlscreen.txt 2>&1
@@ -276,6 +280,9 @@ from stb.core import mlff_workflow as w
 sys.exit(0 if (mlff.ML_FORCE_WARN, mlff.ML_ENERGY_WARN) == (w.UNPHYSICAL_FMAX, w.UNPHYSICAL_DE) == (15.0, 1000.0) else 1)
 "
 rm -rf mlscreen
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 3. --n-configs 0 with no --from-aimd (expects failure) ---
@@ -295,11 +302,11 @@ check_contains "Missing pseudopotential" log_missingpp.txt
 
 # --- 5. --save-report (written in the run folder) ---
 echo -e "\n--- Testing --save-report ---"
-rm -f stb_mlff_report.txt
+rm -f stb_mlff_report*.txt stb_mlff_references*.bib
 stb-mlff -o report_run --file calc.fdf --n-configs 2 --pseudo-dir . --save-report --no-intro > log_savereport.txt 2>&1
-check_success report_run/stb_mlff_report.txt
-check_contains "STB-MLFF REPORT" report_run/stb_mlff_report.txt
-check_contains "\[9\] WARNINGS" report_run/stb_mlff_report.txt
+check_success stb_mlff_report.txt
+check_contains "STB-MLFF REPORT" stb_mlff_report.txt
+check_contains "\[9\] WARNINGS" stb_mlff_report.txt
 rm -rf report_run $R1
 
 
@@ -474,7 +481,7 @@ rm -rf mlff_runs
 # Structure 'calc.fdf', calc '-' = one self-contained .fdf (--file); then pseudo dir,
 # 3 configs, stdev, no strains, 2 tests, no D3, no AIMD, default run folder, no report,
 # no ML screen, no export, no viewer, no --show; Enter; 0 = quit.
-printf '7.1.1\ncalc.fdf\n-\n\n3\n0.05\n\n2\nn\nn\n\nn\nn\n\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '7.1.1\ncalc.fdf\n-\n\n3\n0.05\n\n2\nn\nn\n\nn\n\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success mlff_runs/$R1/mlff_config_001/calc.fdf
 check_success mlff_runs/$R1/mlff_config_003/calc.fdf
@@ -485,7 +492,7 @@ check_contains "Display the coverage figure on screen" log_menu.txt
 echo "Testing: menu with the default structure.fdf + calc.fdf pair and a custom run folder"
 pushd pair > /dev/null
 rm -rf mlff_runs
-printf '7.1.1\n\n\n\n2\n0.05\n\n0\nn\nn\nmy_mlff\nn\nn\n\nn\nn\n\n0\n' | stb-suite > log_menu_pair.txt 2>&1
+printf '7.1.1\n\n\n\n2\n0.05\n\n0\nn\nn\nmy_mlff\nn\n\nn\nn\n\n0\n' | stb-suite > log_menu_pair.txt 2>&1
 check_exit_code $? 0
 check_success my_mlff/$R1/mlff_config_002/structure.fdf
 check_success my_mlff/$R1/mlff_config_002/calc.fdf

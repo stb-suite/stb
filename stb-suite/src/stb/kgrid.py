@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import sys
@@ -15,7 +16,6 @@ from stb.core import structure_io, kspace, citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 
 REPORT_FILE = "stb_kgrid_report.txt"
-BIB_FILE = "references.bib"
 
 
 def build_bib_entries():
@@ -49,7 +49,7 @@ def main():
              "a single k-point there regardless of density. Default: 10.0"
     )
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-kgrid {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -62,10 +62,10 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("kgrid")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-KGRID REPORT =====", 'magenta'), f_out)
@@ -110,15 +110,15 @@ def main():
 
         print_section("[3] REFERENCES", f_out)
         bib_entries = build_bib_entries()
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         print_section("[4] SUMMARY & FILES", f_out)
         print_dual("Status         : OK", f_out)
         print_dual(f"Suggested grid : {divisions[0]} {divisions[1]} {divisions[2]}", f_out)
-        print_dual(f"References     : {BIB_FILE}", f_out)
+        print_dual(f"References     : {citations.run_references_path()}", f_out)
 
     except FileNotFoundError:
         print_dual(

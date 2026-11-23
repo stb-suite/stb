@@ -1,3 +1,4 @@
 output/
-references.bib
+stb_*_references*.bib
 stb_nanotube_report.txt
+stb_*_report*.txt

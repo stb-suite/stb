@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-workfunction (Work Function Calculator, item 2.7)
@@ -157,6 +160,7 @@ PYEOF
 # --- 2. Basic run: single vacuum plateau ---
 echo -e "\n--- Testing a basic run (symmetric slab, single vacuum plateau) ---"
 
+rm -f stb_workfunction_report*.txt stb_workfunction_references*.bib
 timeout 60 stb-workfunction -l symmetric --grid symmetric.VT --fermi 0.0 --no-intro --save-gnuplot \
     > log_basic.txt 2>&1
 check_exit_code $? 0
@@ -175,8 +179,8 @@ check_contains "Work Function | 5.0000 eV" log_basic.txt
 check_success workfunction_data.dat
 check_success workfunction.gplot
 check_contains "Vacuum region 1:" workfunction_data.dat
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
+check_success stb_workfunction_references.bib
+check_contains "@article{Soler2002," stb_workfunction_references.bib
 
 
 # --- 3. Fermi energy auto-detected from .out ---
@@ -268,23 +272,25 @@ check_contains "No vacuum plateau found" log_bulk.txt
 echo -e "\n--- Testing --save-report, --output-dir, and no unconditional data/gnuplot/report files ---"
 
 rm -rf out_dir
-rm -f workfunction_data.dat workfunction.gplot stb_workfunction_report.txt
+rm -f workfunction_data.dat workfunction.gplot stb_workfunction_report*.txt stb_workfunction_references*.bib
+rm -f stb_workfunction_report*.txt stb_workfunction_references*.bib
 timeout 60 stb-workfunction -l symmetric --grid symmetric.VT --fermi 0.0 --no-intro \
     --output-dir out_dir --save-report --save-gnuplot > log_outdir.txt 2>&1
 check_exit_code $? 0
-check_success out_dir/references.bib
-check_success out_dir/stb_workfunction_report.txt
+check_success stb_workfunction_references.bib
+check_success stb_workfunction_report.txt
 check_success out_dir/workfunction_data.dat
 check_success out_dir/workfunction.gplot
 check_contains 'plot "workfunction_data.dat"' out_dir/workfunction.gplot
 
-echo "Testing: a plain run (no --save-report/--save-gnuplot) writes only references.bib"
+echo "Testing: a plain run (no --save-report/--save-gnuplot) writes only stb_workfunction_references.bib"
 rm -rf out_plain
+rm -f stb_workfunction_report*.txt stb_workfunction_references*.bib
 timeout 60 stb-workfunction -l symmetric --grid symmetric.VT --fermi 0.0 --no-intro \
     --output-dir out_plain > log_plain.txt 2>&1
 check_exit_code $? 0
-check_success out_plain/references.bib
-if [ -e out_plain/stb_workfunction_report.txt ] || [ -e out_plain/workfunction_data.dat ] || [ -e out_plain/workfunction.gplot ]; then
+check_success stb_workfunction_references.bib
+if [ -e out_plain/workfunction_data.dat ] || [ -e out_plain/workfunction.gplot ]; then
     echo -e "   -> ${RED}Failed:${NC} a data/gnuplot/report file exists without its flag"
     FAIL=$((FAIL+1))
 else
@@ -334,7 +340,7 @@ check_contains "axis" log_help.txt
 check_contains "fermi" log_help.txt
 check_contains "asymmetric-tol" log_help.txt
 check_contains "output-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 check_not_contains "no-plot" log_help.txt
@@ -344,7 +350,7 @@ check_not_contains "no-plot" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.7) ---"
 
 echo "Testing: navigate 2.7 -> label symmetric -> default grid -> default fermi file -> blank axis (auto) -> save-report=n -> save-gnuplot=n -> view=n -> quit"
-printf '2.7\nsymmetric\n\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+printf '2.7\nsymmetric\n\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Axis           : 2 (auto-detected from symmetric.XV/.fdf)" log_menu.txt
 

@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -22,7 +23,6 @@ from stb.core.ase_view import view_structure_interactive
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_symmetry_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default as stb-kgrid/stb-mlrelax/etc. (core/kspace.py's other
 # callers): minimum empty span along an axis, wrapped periodically, to
@@ -720,10 +720,10 @@ def print_report(results, args, source_file, fmt, show_operations, symprec_scan,
 
     print_section("[10] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
     print_dual("Symmetry detection uses spglib (via pymatgen's SpacegroupAnalyzer) for the 3D "
                "space group and layer group, and pymatgen's PointGroupAnalyzer for the molecular "
                "point group -- see the example README for the underlying theory/approximations "
@@ -731,7 +731,7 @@ def print_report(results, args, source_file, fmt, show_operations, symprec_scan,
 
     print_section("[11] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if refined_path:
         print_dual(f"Refined struct.: {refined_path}", f_out)
     if report_path:
@@ -798,11 +798,11 @@ def main():
                              "error for a wire (2 vacuum axes, no rod-group equivalent exists) "
                              "or if the applicable detection failed.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write references.bib into (and "
-                             f"{REPORT_FILE}, with --save-report) (default: current "
+                        help="Directory to write into ("
+                             "the report and its references file go to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) of the analyzed structure "
                              "-- or, if --write-refined/--compare-to is also given, both "
@@ -834,7 +834,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CRYSTAL SYMMETRY ANALYSIS:", 'bold'))
@@ -987,7 +987,7 @@ def main():
                 print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
 
     print()
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("symmetry")
     f_out = open(report_path, "w") if report_path else None
 
     print_report(results, args, args.file, args.format, args.show_operations,

@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -78,6 +78,7 @@ one) on the CrS structure.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -93,7 +94,6 @@ from stb.core.deps import require_sisl, read_sisl_geometry_xv_or_fdf
 from stb.core import kspace
 
 REPORT_FILE = "stb_stm_report.txt"
-BIB_FILE = "references.bib"
 
 VACUUM_GAP_ANG = 10.0  # same threshold used by stb-workfunction/stb-mlrelax
 
@@ -248,7 +248,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-stm --label siesta --mode current --iso 0.001\n"
                "  stb-stm --label siesta --mode height --z 3.0\n"
-               "  stb-stm --label siesta --save-report --save-gnuplot --view\n",
+               "  stb-stm --label siesta --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -289,11 +289,11 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write stm_<mode>.dat/.gplot into (with --save-gnuplot) "
-                             "and stb_stm_report.txt/references.bib (default: current directory). "
+                             "(the report and its references file go to the current folder) (default: current directory). "
                              "Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write stm_<mode>.dat + stm_<mode>.gplot together. Off by "
                              "default -- this tool used to write both unconditionally on every run.")
@@ -325,7 +325,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("STM SIMULATOR: reading input data", 'bold'))
@@ -441,7 +441,7 @@ def main():
     out_gplot = os.path.join(args.output_dir, f"stm_{args.mode}.gplot")
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("stm")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-STM REPORT =====", 'magenta'), f_out)
@@ -522,16 +522,16 @@ def main():
 
     print_section("[4] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.TERSOFF_HAMANN]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     if args.mode == "current" and "corrugation" in image_stats:
         print_dual(f"Corrugation    : {image_stats['corrugation']:.3f} Ang", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if args.save_gnuplot:
         print_dual(f"Data           : {out_data}", f_out)
         print_dual(f"Gnuplot script : {out_gplot}", f_out)

@@ -1,0 +1,592 @@
+{
+ "schema": "stb_pseudo_bank_v1",
+ "folder": "sr_pbe_0.4_stringent",
+ "table": "nc-sr-04 pbe stringent",
+ "source": {
+  "archive": "nc-sr-04_pbe_stringent_psml.tgz",
+  "url": "http://www.pseudo-dojo.org/pseudos/nc-sr-04_pbe_stringent_psml.tgz",
+  "taken": "2026-11-20",
+  "archive_sha256": "ddd5424fed8457b40a863f793d78dcc33f3cd3fa53fd9040c57198da7939f2a0",
+  "archive_files": 72,
+  "verified": "2026-11-20"
+ },
+ "n_files": 72,
+ "files": {
+  "Ag.psml": {
+   "md5": "8feeda28819891fd55a601521802b975",
+   "z_valence": 19.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Al.psml": {
+   "md5": "e3694645ddc19e8d04e0297cee56d2ca",
+   "z_valence": 3.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ar.psml": {
+   "md5": "76333c564434cd515edc1c40413bf404",
+   "z_valence": 8.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "As.psml": {
+   "md5": "444af548aaaa538f1b15573f77ca25bf",
+   "z_valence": 23.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Au.psml": {
+   "md5": "3994ed5394c592a738d1801cb9a207bd",
+   "z_valence": 19.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "B.psml": {
+   "md5": "52aa1fc132f3a14ae1eca717409e6cc1",
+   "z_valence": 3.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ba.psml": {
+   "md5": "09de21d1a4d919360f9f84a4fc523b2c",
+   "z_valence": 10.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Be.psml": {
+   "md5": "85c25a2e9dd2655be09a238945a87852",
+   "z_valence": 4.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Bi.psml": {
+   "md5": "a8621d7cd9b8dee0d6d22fc8f1c581a7",
+   "z_valence": 23.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Br.psml": {
+   "md5": "b92d38fd09daa3eb9405122a61cf554a",
+   "z_valence": 17.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "C.psml": {
+   "md5": "c6ba54985d41a00ec2d3a4df793a822f",
+   "z_valence": 4.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ca.psml": {
+   "md5": "d8698843b83728c915ddebea3d7a05ea",
+   "z_valence": 10.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Cd.psml": {
+   "md5": "768d78b58bc60faebb064cc22e0b76ee",
+   "z_valence": 20.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Cl.psml": {
+   "md5": "a1c011859a7384b18e29f27ea93d8cef",
+   "z_valence": 7.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Co.psml": {
+   "md5": "a2cc8da31d52f47c67582f2c89b7f425",
+   "z_valence": 17.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Cr.psml": {
+   "md5": "401ac998e97210fa5d171f693f06578a",
+   "z_valence": 14.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Cs.psml": {
+   "md5": "4a4bc7c2b9268a81acd5f395408e8827",
+   "z_valence": 9.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Cu.psml": {
+   "md5": "f2601c09d80aa5b782cae7f934dace97",
+   "z_valence": 19.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "F.psml": {
+   "md5": "c9dd303619b4a642a1759d4c84798484",
+   "z_valence": 7.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Fe.psml": {
+   "md5": "841eb9be0f89d6e218aafb0c977e33fc",
+   "z_valence": 16.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ga.psml": {
+   "md5": "350cb02e72df9afd9eb847c993dddae1",
+   "z_valence": 21.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ge.psml": {
+   "md5": "31649dd92d84ea500739cfbb39fc1680",
+   "z_valence": 22.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "H.psml": {
+   "md5": "20d297b8610abd2a4209c5d32c15e180",
+   "z_valence": 1.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "He.psml": {
+   "md5": "8a0c57413659c0e9bf85d2a75954cd59",
+   "z_valence": 2.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Hf.psml": {
+   "md5": "14072cfce0f0ff4b0b32c2db2f7ce843",
+   "z_valence": 26.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Hg.psml": {
+   "md5": "5c1b3c301de323967747915516c87023",
+   "z_valence": 20.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "I.psml": {
+   "md5": "a64aa3c423b68cdfa307b499b9709fbb",
+   "z_valence": 17.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "In.psml": {
+   "md5": "55e5e8ee27553f8c98844a1826730583",
+   "z_valence": 21.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ir.psml": {
+   "md5": "3a2bde524289a2895cdceed80759cb42",
+   "z_valence": 17.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "K.psml": {
+   "md5": "8a7b88b4f7f419850b0e3ee654b0e233",
+   "z_valence": 9.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Kr.psml": {
+   "md5": "343aead510808c0db0375ae8c3e9eb7b",
+   "z_valence": 8.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "La.psml": {
+   "md5": "21701a067cb05c941cc3953806c5b0e2",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Li.psml": {
+   "md5": "8675e9c8fc33174f58bd03e59cbec7a5",
+   "z_valence": 3.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Lu.psml": {
+   "md5": "b654c4f6d9cf081d7946818172c3689c",
+   "z_valence": 25.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Mg.psml": {
+   "md5": "33b0bc09825a09ee050f7b14658c845d",
+   "z_valence": 10.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Mn.psml": {
+   "md5": "844005d9e2f82ed613b26e3a02e9c499",
+   "z_valence": 15.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Mo.psml": {
+   "md5": "94ef3a537aa1489cf6ce1e8b3f29b7c8",
+   "z_valence": 14.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "N.psml": {
+   "md5": "0d8fd043dc01390a3235b0ab860c3c92",
+   "z_valence": 5.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Na.psml": {
+   "md5": "481f96b9d1238720e08d8c0c84638c0e",
+   "z_valence": 9.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Nb.psml": {
+   "md5": "cddb133309034dd39505e2311564cda4",
+   "z_valence": 13.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ne.psml": {
+   "md5": "97e30e4543feee1f97a2242ac8d252d0",
+   "z_valence": 8.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ni.psml": {
+   "md5": "0478bc3ed22857015f13e1573f74d9df",
+   "z_valence": 18.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "O.psml": {
+   "md5": "016f28e1f5c1eb89935f9e45f70dff70",
+   "z_valence": 6.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Os.psml": {
+   "md5": "96239e030529f14febed498043818ada",
+   "z_valence": 16.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "P.psml": {
+   "md5": "24a25e690eb1417c3bb9d3d493ef60a2",
+   "z_valence": 5.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Pb.psml": {
+   "md5": "12d27fe4460ce4a9357e622fa37928c1",
+   "z_valence": 22.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Pd.psml": {
+   "md5": "bc2771afb952633db92ab3cd30dc39dc",
+   "z_valence": 18.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Po.psml": {
+   "md5": "e21eb95cff0e0b68545e6f8ce4bdb528",
+   "z_valence": 24.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Pt.psml": {
+   "md5": "8e0798c7503362853638a0f11b3b6972",
+   "z_valence": 18.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Rb.psml": {
+   "md5": "892819c4496d39ac453a5c2963ad6324",
+   "z_valence": 9.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Re.psml": {
+   "md5": "76730cf00d28a3283ec68f7b67e4f472",
+   "z_valence": 15.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Rh.psml": {
+   "md5": "f501f366306bfaa7ce6d5ee8acbda2be",
+   "z_valence": 17.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Rn.psml": {
+   "md5": "7a32d248df897356fd2467dca2e5c581",
+   "z_valence": 18.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ru.psml": {
+   "md5": "f63b6d1c19c5e062154f849083745a72",
+   "z_valence": 16.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "S.psml": {
+   "md5": "e23d2b65e4062162e0013ed7882c9968",
+   "z_valence": 6.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Sb.psml": {
+   "md5": "a01a55634e30785e846ee1f76611823d",
+   "z_valence": 23.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Sc.psml": {
+   "md5": "c43b1183dd35fd578a89865d2d859208",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Se.psml": {
+   "md5": "ba8198673ac8ab7bcd24730f67953a38",
+   "z_valence": 24.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Si.psml": {
+   "md5": "5b15108f493d4091ee5419736e32bfcf",
+   "z_valence": 4.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Sn.psml": {
+   "md5": "d2e2f391f537bae78e340f4152d079d4",
+   "z_valence": 22.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Sr.psml": {
+   "md5": "9e1bb9949ef9b252367687fe57f23698",
+   "z_valence": 10.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ta.psml": {
+   "md5": "ae22526a4d558c54a4443acace6b1f90",
+   "z_valence": 27.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Tc.psml": {
+   "md5": "4766a03e840dd047a82750e902b19f5e",
+   "z_valence": 15.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Te.psml": {
+   "md5": "89b93a8b5065c488b88efdff011e9694",
+   "z_valence": 24.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ti.psml": {
+   "md5": "8e82c3759410df94bb35afb3bd6ea73b",
+   "z_valence": 12.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Tl.psml": {
+   "md5": "33bf7c128c2e83f638de1c79f66b7f1d",
+   "z_valence": 21.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "V.psml": {
+   "md5": "97fb49a23e7473ae1c5c2c976d65218b",
+   "z_valence": 13.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "W.psml": {
+   "md5": "21e6fcd95f659bd4220fef63dea68bf0",
+   "z_valence": 14.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Xe.psml": {
+   "md5": "4c410a4d22057d4def6c91d420377984",
+   "z_valence": 8.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Y.psml": {
+   "md5": "757e599a8cba48e47c11d44cc81d1557",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Zn.psml": {
+   "md5": "21c8bd26c454ddd2d6f5380de162f2fd",
+   "z_valence": 20.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Zr.psml": {
+   "md5": "1b684ec19db4df699eb6e385164fe1d5",
+   "z_valence": 12.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  }
+ }
+}

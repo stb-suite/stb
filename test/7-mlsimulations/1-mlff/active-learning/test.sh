@@ -548,11 +548,12 @@ rm -rf wf_pair
 
 # --- 2. --save-report (written in the output directory) ---
 echo -e "\n--- Testing --save-report ---"
+rm -f stb_mlffActiveLearning_report*.txt stb_mlffActiveLearning_references*.bib
 stb-mlffActiveLearning --model "$QUICK_MODEL" $REF --workflow none.json --n-candidates 5 --top-k 1 --max-force 0 --max-energy 0 --frontier 0 \
     --output-dir report_test --save-report --no-intro > log_savereport.txt 2>&1
-check_success report_test/stb_mlffActiveLearning_report.txt
-check_contains "STB-MLFFACTIVELEARNING REPORT" report_test/stb_mlffActiveLearning_report.txt
-check_contains "\[10\] WARNINGS" report_test/stb_mlffActiveLearning_report.txt
+check_success stb_mlffActiveLearning_report.txt
+check_contains "STB-MLFFACTIVELEARNING REPORT" stb_mlffActiveLearning_report.txt
+check_contains "\[10\] WARNINGS" stb_mlffActiveLearning_report.txt
 rm -rf report_test
 
 

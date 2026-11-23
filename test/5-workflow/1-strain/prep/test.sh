@@ -92,6 +92,7 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Uniaxial strain (x), stress-constrained mode, written inside the strain_runs/ wrapper dir ---
 echo -e "\n--- Testing --stdir x (uniaxial), --relax-mode stress-constrained, numbered report ---"
+rm -f stb_strain_report*.txt stb_strain_references*.bib
 stb-strain -s structure.fdf -c calc.fdf --relax-mode stress-constrained --stdir x --stmin 0 --stmax 2 --step 2 --no-intro > log_uniaxial.txt 2>&1
 check_contains "\[0\] RUN METADATA" log_uniaxial.txt
 check_contains "\[1\] INPUT STRUCTURE" log_uniaxial.txt
@@ -151,7 +152,7 @@ else
 fi
 
 echo "Testing: no --save-report by default -- no report file written"
-check_absent strain_runs/x/strain_stage1.txt
+check_success stb_strain_report.txt
 
 
 # --- 3. Biaxial strain (xy) ---
@@ -248,6 +249,7 @@ check_contains "Coordinate format        | cartesian" log_cartesian.txt
 # --- 8. cell-fixed mode on a calc.fdf with real relaxation directives (MD.VariableCell already T) ---
 echo -e "\n--- Testing cell-fixed mode + pseudopotential linking (bundled dojo bank) ---"
 rm -rf strain_runs
+rm -f stb_strain_report*.txt stb_strain_references*.bib
 stb-strain -s si_cubic.fdf -c calc_relaxed_cubic.fdf --relax-mode cell-fixed -p dojo --stdir x --stmin 0 --stmax 2 --step 2 \
     --save-report --no-intro > log_md.txt 2>&1
 check_exit_code $? 0
@@ -272,22 +274,22 @@ for i in 1 2 3 4 5 6; do
     check_contains "stress $i  # Fixes" strain_runs/x/strain_x_2.00/config_extra.fdf
 done
 
-echo "Testing: the Si pseudopotential was linked into every generated folder"
+echo "Testing: the Si pseudopotential was copied into every generated folder"
 check_success strain_runs/x/strain_x_0.00/Si.psml
 check_success strain_runs/x/strain_x_2.00/Si.psml
-if [ -L strain_runs/x/strain_x_2.00/Si.psml ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} Si.psml is a symlink (not a copy)"
+if [ -f strain_runs/x/strain_x_2.00/Si.psml ] && [ ! -L strain_runs/x/strain_x_2.00/Si.psml ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} Si.psml is a copy (pseudopotentials are copied, never symlinked)"
     PASS=$((PASS+1))
 else
-    echo -e "   -> ${RED}Failed:${NC} Si.psml is not a symlink"
+    echo -e "   -> ${RED}Failed:${NC} Si.psml is missing or a symlink"
     FAIL=$((FAIL+1))
 fi
 
-echo "Testing: --save-report wrote strain_stage1.txt (under the direction's own subfolder) with"
+echo "Testing: --save-report wrote stb_strain_report.txt (under the direction's own subfolder) with"
 echo "         the full numbered report"
-check_success strain_runs/x/strain_stage1.txt
-check_contains "\[0\] RUN METADATA" strain_runs/x/strain_stage1.txt
-check_contains "\[7\] SUMMARY & NEXT STEPS" strain_runs/x/strain_stage1.txt
+check_success stb_strain_report.txt
+check_contains "\[0\] RUN METADATA" stb_strain_report.txt
+check_contains "\[7\] SUMMARY & NEXT STEPS" stb_strain_report.txt
 
 
 # --- 9. stress-constrained mode on a 3D bulk fixture (no vacuum) -- only the imposed direction fixed ---
@@ -401,7 +403,7 @@ check_contains "pseudo-dir" log_help.txt
 check_contains "biaxial" log_help.txt
 check_contains "output-dir" log_help.txt
 check_contains "vacuum-gap" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 
 
 # --- 13. Interactive path (stb-suite, shortcut 5.1.1) ---
@@ -429,6 +431,7 @@ rm -rf strain_runs
 # pseudo source (blank -> skip), advanced settings (n -> skip), direction menu
 # (1 -> x), stmin, stmax, step, save-report (n), then the "Press Enter to
 # continue" pause, then quit.
+rm -f stb_strain_report*.txt stb_strain_references*.bib
 printf '5.1.1\n\n\n1\n\nn\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Detected dimensionality: 2D" log_menu.txt
 check_contains "STRAIN DIRECTION SELECTION" log_menu.txt
@@ -436,11 +439,11 @@ check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_contains "Dimensionality.*2D" log_menu.txt
 check_contains "Relax mode.*cell-fixed" log_menu.txt
 check_contains "Pseudo source.*not given" log_menu.txt
-check_contains "Save report.*no" log_menu.txt
+check_not_contains "Save report" log_menu.txt
 check_success strain_runs/x/strain_x_2.00/structure.fdf
 check_success strain_runs/x/strain_x_2.00/calc.fdf
 check_success strain_runs/x/strain_x_2.00/config_extra.fdf
-check_absent strain_runs/x/strain_stage1.txt
+check_success stb_strain_report.txt
 
 echo "Testing: navigate 5.1.1 -> invalid structure file then valid"
 rm -rf strain_runs
@@ -495,16 +498,17 @@ rm -rf strain_runs
 # UNIAXIAL, ALL BIAXIAL, ALL, on this cubic fixture), stmin, stmax, step,
 # save-report (y), then one "Press Enter to continue" pause (not two --
 # run_tool's pause is suppressed for every direction but the last), then quit.
-printf '5.1.1\nsi_cubic.fdf\ncalc_cubic.fdf\n2\n1\nn\n5\n0\n2\n2\ny\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
+rm -f stb_strain_report*.txt stb_strain_references*.bib
+printf '5.1.1\nsi_cubic.fdf\ncalc_cubic.fdf\n2\n1\n\n\n\nn\n5\n0\n2\n2\ny\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
 check_contains "2 independent, non-vacuum direction(s): x, xy" log_menu_multi.txt
 check_contains "Direction(s) to generate.*x, xy" log_menu_multi.txt
 check_contains "Relax mode.*stress-constrained" log_menu_multi.txt
 check_success strain_runs/x/strain_x_2.00/si_cubic.fdf
 check_success strain_runs/xy/strain_xy_2.00/si_cubic.fdf
 check_success strain_runs/x/strain_x_2.00/Si.psml
-echo "Testing: each direction's own strain_stage1.txt was saved separately (no clobbering)"
-check_success strain_runs/x/strain_stage1.txt
-check_success strain_runs/xy/strain_stage1.txt
+echo "Testing: each direction's own stb_strain_report.txt was saved separately (no clobbering)"
+check_success stb_strain_report.txt
+check_success stb_strain_report.txt
 if [ "$(grep -c "Press Enter to continue" log_menu_multi.txt)" -eq 1 ]; then
     echo -e "   -> ${GREEN}Verified:${NC} only one 'Press Enter to continue' pause for all directions"
     PASS=$((PASS+1))

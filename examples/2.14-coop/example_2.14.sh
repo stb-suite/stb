@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 # Guided example: stb-coop (code 2.14 in the stb-suite menu)
 #
 # Not an automated test (see test/2-analysis/14-coop/test.sh for that) -- a
@@ -55,7 +58,7 @@ NOT a band-path one like stb-fatbands uses) and a real .HSX -- unlike
 stb-wfdensity/stb-sts, there is NO approximate fallback: COOP needs the
 real overlap matrix, COHP needs the real Hamiltonian.
 
-Every run prints a numbered [0]...[7] report. --save-report persists it;
+Every run prints a numbered [0]...[7] report. It is always saved;
 --save-gnuplot writes coop.dat/cohp.dat + a real .gplot script (off by
 default -- this tool used to write the .dat unconditionally but never a
 .gplot at all); --view shows a matplotlib preview (replaces the old
@@ -204,13 +207,12 @@ pause
 
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[7] report to the console.
---save-report additionally persists it to stb_coop_report.txt, and
---save-gnuplot writes coop.dat + a real .gplot script -- both off by
-default, so a plain run only ever writes coop.dat + references.bib:
+It is always saved to stb_coop_report.txt; --save-gnuplot writes coop.dat + a real .gplot script -- both off by
+default, so a plain run only ever writes coop.dat + stb_coop_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.HSX Sn3O4.selected.WFSX "$OUT/full-report/"
@@ -218,12 +220,12 @@ echo "\$ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 --erange -
 (cd "$OUT/full-report" && stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
     --erange -10 5 --npoints 25 --sigma 300 --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only coop.dat + references.bib -- no .gplot, no stb_coop_report.txt)"
+echo "(only coop.dat + stb_coop_references.bib -- no .gplot, no stb_coop_report.txt)"
 echo
 echo "\$ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 --erange -10 5 --npoints 25 --sigma 300 \\"
-echo "      --save-report --save-gnuplot --no-intro"
+echo "      --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
-    --erange -10 5 --npoints 25 --sigma 300 --save-report --save-gnuplot \
+    --erange -10 5 --npoints 25 --sigma 300 --save-gnuplot \
     --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_coop_report.txt:"
 grep -o '\[[0-9]\] [A-Z& ]*' "$OUT/full-report/stb_coop_report.txt" | sort -u
@@ -258,8 +260,8 @@ echo "\$ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --erange -10 5 --npoi
 (cd "$TMP" && stb-coop --label Sn3O4 --quantity coop --pair 0 6 \
     --erange -10 5 --npoints 25 --sigma 300 --no-intro > cli.log 2>&1)
 echo
-echo "\$ printf '2.14\\nSn3O4\\n\\n1\\n1\\n0\\n6\\n-10\\n5\\n300\\n\\nn\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.14\nSn3O4\n\n1\n1\n0\n6\n-10\n5\n300\n\nn\n\nn\nn\nn\n\n0\n' | timeout 120 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.14\\nSn3O4\\n\\n1\\n1\\n0\\n6\\n-10\\n5\\n300\\n\\nn\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.14\nSn3O4\n\n1\n1\n0\n6\n-10\n5\n300\n\nn\n\nn\nn\n\n0\n' | timeout 120 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Selected pairs" "$TMP/cli.log")
 MENU_LINE=$(grep "Selected pairs" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -280,9 +282,8 @@ Seven self-contained folders were generated under output/:
   cohp/                label-plus-hsx/    fermi-shift/
   full-report/
 
-Each has references.bib and coop.dat/cohp.dat; full-report/ additionally
-has coop.gplot/coop.pdf and stb_coop_report.txt (only from its
---save-report/--save-gnuplot run).
+Each has stb_coop_references.bib and coop.dat/cohp.dat; full-report/ additionally
+has coop.gplot/coop.pdf and stb_coop_report.txt (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:
   - COOP/COHP theory: crystal-orbital overlap/Hamilton populations,
@@ -303,12 +304,12 @@ Recap of what this walkthrough covered:
     the same way as stb-wfdensity/stb-sts
   - --shift fermi's new priority-ordered Fermi-source hierarchy, shared
     with stb-wfdensity/stb-sts
-  - the numbered [0]...[7] report, --save-report, --save-gnuplot (now
+  - the numbered [0]...[7] report (always saved), --save-gnuplot (now
     with a REAL .gplot script, previously missing entirely), --view
     (replacing the old, on-by-default --no-plot)
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA calculation:
   stb-coop --label my_calc --quantity coop --pair 0 1 --erange -10 5 --sigma 200 \\
-      --bond-order --save-report --save-gnuplot --view
+      --bond-order --save-gnuplot --view
 EOF

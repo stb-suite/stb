@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -58,6 +58,7 @@ and -o/--output-dir.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -66,12 +67,33 @@ import argparse
 import numpy as np
 from datetime import datetime
 from stb.core import structure_io, siesta_log
+from stb.core import symmetry as core_symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.convergence import PARAMETER_DEFAULTS, PARAMETER_ORDER, substitute_numeric_tag, substitute_kgrid_tag
 
 _FOLDER_RE = re.compile(r'^convergence_([a-zA-Z]+)_([\d.]+)$')
 _RELAX_STEPS_RE = re.compile(r'MD\.(?:NumCGsteps|Steps)\s+(\d+)', re.IGNORECASE)
-REPORT_FILE = "convergence_report.txt"
+_STRESS_TOL_RE = re.compile(r'^\s*MD\.MaxStressTol\s+([0-9.eE+-]+)\s*([A-Za-z/*0-9]+)?', re.IGNORECASE | re.MULTILINE)
+SIESTA_DEFAULT_STRESS_TOL_GPA = 1.0
+EV_PER_ANG3_TO_GPA = 160.21766
+REPORT_FILE = "stb_convergenceAnalysis_report.txt"
+
+
+def read_declared_stress_tol_gpa(folder):
+    """MD.MaxStressTol forced in this folder's config_extra.fdf, in GPa -- None when absent (SIESTA's default,
+    1 GPa, then applies; versions up to 2.1.0.dev33 of stb-convergence did not write it)."""
+    path = os.path.join(folder, "config_extra.fdf")
+    try:
+        with open(path) as f:
+            m = _STRESS_TOL_RE.search(f.read())
+    except OSError:
+        return None
+    if not m:
+        return None
+    value, unit = float(m.group(1)), (m.group(2) or "GPa").lower()
+    factor = {"gpa": 1.0, "mpa": 1e-3, "kbar": 0.1, "bar": 1e-4, "ev/ang**3": EV_PER_ANG3_TO_GPA,
+              "ev/ang^3": EV_PER_ANG3_TO_GPA, "ry/bohr**3": 14710.5, "ry/bohr^3": 14710.5}.get(unit, 1.0)
+    return value * factor
 
 # Whether accuracy improves as the swept value increases -- derived from
 # stb-convergence's own PARAMETER_DEFAULTS['tighter'] rather than a second,
@@ -141,7 +163,8 @@ def read_declared_relax_steps(folder):
     return int(m.group(1)) if m else None
 
 
-def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps):
+def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps,
+                 stress_gpa=None, stress_tol_gpa=None, volume_unchanged=False):
     """Short data-quality code for one run's table row -- 'OK', or a comma
     -joined list of concerns (never blocks the convergence scan itself,
     just flags a run whose own geometry/energy might not be trustworthy).
@@ -151,8 +174,15 @@ def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, decl
         issues.append("SCF?")
     if max_force is not None and max_force > force_tolerance:
         issues.append("F>tol")
-    if declared_steps is not None and geometry_steps >= declared_steps:
+    if declared_steps and geometry_steps >= declared_steps:   # 0 declared steps = a single point, nothing to exhaust
         issues.append("steps")
+    if declared_steps:
+        if stress_gpa is not None and stress_tol_gpa is not None and stress_gpa > stress_tol_gpa:
+            issues.append("P>tol")
+        if stress_tol_gpa is None or stress_tol_gpa >= SIESTA_DEFAULT_STRESS_TOL_GPA:
+            issues.append("Ptol=1GPa")
+        if volume_unchanged:
+            issues.append("V=input")
     return ",".join(issues) if issues else "OK"
 
 
@@ -249,6 +279,42 @@ def write_curve_plot(dat_path, parameter_name, rows):
     return gplot_path
 
 
+# Cutoff radii of the basis orbitals of each run, {(parameter, value): (min, max)} in Bohr,
+# filled by analyze_one_sweep for the PAO.EnergyShift table.
+ORBITAL_RADII = {}
+# parameter -> [(folder, input space group, relaxed space group at 1e-3 Ang, cell angles)]
+DISTORTED = {}
+
+
+def relaxed_symmetry_check(folder, structure, outcell):
+    """(input SG, relaxed SG, angles) when the relaxed cell lost symmetry to noise only (see
+    core.symmetry.symmetry_lost_to_noise), else None. The relaxed positions come from the
+    folder's *.XV when there is one (sisl), else the input fractional coordinates in the
+    relaxed cell."""
+    from pymatgen.core import Lattice, Structure
+    try:
+        pmg_in = structure_io.to_pymatgen(structure)
+        relaxed = None
+        xv = sorted(f for f in os.listdir(folder) if f.endswith(".XV"))
+        if xv:
+            import sisl
+            geom = sisl.get_sile(os.path.join(folder, xv[0])).read_geometry()
+            if len(geom) == len(pmg_in):
+                relaxed = Structure(Lattice(geom.cell), pmg_in.species, geom.xyz, coords_are_cartesian=True)
+        if relaxed is None:
+            relaxed = Structure(Lattice(outcell), pmg_in.species, pmg_in.frac_coords)
+        lost = core_symmetry.symmetry_lost_to_noise(pmg_in, relaxed)
+        if lost:
+            return lost[0], lost[1], relaxed.lattice.angles
+    except Exception:
+        return None
+    return None
+_RC_LINE_RE = re.compile(r"^\s*rc\s*=\s*([0-9]+\.[0-9]+)\s*$")
+
+
+from stb.core.basis_scan import orbital_radii  # noqa: E402  (shared with the basis-convergence report)
+
+
 def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_out):
     """Reads every folder's calc.out + structure.fdf + config_extra.fdf and
     returns (rows, n_skipped) sorted ascending by swept value. Each row is
@@ -285,8 +351,30 @@ def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_
         volume = abs(float(np.linalg.det(outcell))) if outcell is not None else None
         geometry_steps = siesta_log.count_geometry_steps(out_path)
         declared_steps = read_declared_relax_steps(folder)
-        quality = quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps)
+        stress = siesta_log.get_stress_tensor(out_path)
+        stress_gpa = float(np.abs(stress).max()) * EV_PER_ANG3_TO_GPA if stress is not None else None
+        stress_tol = read_declared_stress_tol_gpa(folder)
+        volume_unchanged = False
+        if declared_steps and volume is not None:
+            try:
+                v_input = abs(float(np.linalg.det(structure_io.lattice_only(structure))))
+                # an already-relaxed input may legitimately stop at step 0 under a tight tolerance: only a
+                # loose tolerance (SIESTA's 1 GPa) or a stress left above 0.05 GPa makes it suspicious
+                loose = stress_tol is None or stress_tol >= SIESTA_DEFAULT_STRESS_TOL_GPA
+                volume_unchanged = (v_input > 0 and abs(volume - v_input) < 1e-5 * v_input
+                                    and (loose or (stress_gpa is not None and stress_gpa > 0.05)))
+            except Exception:
+                pass
+        if declared_steps and outcell is not None:
+            lost = relaxed_symmetry_check(folder, structure, outcell)
+            if lost:
+                DISTORTED.setdefault(parameter, []).append((name,) + lost)
+        quality = quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps,
+                               stress_gpa, stress_tol if stress_tol is not None else SIESTA_DEFAULT_STRESS_TOL_GPA,
+                               volume_unchanged)
 
+        if parameter == "energyshift":
+            ORBITAL_RADII[(parameter, value)] = orbital_radii(out_path)
         data.append([value, energy, n_atoms, scf_converged, max_force, volume, quality])
 
     data.sort(key=lambda d: d[0])
@@ -343,12 +431,63 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
             f"[WARNING] {n_flagged}/{len(rows)} run(s) flagged (SCF? = SCF convergence not "
             f"confirmed, F>tol = residual force above --force-tolerance "
             f"{args.force_tolerance} eV/Ang, steps = relaxation used its full declared step "
-            "budget) -- their geometry may not be a genuine relaxed minimum.", 'yellow'), f_out)
+            "budget, P>tol = final stress above MD.MaxStressTol, Ptol=1GPa = no MD.MaxStressTol below SIESTA's "
+            "1 GPa default (~1 % of the volume of a B0 ~ 90 GPa solid), V=input = the cell never moved) -- their "
+            "geometry may not be a genuine relaxed minimum.", 'yellow'), f_out)
+    n_unmoved = sum(1 for r in rows if "V=input" in r[8])
+    if n_unmoved:
+        print_dual(color_text(
+            f"[WARNING] {n_unmoved}/{len(rows)} relaxation(s) ended with exactly the input cell: the relaxation "
+            "stopped at the first step (stress below a loose MD.MaxStressTol), so their 'relaxed' volume is the "
+            "input one and the volume verdict below means nothing for them. Regenerate the folders with "
+            "stb-convergence (it now forces MD.MaxStressTol, --max-stress-tol, default 0.02 GPa) and rerun.",
+            'yellow'), f_out)
 
     energy_converged = scan_energy_convergence(rows, args.tolerance, increasing_is_accurate)
-    volume_rows = [r for r in rows if r[4] is not None]
+    volume_rows = [r for r in rows if r[4] is not None and "V=input" not in r[8]]
     volume_converged = (scan_volume_convergence(volume_rows, args.volume_tolerance, increasing_is_accurate)
                          if len(volume_rows) >= 2 else None)
+    volumes_seen = [r[4] for r in volume_rows]
+    fixed_geometry = len(volumes_seen) >= 2 and (max(volumes_seen) - min(volumes_seen)) < 1e-6 * max(volumes_seen)
+
+    if parameter == "energyshift":
+        radii_rows = [([f"{r[0]:.4f}"] + ([f"{rc[0]:.3f}", f"{rc[1]:.3f}", f"{rc[1] * 0.529177:.3f}"] if rc else
+                                         ["--", "--", "--"]), None)
+                      for r in rows for rc in [ORBITAL_RADII.get((parameter, r[0]))]]
+        if any(ORBITAL_RADII.get((parameter, r[0])) for r in rows):
+            print_dual("Cutoff radii of the basis orbitals (from each log's 'rc =' lines):", f_out)
+            print_table(["PAO.EnergyShift (Ry)", "smallest rc (Bohr)", "largest rc (Bohr)", "largest rc (Ang)"],
+                        radii_rows, f_out)
+        print_dual(color_text(
+            "[NOTE] PAO.EnergyShift is NOT judged by the total energy here. The total energy has no practical "
+            "plateau in this parameter: bases of different range are not nested and E still moves by 0.01-1.5 "
+            "eV/atom per step (it is not even monotonic for graphene), so the energy criterion would always "
+            "answer 'not converged' or 'the smallest value scanned'. The |Delta E/atom| column is shown for "
+            "information only.", 'cyan'), f_out)
+        if fixed_geometry:
+            print_dual(color_text(
+                "[NOTE] Every run has the same cell (a --single-point sweep): there is no relaxed volume to "
+                "judge by either. Use these runs for energy DIFFERENCES you care about, and get V0 and B0 at "
+                "each value from an E(V) scan (stb-eosInputs / stb-eosAnalysis) for the verdict on the basis "
+                "range.", 'cyan'), f_out)
+            return None, None, None
+        direction_hint = "or lower"
+        if not volume_rows:
+            print_dual(color_text("[WARNING] No relaxed volume to judge by (every relaxation ended at its input "
+                                  "cell, see above): no verdict.", 'yellow'), f_out)
+            return None, None, None
+        if volume_converged is not None:
+            print_dual(f"{color_text('Structure converged at:', 'green')} {parameter} = {volume_converged:.4f} "
+                       f"({direction_hint}, |Delta V/V| < {args.volume_tolerance}%, relaxed cell). The relaxed "
+                       "volume also carries the noise of each relaxation: confirm with V0 from an E(V) scan "
+                       "(stb-eosInputs) at this value and the next smaller one.", f_out)
+        else:
+            print_dual(color_text(
+                f"[WARNING] No point met the {args.volume_tolerance}% relaxed-volume tolerance within the scanned "
+                "range. Reducing PAO.EnergyShift further may not help: check V0/B0 from an E(V) scan per value, "
+                "the basis size (DZP -> TZP) and, if the range does not close, optimized orbital radii "
+                "(PAO.Basis).", 'yellow'), f_out)
+        return None, volume_converged, volume_converged
 
     direction_hint = "or higher" if increasing_is_accurate else "or lower"
     if energy_converged is not None:
@@ -363,6 +502,9 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
         print_dual(f"{color_text('Structure converged at:', 'green')} {parameter} = "
                    f"{volume_converged:.4f} ({direction_hint}, |Delta V/V| < {args.volume_tolerance}%, "
                    "relaxed cell)", f_out)
+    elif not volume_rows and any("V=input" in r[8] for r in rows):
+        print_dual(color_text("[WARNING] No relaxed volume to judge by (every relaxation ended at its input "
+                              "cell): no structural verdict.", 'yellow'), f_out)
     else:
         print_dual(color_text(
             f"[WARNING] No point met the {args.volume_tolerance}% relaxed-volume tolerance within "
@@ -387,7 +529,190 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
     elif volume_converged is not None:
         recommended = volume_converged
 
+    distorted = DISTORTED.get(parameter, [])
+    if distorted:
+        name, sg_in, sg_out, angles = distorted[0]
+        print_dual(color_text(
+            f"[WARNING] {len(distorted)} relaxed cell(s) lost the input symmetry to numerical noise: {sg_in} "
+            f"in, {sg_out} out at 0.001 Ang (still {sg_in} at 0.01 Ang); e.g. {name}, angles {angles[0]:.4f} "
+            f"{angles[1]:.4f} {angles[2]:.4f} deg. The volume above is unaffected, but a structure taken from "
+            "these runs carries the distortion (stb-kpath then sees another Bravais lattice). Symmetrize it "
+            "before reuse, or keep the angles fixed in the relaxation (MD.Constraints / Geometry.Constraints "
+            "on the shear stress components).", 'yellow'), f_out)
+
     return energy_converged, volume_converged, recommended
+
+
+def analyze_basis(base, args, f_out):
+    """Report of a basis-set convergence by equations of state (stb-convergence --parameter basis):
+    every stage found under `base`, its scans fitted, the verdict of each stage."""
+    from stb.core import basis_scan as bs
+    manifests = bs.read_manifests(base)
+    warnings = []
+
+    def warn(text):
+        warnings.append(text)
+        print_dual(color_text(f"[WARNING] {text}", 'yellow'), f_out)
+
+    print_section("[1] STAGES FOUND", f_out)
+    print_table(["Stage", "What it tests", "Scans"], [
+        ([stage, bs.STAGE_TITLES[stage], str(len(manifests[stage]["sub_scans"])) if stage in manifests else "not run"],
+         None if stage in manifests else 'yellow') for stage in bs.STAGES], f_out)
+    first = next(iter(manifests.values()))
+    n_periodic, n_atoms, measure = first["n_periodic"], first["n_atoms"], first["measure"]
+    quantity = {3: "V0", 2: "area (V0 of the cell at fixed height)", 1: "length (V0 at fixed cross-section)"}[n_periodic]
+    print_dual(f"Control quantity  : the equilibrium {measure} of each E({measure[0].upper()}) scan -- "
+               f"{quantity}; Birch-Murnaghan fit of the single points. The total energy is not a criterion: "
+               "it has no plateau in the basis parameters.", f_out)
+
+    verdicts = {}
+    for index, stage in enumerate([st for st in bs.STAGES if st in manifests], start=1):
+        man = manifests[stage]
+        print_section(f"[2.{index}] STAGE {stage.upper()}: {bs.STAGE_TITLES[stage]}", f_out)
+        tolerance = bs.CLOSE_PCT[stage][n_periodic]
+        scans = man["sub_scans"]          # written from loosest to tightest
+        fits = [bs.fit_sub_scan(os.path.join(base, sc["name"]), args.file, n_atoms) for sc in scans]
+        v0s = [fit["v0"] for fit in fits]
+        tightest = next((v for v in reversed(v0s) if v is not None), None)
+        rows = []
+        periodic_axes = man.get("periodic_axes") or [0, 1, 2][:n_periodic]
+        lowdims = [bs.low_dimensional(fit, n_periodic, periodic_axes) for fit in fits]
+        n_cols = 8 if n_periodic == 2 else 7
+        for sc, fit, low in zip(scans, fits, lowdims):
+            label = (f"{sc['value']:g} Ry" if stage != "size" else str(sc["value"]))
+            if fit["v0"] is None:
+                rows.append(([label, f"{fit['n']}/{fit['n_folders']}"] + ["--"] * (n_cols - 2)
+                             + ["; ".join(fit["problems"][:2]) or "fewer than 5 finished points"], 'yellow'))
+                continue
+            radii = fit["radii"]
+            noisy = not (fit["rms"] is not None and fit["rms"] < bs.B0_RESIDUAL_MEV)
+            if n_periodic == 3 or low is None:
+                main_cols = [f"{fit['v0'] / n_atoms:.4f}"]
+                stiff_col = f"{fit['b0']:.1f}" + (" (noisy)" if noisy else "")
+            else:
+                main_cols = ([f"{low['measure']:.4f}", f"{low['a0']:.4f}"] if n_periodic == 2
+                             else [f"{low['measure']:.4f}"])
+                stiff_col = (f"{low['stiffness']:.1f}" if low["stiffness"] is not None else "--") + (" (noisy)" if noisy else "")
+            if n_periodic == 2 and low is None:
+                main_cols.append("--")
+            rows.append(([label, f"{fit['n']}/{fit['n_folders']}"] + main_cols
+                         + [f"{100 * (fit['v0'] / tightest - 1):+.2f}" if tightest else "--", stiff_col,
+                            f"{fit['rms']:.3f}" if fit["rms"] is not None else "--",
+                            f"{radii[0]:.2f} / {radii[1]:.2f}" if radii else "--",
+                            f"{measure.upper()} OUTSIDE THE SCAN" if fit["outside"] else ("; ".join(fit["problems"][:1]) or "ok")],
+                         'yellow' if fit["outside"] or fit["problems"] else None))
+        first_col = {"mesh": "Mesh.Cutoff", "range": "PAO.EnergyShift", "size": "PAO.BasisSize"}[stage]
+        if n_periodic == 3:
+            header = [first_col, "Points", "V0/atom (Ang^3)", "vs tightest (%)", "B0 (GPa)"]
+        elif n_periodic == 2:
+            header = [first_col, "Points", "A0 (Ang^2)", "a0 (Ang)", "vs tightest (%)", "stiffness (N/m)"]
+        else:
+            header = [first_col, "Points", "L0 (Ang)", "vs tightest (%)", "stiffness (nN)"]
+        print_table(header + ["fit rms (meV/atom)", "rc min / max (Bohr)", "Notes"], rows, f_out)
+        if n_periodic == 2:
+            print_dual("2D: A0 is the equilibrium area of the cell, a0 the length of its first periodic vector at A0 "
+                       "(the periodic vectors are scaled together), the stiffness A d2E/dA2 = B0 x cell height -- "
+                       "(C11 + C12)/2 of an isotropic sheet; as in stb-eosAnalysis. 'vs tightest' is the change "
+                       "in area (a0 changes by half of it).", f_out)
+        elif n_periodic == 1:
+            print_dual("Wire: L0 is the equilibrium length, the stiffness L d2E/dL2 = B0 x cross-section, as in "
+                       "stb-eosAnalysis.", f_out)
+
+        if stage == "size":
+            good = [v for v in v0s if v is not None]
+            if len(good) == 2:
+                change = 100 * abs(good[1] / good[0] - 1)
+                passed = change < tolerance
+                verdicts[stage] = (scans[0]["value"] if passed else None, f"{change:.2f} %")
+                print_dual(color_text(
+                    f"VERDICT: {scans[0]['value']} -> {scans[1]['value']} changes V0 by {change:.2f} % "
+                    f"({'<' if passed else '>='} {tolerance:g} %): the cardinality of {scans[0]['value']} is "
+                    + ("enough for this structure." if passed else "NOT enough; use the larger basis (and repeat "
+                       "the range stage with it)."), 'green' if passed else 'yellow'), f_out)
+            else:
+                verdicts[stage] = (None, "incomplete")
+                warn("Size stage: both scans are needed for a verdict.")
+        else:
+            position, how = bs.closing_point(v0s, tolerance)
+            if position is None:
+                verdicts[stage] = (None, "does not close")
+                warn(f"Stage {stage}: no setting has a V0 within {tolerance:g} % of every tighter setting. "
+                     + ("Extend the scan to larger Mesh.Cutoff (--basis-values)." if stage == "mesh" else
+                        "Reducing PAO.EnergyShift further does not fix a basis whose range does not close: "
+                        "optimize the orbital radii (%block PAO.Basis, SIESTA's Util/Optimizer) or go up in "
+                        "cardinality."))
+            else:
+                value = scans[position]["value"]
+                verdicts[stage] = (value, how)
+                print_dual(color_text(
+                    f"VERDICT: {'Mesh.Cutoff' if stage == 'mesh' else 'PAO.EnergyShift'} = {value:g} Ry -- the "
+                    f"{'smallest mesh' if stage == 'mesh' else 'largest shift'} whose {'V0' if n_periodic == 3 else measure} is within {tolerance:g} % of "
+                    + ("every tighter setting of the scan." if how == "two" else "the next setting; it is the last but one of "
+                       "the scan, so the closing was verified against ONE point only -- add a tighter value "
+                       "(--basis-values) to confirm."), 'green' if how == "two" else 'yellow'), f_out)
+                if how == "one":
+                    warnings.append(f"Stage {stage}: closing at {value:g} Ry verified against one point only.")
+        for sc, fit in zip(scans, fits):
+            if fit["radii"] and not (bs.RC_RANGE_BOHR[0] <= fit["radii"][1] <= bs.RC_RANGE_BOHR[1]) and stage == "range":
+                warn(f"{sc['name']}: largest orbital radius {fit['radii'][1]:.2f} Bohr, outside the usual "
+                     f"{bs.RC_RANGE_BOHR[0]:g}-{bs.RC_RANGE_BOHR[1]:g} Bohr ("
+                     + ("orbitals too short: expect a compressed, too stiff solid" if fit["radii"][1] < bs.RC_RANGE_BOHR[0]
+                        else "very long orbitals: costly, and they need a finer mesh") + ").")
+        if any(fit["filter"] for fit in fits):
+            warn(f"Stage {stage}: the logs show the orbital filter (FilterCutoff/FilterTol) at work -- the basis "
+                 "tested is the filtered one, and the fit residuals carry its noise.")
+        noisy = [sc["name"] for sc, fit in zip(scans, fits)
+                 if fit["rms"] is not None and fit["rms"] >= bs.B0_RESIDUAL_MEV]
+        if noisy:
+            print_dual(color_text(
+                f"[NOTE] Fit residual above {bs.B0_RESIDUAL_MEV:g} meV/atom in {', '.join(noisy)}: B0 of those scans "
+                "is not used for anything (V0 is far less sensitive to this noise). A residual that does not go "
+                "down with Mesh.Cutoff has another origin (Ge and Ag kept 0.2-0.5 meV/atom at every mesh).", 'cyan'),
+                f_out)
+        if args.reference_v0 and tightest:
+            off = 100 * (tightest / n_atoms / args.reference_v0 - 1)
+            print_dual(f"Reference          : tightest setting gives V0/atom {tightest / n_atoms:.4f} Ang^3, "
+                       f"{off:+.2f} % from --reference-v0 {args.reference_v0:g}.", f_out)
+            chosen = verdicts[stage][0]
+            if stage == "range" and chosen is not None:
+                loose = next((f["v0"] for s_, f in zip(scans, fits) if s_["value"] == 0.01 and f["v0"]), None)
+                picked = fits[[s_["value"] for s_ in scans].index(chosen)]["v0"]
+                if loose and abs(loose / n_atoms / args.reference_v0 - 1) < abs(picked / n_atoms / args.reference_v0 - 1):
+                    warn("PAO.EnergyShift 0.01 Ry is closer to the reference than the converged value: that is a "
+                         "cancellation of errors (short orbitals compress the solid), not a better basis.")
+
+    print_section("[3] SUMMARY & NEXT STEPS", f_out)
+    names = {"mesh": "Mesh.Cutoff", "range": "PAO.EnergyShift", "size": "PAO.BasisSize"}
+    print_table(["Stage", "Parameter", "Result"], [
+        ([stage, names[stage],
+          ("not run" if stage not in verdicts else
+           (f"{verdicts[stage][0]:g} Ry" if isinstance(verdicts[stage][0], float) else str(verdicts[stage][0]))
+           + (" (one point only)" if verdicts[stage][1] == "one" else "") if verdicts[stage][0] is not None
+           else f"NOT CONVERGED ({verdicts[stage][1]})")],
+         None if stage in verdicts and verdicts[stage][0] is not None else 'yellow') for stage in bs.STAGES], f_out)
+    mesh_v = verdicts.get("mesh", (None,))[0]
+    range_v = verdicts.get("range", (None,))[0]
+    # the pseudopotential source of the stage just run (manifests written before 2.1.0 do not record it)
+    pseudo = next((m.get("pseudo") for m in manifests.values() if m.get("pseudo")), None)
+    pseudo_opt = f" -p {pseudo}" if pseudo else " -p <pseudopotential source>"
+    if "range" not in manifests and mesh_v is not None:
+        print_dual(f"Next: stb-convergence --parameter basis --basis-stage range --mesh-cutoff {mesh_v:g} "
+                   f"-s {first['structure']} -c {first['calc']}{pseudo_opt} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
+    elif "size" not in manifests and range_v is not None:
+        mesh_used = manifests["range"]["sub_scans"][0].get("mesh_cutoff")
+        print_dual(f"Next: stb-convergence --parameter basis --basis-stage size --energyshift {range_v:g}"
+                   + (f" --mesh-cutoff {mesh_used:g}" if mesh_used else "")
+                   + f" -s {first['structure']} -c {first['calc']}{pseudo_opt} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
+    print_dual(color_text(
+        "The verdict holds for this structure. Energies with an isolated atom or molecule (cohesive, adsorption) "
+        "need the counterpoise correction and their own test (the corrected cohesive energy of Si still moved 7 "
+        "meV where the structure had closed); in 2D the in-plane lattice parameter does not test the decay of the "
+        "orbitals into the vacuum. A basis can also close at the wrong value (Ge: V0 +4.6 % with TZP at 0.0005 "
+        "Ry): only an all-electron reference (--reference-v0, Ang^3/atom) shows that.", 'cyan'), f_out)
+    if warnings:
+        print_dual(color_text(f"\n{len(warnings)} warning(s):", 'yellow'), f_out)
+        for number, text in enumerate(warnings, start=1):
+            print_dual(f"  {number}. {text}", f_out)
 
 
 def main():
@@ -397,7 +722,7 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
                "  %(prog)s --dir convergence_runs\n"
-               "  %(prog)s --dir convergence_runs --tolerance 0.005 --save-report --save-gnuplot --view\n"
+               "  %(prog)s --dir convergence_runs --tolerance 0.005 --save-gnuplot --view\n"
                "  %(prog)s --dir convergence_runs --apply calc.fdf\n"
     )
 
@@ -413,13 +738,17 @@ def main():
     parser.add_argument("--volume-tolerance", type=float, default=0.5,
                         help="Relaxed-cell-volume convergence tolerance, as a percent change "
                              "between consecutive swept values (default: 0.5).")
+    parser.add_argument("--reference-v0", type=float, default=None, metavar="ANG3_PER_ATOM",
+                        help="Basis convergence (stb-convergence --parameter basis) only: an all-electron "
+                             "equilibrium volume per atom to compare the converged basis with -- the only way "
+                             "to notice a basis that converges to the wrong value.")
     parser.add_argument("--force-tolerance", type=float, default=0.05,
                         help="Residual-force data-quality flag threshold in eV/Ang (default: "
                              "0.05) -- NOT a convergence criterion, just flags a run whose CG "
                              "relaxation may not have reached a genuine minimum.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write <parameter>_convergence.dat/.gplot into with "
-                             "--save-gnuplot, and the report into with --save-report (default: "
+                             "--save-gnuplot (the report and its references file go to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--apply", type=str, default=None, metavar="CALC_FDF",
                         help="Writes every parameter's converged (recommended) value into this "
@@ -429,7 +758,7 @@ def main():
                         help="--apply with a kgrid sweep only: vacuum-axis detection threshold in "
                              "Angstrom, same meaning as stb-kgrid's --vacuum-gap (default: 10.0).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write, per discovered parameter, curve data + a companion "
                              ".gplot script (2-panel: energy + relaxed volume). Off by default.")
@@ -446,11 +775,11 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("convergenceAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -470,7 +799,6 @@ def main():
     print_dual(f"Volume tolerance  : {args.volume_tolerance} %", f_out)
     print_dual(f"Force tolerance   : {args.force_tolerance} eV/Ang (data-quality flag only)", f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     print_dual(f"Save gnuplot      : {'yes' if args.save_gnuplot else 'no'}", f_out)
     print_dual(f"View (matplotlib) : {'yes' if args.view else 'no'}", f_out)
     if report_path:
@@ -478,6 +806,14 @@ def main():
 
     if not os.path.isdir(args.dir):
         fail(f"Directory '{args.dir}' not found.")
+
+    from stb.core import basis_scan
+    for candidate in (args.dir, os.path.join(args.dir, "basis")):
+        if os.path.isdir(candidate) and basis_scan.read_manifests(candidate):
+            analyze_basis(candidate, args, f_out)
+            if f_out:
+                f_out.close()
+            return
 
     print_section("[1] DISCOVERED PARAMETER SWEEPS", f_out)
     sweeps = discover_parameter_sweeps(args.dir)

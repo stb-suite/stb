@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-density (Density Plotter, item 2.8)
@@ -37,6 +40,16 @@ check_absent() {
     else
         echo -e " ... ${RED}FAIL${NC} (file '$1' should not exist)"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -101,6 +114,7 @@ PYEOF
 # --- 2. Basic 2D slice ---
 echo -e "\n--- Testing a basic 2D slice ---"
 
+rm -f stb_density_report*.txt stb_density_references*.bib
 timeout 60 stb-density -l Sn3O4 --no-intro --output-dir out_basic --save-gnuplot > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "\[0\] RUN METADATA" log_basic.txt
@@ -112,18 +126,19 @@ check_contains "Mode: 2D Map (Slice)" log_basic.txt
 check_contains "Integrated Charge Density:" log_basic.txt
 check_success out_basic/Sn3O4_density.dat
 check_success out_basic/Sn3O4_density.gplot
-check_success out_basic/references.bib
-check_contains "@article{Soler2002," out_basic/references.bib
+check_success stb_density_references.bib
+check_contains "@article{Soler2002," stb_density_references.bib
 check_contains "Charge Density (e/Ang^3)" out_basic/Sn3O4_density.gplot
 check_contains "White -> Yellow -> Red" out_basic/Sn3O4_density.gplot
 echo "Testing: a non-negative quantity gets a cbrange anchored at 0"
 check_contains "set cbrange \[0:" out_basic/Sn3O4_density.gplot
 
-echo "Testing: a plain run (no --save-gnuplot) writes only the .dat file + references.bib"
+echo "Testing: a plain run (no --save-gnuplot) writes only the .dat file + stb_density_references.bib"
+rm -f stb_density_report*.txt stb_density_references*.bib
 timeout 60 stb-density -l Sn3O4 --no-intro --output-dir out_plain > log_plain.txt 2>&1
 check_exit_code $? 0
 check_success out_plain/Sn3O4_density.dat
-check_success out_plain/references.bib
+check_success stb_density_references.bib
 check_absent out_plain/Sn3O4_density.gplot
 
 
@@ -372,7 +387,7 @@ check_contains "cube" log_help.txt
 check_contains "vmin" log_help.txt
 check_contains "vmax" log_help.txt
 check_contains "contour" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 
@@ -381,14 +396,14 @@ check_contains "\-\-view" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.8) ---"
 
 echo "Testing: navigate 2.8 -> label Sn3O4 -> mode 1 (2D) -> axis 2 -> center -> no contour -> no spin-only -> no rho2 -> no manual range -> default output dir -> no save-report/gnuplot/view -> quit"
-printf '2.8\nSn3O4\n1\n2\n\nn\nn\n\nn\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+printf '2.8\nSn3O4\n1\n2\n\nn\nn\n\nn\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Mode: 2D Map (Slice)" log_menu.txt
 check_success Sn3O4_density.dat
 
 echo "Testing: navigate 2.8 -> profile mode (3) -> axis 2 -> no spin-only -> no rho2 -> no manual range n/a -> default output dir -> no save-report/gnuplot/view -> quit"
 rm -f Sn3O4_density.dat
-printf '2.8\nSn3O4\n3\n2\nn\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_profile.txt 2>&1
+printf '2.8\nSn3O4\n3\n2\nn\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_profile.txt 2>&1
 check_exit_code $? 0
 check_contains "Mode: Planar-Averaged Profile" log_menu_profile.txt
 

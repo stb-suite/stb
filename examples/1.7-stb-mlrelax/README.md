@@ -150,10 +150,10 @@ stb-suite
   Every check that ran is listed explicitly -- not just a summary line --
   so it's always clear exactly what was verified, in both the console
   output and the report file.
-- **`references.bib`** — always written, no flag: SIESTA (the output is a
+- **`stb_mlrelax_references.bib`** — always written, no flag: SIESTA (the output is a
   `.fdf`), the MACE architecture paper, and (unless `--custom-model`) the
   MACE-MP-0 foundation-model paper. Merges with an existing
-  `references.bib` in the same folder instead of overwriting it.
+  `stb_mlrelax_references.bib` in the same folder instead of overwriting it.
 - **A detailed before/after comparison table** (`[5]`, `Quantity | Before |
   After | Change`) — energy (total and per-atom), max force, full cell
   parameters + volume + density (if `--relax-cell`), mean/RMS/max atomic
@@ -170,8 +170,8 @@ stb-suite
 
 ## Optional (off by default)
 
-- `--save-report` — also persist the full numbered report to
-  `stb_mlrelax_report.txt`.
+- **Report** — always saved to `stb_mlrelax_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - `--save-data` — also dump the raw per-step convergence trace to
   `<stem>_relax_convergence.dat`.
 - `--view` — open an interactive ASE 3D viewer with **both** the structure
@@ -265,7 +265,7 @@ entirely with your own fine-tuned model.
 | `output/bad-structure/`      | `stb-mlrelax -f si_too_close.fdf`                               | pre-relax `[WARNING]`, clean post-relax check     |
 | `output/model-comparison/`   | `stb-mlrelax -f si_defect.fdf --model {small,medium,large}`     | the speed/accuracy table above, measured live     |
 | `output/optimizer-comparison/` | `stb-mlrelax -f si_defect.fdf --optimizer {FIRE,BFGS,LBFGS}`  | the FIRE/BFGS/LBFGS table above, measured live    |
-| `output/full-report/`        | `stb-mlrelax -f si_defect.fdf --save-report --save-data`        | full report, `references.bib`, convergence files  |
+| `output/full-report/`        | `stb-mlrelax -f si_defect.fdf --save-data`        | full report, `stb_mlrelax_references.bib`, convergence files  |
 
 ### `bad-structure/` — the structure check catching a real problem
 
@@ -303,7 +303,7 @@ stb-mlrelax -f <structure.fdf> [--relax-cell] [--vacuum-gap <Ang>]
             [--model small|medium|large | --custom-model <path> --custom-model-card <json>]
             [--fmax <eV/Ang>] [--max-steps <N>] [--optimizer FIRE|BFGS|LBFGS]
             [--device cpu|cuda] [-o/--output <file>]
-            [--save-report] [--save-data] [--view]
+            [--save-data] [--view]
 ```
 
 - `-f/--file` — required, the input structure (`.fdf`).
@@ -316,9 +316,10 @@ stb-mlrelax -f <structure.fdf> [--relax-cell] [--vacuum-gap <Ang>]
   `stb-mlffAnalysis` writes next to it).
 - `--fmax`/`--max-steps`/`--optimizer`/`--device` — relaxation controls.
 - `-o/--output` — output `.fdf` name (default `relaxed.fdf`).
-- `--save-report`/`--save-data`/`--view` — all optional, off by default.
+- **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
-`references.bib` is always written — there's no flag for it. Structure
+`stb_mlrelax_references.bib` is always written — there's no flag for it. Structure
 validation (before and after relaxation) always runs too — there's no flag
 for it either.
 

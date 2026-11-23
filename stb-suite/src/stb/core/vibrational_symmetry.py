@@ -70,3 +70,15 @@ def reduction_multiplicity(chi_target, chi_i, n_elem):
     IR (chi_target = chi_v itself, the vector representation).
     """
     return np.sum(chi_target * np.conj(chi_i)) / n_elem
+
+
+def is_real_irreducible(chi, rotations):
+    """Whether a band group's character is ONE irrep over the reals: <chi|chi> = 1 with Frobenius-Schur indicator 1,
+    or a complex-conjugate pair (E of C3: <chi|chi> = 2, indicator 0). Only then is a rotational invariant (Raman
+    activity, |dmu/dQ|^2) the same for every partner (Schur); two different irreps that share a frequency fail this."""
+    chi = np.asarray(chi)
+    rotations = np.asarray(rotations)
+    squares = [int(np.flatnonzero((rotations == r @ r).all(axis=(1, 2)))[0]) for r in rotations]
+    norm = float(np.sum(np.abs(chi) ** 2).real) / len(chi)
+    indicator = float(np.sum(chi[squares]).real) / len(chi)
+    return (abs(norm - 1) < 0.1 and abs(indicator - 1) < 0.1) or (abs(norm - 2) < 0.1 and abs(indicator) < 0.1)

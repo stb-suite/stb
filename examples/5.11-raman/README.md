@@ -1,5 +1,7 @@
 # 5.11 — Workflow: Raman Spectrum (`stb-raman` / `stb-ramanModes` / `stb-ramanAnalysis`)
 
+> **Note.** The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+
 The non-resonant, first-order Raman spectrum of a crystal or molecule, entirely from SIESTA, in three
 stages: **Stage 1** (`stb-raman`, code `5.11.1`) displaces atoms to get the phonons; **Stage 2**
 (`stb-ramanModes`, `5.11.2`) finds the Γ-point modes, classifies them by symmetry, and displaces the cell
@@ -129,8 +131,8 @@ cross sections.
 | Stage | Command | Reads | Writes | Then |
 |---|---|---|---|---|
 | 1 | `stb-raman` | `structure.fdf`, `calc.fdf` | `raman_study/phonon_disp/disp-*/`, `perfect_supercell/` | SIESTA in each (forces) |
-| 2 | `stb-ramanModes` | the finished `disp-*` runs, a `calc.fdf` for the optical runs | `raman_study/optical_disp/mode_NN_{plus,minus}_<dir>/`, `raman_stage2.txt` | SIESTA in each (ε₂) |
-| 3 | `stb-ramanAnalysis` | the finished optical runs, `raman_stage2.txt` | the report, `plot/raman_spectrum.{dat,gplot}` | — |
+| 2 | `stb-ramanModes` | the finished `disp-*` runs, a `calc.fdf` for the optical runs | `raman_study/optical_disp/mode_NN_{plus,minus}_<dir>/`, `raman_study/raman_modes.json` | SIESTA in each (ε₂) |
+| 3 | `stb-ramanAnalysis` | the finished optical runs, `raman_modes.json` | the report, `plot/raman_spectrum.{dat,gplot}` | — |
 
 ## 3. Libraries and external dependencies used
 
@@ -205,7 +207,7 @@ For silicon: 3 modes × 12 folders = 36 single points become 12 with `--use-symm
 | `[1] READING RUNS` | per mode: R (diagonal, and off-diagonal with the full tensor), activity, ρ; SCF and missing-folder warnings; degenerate partners reuse their representative (`[derived]`) |
 | `[2] RAMAN-ACTIVE MODES SUMMARY` | one row per mode; whether the activity is exact (full tensor) or approximate (diagonal only) |
 | `[3] SPECTRUM` | Lorentzian sum (`--linewidth`, default 10 cm⁻¹), optional Stokes factor n+1 (`--temperature`), peaks; `--experimental FILE` overlays a measured spectrum and matches peaks |
-| `[4] SUMMARY & FILES` | what was written (`--save-gnuplot`: `plot/raman_spectrum.dat` + `.gplot`; `--save-report`) |
+| `[4] SUMMARY & FILES` | what was written (`--save-gnuplot`: `plot/raman_spectrum.dat` + `.gplot`; the report) |
 
 ### 6.2 The diagonal-only warning
 

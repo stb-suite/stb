@@ -6,13 +6,17 @@ core/). stackingfault_bsse.py was later removed (BSSE correction doesn't
 apply to a same-atom-count, same-basis lateral-shift comparison like a
 gamma-surface scan -- there's no genuinely different-basis-size fragment
 comparison to correct there, unlike an adsorption/interaction energy);
-adsorb_bsse.py remains the sole consumer. The underlying issue this module
+adsorb_bsse.py remains a consumer; species_block_overrides (per-species blocks of a
+template re-keyed to one folder's species, ghosts included) is shared by stb-cohesive,
+stb-adsorbBsse and stb-chargediffPrep. The underlying issue this module
 corrects for, where it IS applicable: SIESTA's localized (PAO) basis set
 lets two weakly-bound fragments artificially lower each other's energy by
 borrowing basis functions across the gap -- a plane-wave code wouldn't
 have this problem at all, but a localized-basis code always does for a
 genuine two-different-fragment interaction/binding energy.
 """
+
+import re
 
 from stb.core import structure_io
 
@@ -85,3 +89,76 @@ def strip_config_extra_include(calc_text, config_extra_file="config_extra.fdf"):
     if calc_text.startswith(prefix):
         return calc_text[len(prefix):]
     return calc_text
+
+
+# Blocks keyed by species label (first column, or a header line per species for
+# PAO.Basis), compared on SIESTA's normalized name (case, '.', '_', '-' ignored).
+SPECIES_BLOCKS = ("paobasissizes", "paopolarizationscheme", "paobasis")
+_BLOCK_RE = re.compile(r"^[ \t]*%block[ \t]+(\S+)[ \t]*\n(.*?)^[ \t]*%endblock[^\n]*", re.I | re.S | re.M)
+
+
+def _norm(label):
+    return re.sub(r"[._\-]", "", label.lower())
+
+
+def _block_entries(name, body):
+    """{label: [lines]} of a per-species block, in order. PAO.Basis has one header line per
+    species ('Li 2 0.0') followed by its shell lines ('n=2 0 2 P 1', radii, factors), whose
+    first token is 'n=..' or a number; the other blocks have one 'label value' line each."""
+    entries = {}
+    current = None
+    for raw in body.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        first = line.split()[0]
+        if _norm(name) == "paobasis":
+            is_shell = first.lower().startswith("n=") or re.fullmatch(r"[-+0-9.eEdD]+", first)
+            if is_shell and current is not None:
+                entries[current].append(line)
+                continue
+        current = first
+        entries.setdefault(current, []).append(line)
+    return entries
+
+
+def species_block_overrides(template_text, labels):
+    """config_extra.fdf text that re-keys the template's per-species blocks (PAO.Basis,
+    PAO.PolarizationScheme, PAO.BasisSizes) to the species `labels` of ONE folder, or ''
+    when the template's blocks already fit it.
+
+    The template is copied verbatim into folders whose species differ (an isolated F atom,
+    an F atom with Li ghosts): an entry for an absent species stops SIESTA ('WRONG species
+    symbol in PAO.PolarizationScheme: Li'), and a ghost label ('Li_ghost') with no entry of
+    its own gets the default basis -- a BSSE ghost then carries a basis other than the
+    real atom's, or its polarization orbital fails to generate. Each block is rewritten with
+    the entries of the species present, a 'X_ghost' getting the entry of 'X'; config_extra.fdf
+    is read first, and SIESTA keeps the first occurrence of a block."""
+    labels = list(dict.fromkeys(labels))
+    out = []
+    for m in _BLOCK_RE.finditer(template_text):
+        name, body = m.group(1), m.group(2)
+        if _norm(name) not in SPECIES_BLOCKS or "<" in name:
+            continue
+        entries = _block_entries(name, body)
+        new_lines = []
+        for label in labels:
+            source = label if label in entries else (
+                label[:-len("_ghost")] if label.endswith("_ghost") and label[:-len("_ghost")] in entries else None)
+            if source is None:
+                continue
+            lines = list(entries[source])
+            head = lines[0].split(None, 1)
+            lines[0] = label + (" " + head[1] if len(head) > 1 else "")
+            new_lines.extend(lines)
+        fits = set(entries) <= set(labels) and not any(
+            lb.endswith("_ghost") and lb not in entries and lb[:-len("_ghost")] in entries for lb in labels)
+        if fits:
+            continue                      # the template's block already fits this folder exactly
+        out.append(f"%block {name}\n" + "".join(f"  {ln.strip()}\n" for ln in new_lines)
+                   + f"%endblock {name}\n")
+    if not out:
+        return ""
+    return ("# Per-species blocks of the template, re-keyed to this folder's species (absent species\n"
+            "# dropped, each X_ghost given the entry of X). Read before the template's own blocks.\n"
+            + "".join(out))

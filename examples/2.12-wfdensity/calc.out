@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/test/2-analysis/12-wfdensity/test
+* Directory : /path/to/stb/test/2-analysis/12-wfdensity/test
 * Running on 4 nodes in parallel.
 >> Start of run:  28-JUL-2026  12:14:45
 

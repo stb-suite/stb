@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -14,6 +14,7 @@
 # (numpy's own RankWarning on a poorly-conditioned polyfit is a real, relevant
 # signal for this tool's own core fit -- now captured there instead of leaking).
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -26,7 +27,7 @@ from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_sect
                           print_table, capture_library_noise)
 from stb.core.dftu_data import REFERENCE_U, ldau_proj_block, load_manifest
 
-REPORT_FILE = "hubbardu_stage3.txt"
+REPORT_FILE = "stb_hubbarduAnalysis_report.txt"
 
 _OCC_RE = re.compile(r'Occupations:\s*([0-9eE+.\-\s]+)')
 
@@ -220,7 +221,7 @@ visually instead of trusting R^2 alone.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s --dir hubbardu_runs --file calc.out\n"
-               "  %(prog)s --dir hubbardu_runs --save-gnuplot --view --save-report\n"
+               "  %(prog)s --dir hubbardu_runs --save-gnuplot --view\n"
     )
 
     parser.add_argument("--dir", type=str, default="hubbardu_runs",
@@ -244,7 +245,7 @@ visually instead of trusting R^2 alone.""",
                         help="Show an interactive matplotlib preview of the response curve "
                              "(both branches + fitted lines) before finishing. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbarduAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -271,10 +272,10 @@ visually instead of trusting R^2 alone.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("hubbarduAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

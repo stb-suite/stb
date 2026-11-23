@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import io
@@ -306,7 +307,7 @@ def main():
                              "(atomic units). Densities are always e/Bohr^3.")
     parser.add_argument("--dry-run", action="store_true", help="Report only; write no cube.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (next to the input). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-cube {VERSION}")
     args = parser.parse_args()
@@ -316,7 +317,7 @@ def main():
             "Siesta ToolBox Suite - Grid Converter",
             "SIESTA real-space grids to Gaussian cube",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     gtype = args.type
@@ -343,7 +344,7 @@ def main():
     default_output = (f"{label}_{gtype}.cube" if args.spin == "total" else f"{label}_{gtype}_{args.spin}.cube")
     output_file = args.output or default_output
 
-    report_path = os.path.join(folder, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("cube")
     buf = io.StringIO() if report_path else None
     sec = Sections(buf)
 

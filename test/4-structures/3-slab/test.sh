@@ -147,7 +147,7 @@ check_success slab.fdf
 
 # --- 8. Numbered report, before/after symmetry table, --save-report ---
 echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
-rm -f stb_slab_report.txt slab.fdf
+rm -f stb_slab_report*.txt stb_slab_references*.bib slab.fdf
 stb-slab -f si_bulk.fdf --hkl 1 1 1 --save-report --no-intro > log_report.txt 2>&1
 check_success stb_slab_report.txt
 check_contains "===== STB-SLAB REPORT =====" stb_slab_report.txt
@@ -155,21 +155,21 @@ check_contains "\[5\] STRUCTURE VALIDATION, SYMMETRY & WRITING OUTPUT FILE(S)" s
 check_contains "Property.*Bulk (before).*Slab (after)" stb_slab_report.txt
 check_contains "Layer Group.*N/A (not 2D-periodic)" stb_slab_report.txt
 check_contains "Report                    : stb_slab_report.txt" log_report.txt
-rm -f stb_slab_report.txt slab.fdf
+rm -f stb_slab_report*.txt stb_slab_references*.bib slab.fdf
 
 
 # --- 9. --ml-relax (needs the optional 'ml' extra) ---
 echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
 
 if python3 -c "import mace" 2>/dev/null; then
-    rm -f slab.fdf stb_slab_report.txt
+    rm -f slab.fdf stb_slab_report*.txt stb_slab_references*.bib
     stb-slab -f si_bulk.fdf --hkl 1 1 1 --ml-relax --ml-relax-cell --save-report --no-intro \
         > log_ml_relax.txt 2>&1
     check_exit_code $? 0
     check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_slab_report.txt
     check_success slab.fdf
     check_contains "ML pre-relaxed with MACE-MP-0" slab.fdf
-    rm -f slab.fdf stb_slab_report.txt
+    rm -f slab.fdf stb_slab_report*.txt stb_slab_references*.bib
 
     echo "Testing: --ml-relax-cell without --ml-relax is rejected"
     stb-slab -f structure.fdf --hkl 1 0 0 --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1
@@ -227,7 +227,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (menu 4.3) ---"
 echo "Testing: navigate 4.3 -> invalid file then valid -> hkl '1 0 0' -> defaults -> mode 1 ->"
 echo "         no passivate -> default output -> no ml-relax -> no save-report -> no view -> quit"
 rm -f slab.fdf
-printf '4.3\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\nn\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.3\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\n\nn\nn\nn\n1\nn\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Slab written to" log_menu.txt
 check_success slab.fdf

@@ -111,9 +111,8 @@ texture occurs.
   `REFERENCES`, `SUMMARY & FILES`) — `SPIN TEXTURE ANALYSIS` reports
   per-component mean/min/max, the `|S| <= 1` normalization check
   (section 1.2), and the single most spin-polarized state found.
-- **`--save-report`**, **`--save-gnuplot`** (writes
-  `spintexture_S{x,y,z}.dat`/`.gplot`) and **`--view`** (matplotlib
-  preview) are all off by default.
+- **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--label` can be combined with `--hsx-file`/`--geometry-file`.**
 - **`--shift fermi/vbm/cbm`'s Fermi-energy source** follows the same
   priority-ordered hierarchy as `stb-effmass` (`--fermi` > `--bands-file`
@@ -147,7 +146,7 @@ Or try the tool directly:
 
 ```bash
 stb-spintexture --label IsolatedO --shift fermi --fermi -12.0 \
-    --save-report --save-gnuplot --view
+    --save-gnuplot --view
 ```
 
 ## 7. What's next

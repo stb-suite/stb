@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -20,7 +21,6 @@ from stb.core.cli import color_text, show_intro, run_with_spinner, print_dual, p
 from stb.core.deps import require_pyxtal
 
 REPORT_FILE = "stb_xrd_report.txt"
-BIB_FILE = "references.bib"
 
 
 def plot_matplotlib(xrd, structure, wavelength_label, two_theta_range,
@@ -82,7 +82,7 @@ already needed by stb-crystalcast covers this too.""",
                "  %(prog)s --file relaxed.STRUCT_OUT --format struct_out \\\n"
                "      --two-theta-range 10 80 --view\n"
                "  %(prog)s --file structure.fdf --format fdf \\\n"
-               "      --compare-to experimental.dat --view --save-report --save-gnuplot\n"
+               "      --compare-to experimental.dat --view --save-gnuplot\n"
     )
 
     parser.add_argument("--file", required=True, help="Path to structure file.")
@@ -120,11 +120,11 @@ already needed by stb-crystalcast covers this too.""",
                              "experimental file -- compare it exactly as read. Off by default "
                              "(auto-detection normally handles this correctly).")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write references.bib into (and the report/data+gnuplot "
-                             "files, with --save-report/--save-gnuplot) (default: current "
+                        help="Directory to write into (and the data+gnuplot "
+                             "files, with --save-gnuplot; the report and its references file go to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write xrd_pattern.dat (all peaks, pyxtal's own format) and "
                              "xrd_pattern.gplot (a stick-pattern plot script) together. Off by "
@@ -149,7 +149,7 @@ already needed by stb-crystalcast covers this too.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -223,7 +223,7 @@ already needed by stb-crystalcast covers this too.""",
         xrd_core.write_xrd_gnuplot(dat_path, gplot_path, structure.composition.reduced_formula,
                                     wavelength_label)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("xrd")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-XRD REPORT =====", 'magenta'), f_out)
@@ -298,14 +298,14 @@ already needed by stb-crystalcast covers this too.""",
 
     print_section("[5] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.PYXTAL]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if dat_path:
         print_dual(f"Data           : {dat_path}", f_out)
         print_dual(f"Gnuplot script : {gplot_path}", f_out)

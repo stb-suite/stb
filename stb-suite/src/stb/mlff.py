@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import glob
@@ -21,7 +22,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io
 from stb.core.adsorption_sites import SINGLE_POINT_BLOCK, CONFIG_EXTRA_FILE
-from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, get_required_pseudos, resolve_pseudo_source
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.fdf_directives import parse_directives, parse_kgrid
 from stb.core.kspace import detect_vacuum_axes, dimensionality_label
@@ -222,6 +223,7 @@ def write_config_folder(output_root, index, ref_fdf, ref_basename, positions,
 
     for pseudo_path in pseudos_to_copy:
         shutil.copy(pseudo_path, os.path.join(folder, os.path.basename(pseudo_path)))
+    note_pseudo_folder(folder)
 
     return folder
 
@@ -657,7 +659,7 @@ def main():
                              "scales the vacuum.")
     parser.add_argument("--pseudo-dir", default=".",
                         help="Pseudopotentials source: a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder with <element>.psf/.psml "
+                             f"({BANK_HELP}) or a folder with <element>.psf/.psml "
                              "(default: current directory).")
     parser.add_argument("--from-aimd", default=None, metavar="LABEL",
                         help="Also sample starting geometries from an existing AIMD "
@@ -691,7 +693,7 @@ def main():
                              "systems (layers, molecular crystals, physisorption). Default: whatever the "
                              "template says (off if nothing).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <run folder>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--ml-screen", action="store_true",
                         help="Before any SIESTA run, evaluate every config with a MACE-MP foundation "
                              "model (needs the 'ml' extra): its max force and energy above the "
@@ -728,13 +730,13 @@ def main():
             "Siesta ToolBox Suite - Custom ML Force Field (Prep)",
             "Generate SIESTA training configurations for MACE fine-tuning",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- PREP:", 'bold'))
     print("-" * 60)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlff")
     if report_path:
         os.makedirs(args.output_dir, exist_ok=True)   # the report lives in the run folder, like Stages 2-4'
     f_out = open(report_path, "w") if report_path else None
@@ -812,7 +814,7 @@ def main():
     for path in ([calc_template] if calc_template else []) + [ref_file]:
         with open(path) as f:
             texts.append(f.read())
-    pseudo_label = (f"bundled bank '{args.pseudo_dir}'" if args.pseudo_dir in BANKS else f"'{args.pseudo_dir}'")
+    pseudo_label = (f"bundled bank '{args.pseudo_dir}'" if is_bank(args.pseudo_dir) else f"'{args.pseudo_dir}'")
     plan_warnings = report_settings(texts, ase_atoms, vacuum_axes, pseudo_label, pseudos_to_copy, f_out)
     system_label = parse_directives(*texts).get("systemlabel", "siesta")
     tmpl_d3 = parse_directives(*texts).get("dftd3")
@@ -832,6 +834,9 @@ def main():
         print_dual(f"{'Dispersion':<21}: none (no DFT-D3; --d3 adds it -- for layered or vdW-bonded systems)",
                    f_out)
     d3_block = mlff_workflow.DFTD3_BLOCK if args.d3 else ""
+    if args.d3:
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DFT_D3)
 
     print_section("[3] SAMPLING PLAN", f_out)
     n_aimd = args.n_samples if args.from_aimd else 0
@@ -999,8 +1004,8 @@ def main():
     if calc_template:
         state["reference"]["calc"] = mlff_workflow.rel(calc_template, wf_base)
     # A folder is stored relative to the workflow file; a bundled bank name
-    # (dojo, virtual_vault) as given.
-    state["reference"]["pseudo_dir"] = (args.pseudo_dir if args.pseudo_dir in BANKS
+    # (dojo, dojo-fr-pbesol, virtual_vault, ...) as given.
+    state["reference"]["pseudo_dir"] = (args.pseudo_dir if is_bank(args.pseudo_dir)
                                         else mlff_workflow.rel(pseudo_path, wf_base))
     state["reference"]["dftd3"] = d3
     mlff_workflow.add_configs(state, entries, wf_base)

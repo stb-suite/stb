@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/optical_ex/si/convergence/mesh24/dir_xx
+* Directory : /path/to/run/optical_ex/si/convergence/mesh24/dir_xx
 * Running on 2 nodes in parallel.
 >> Start of run:  16-OCT-2026  10:40:57
 

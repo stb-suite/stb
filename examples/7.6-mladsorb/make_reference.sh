@@ -30,7 +30,7 @@ export MPLBACKEND=Agg
 
 r2=(--custom-model "$R2/mlff_model_compiled.model" --custom-model-card "$R2/mlff_model_card.json")
 r3=(--custom-model "$R3/mlff_model_compiled.model" --custom-model-card "$R3/mlff_model_card.json")
-common=(--no-intro --device "$DEVICE" --adsorbate Si --bulk-reference "$HERE/si_bulk.fdf" --save-data --save-report)
+common=(--no-intro --device "$DEVICE" --adsorbate Si --bulk-reference "$HERE/si_bulk.fdf" --save-data)
 quick=(--skip-foundation-comparison --no-committee)
 committee=(--no-committee)
 if [ -n "$MLFF_RUN" ] && [ -f "$MLFF_RUN/mlff_workflow.json" ]; then
@@ -44,7 +44,9 @@ run() {   # run <case> <slab> <args...>
     fi
     echo "  [run]  $case: stb-mladsorb --slab $slab $*"
     local t0=$SECONDS
-    (cd "$RUN" && stb-mladsorb --slab "$HERE/$slab" "${common[@]}" -o "$case" "$@" > "$case.log" 2>&1) || {
+    # Run inside the case folder: the report goes to the current folder.
+    mkdir -p "$RUN/$case"; rm -f "$RUN/$case"/stb_mladsorb_report*.txt
+    (cd "$RUN/$case" && stb-mladsorb --slab "$HERE/$slab" "${common[@]}" -o . "$@" > "../$case.log" 2>&1) || {
         echo "  [FAIL] $case -- see $RUN/$case.log"; exit 1; }
     echo "         $((SECONDS - t0)) s"
 }

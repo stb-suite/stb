@@ -54,7 +54,7 @@ from __future__ import annotations
 import numpy as np
 
 from stb.core.vibrational_symmetry import (
-    run_gamma_irreps, acoustic_chi_vector, reduction_multiplicity,
+    run_gamma_irreps, acoustic_chi_vector, reduction_multiplicity, is_real_irreducible,
 )
 
 RAMAN_ACTIVE_TOL = 1e-3
@@ -69,8 +69,9 @@ class ModeSymmetry:
     mode).
     """
 
-    def __init__(self, band_indices, label, is_raman_active):
+    def __init__(self, band_indices, label, is_raman_active, is_real_irrep=True):
         self.band_indices = list(band_indices)
+        self.is_real_irrep = is_real_irrep   # False: an accidental degeneracy of different irreps
         self.label = label
         self.is_raman_active = is_raman_active
 
@@ -146,9 +147,11 @@ def _classify_from_irreps(irreps):
         n_i = reduction_multiplicity(chi_quad, characters[i], n_elem)
         is_active = bool(abs(n_i.real) > RAMAN_ACTIVE_TOL)
         label = labels[i] if labels else None
-        mode_symmetries.append(ModeSymmetry(bset, label, is_active))
+        mode_symmetries.append(ModeSymmetry(bset, label, is_active,
+                                            is_real_irreducible(characters[i], rotations)))
 
     return mode_symmetries
+
 
 
 # --- Component-level tensor-form reduction (stb-ramanModes --reduce-components) ---

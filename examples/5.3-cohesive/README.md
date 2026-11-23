@@ -198,19 +198,34 @@ default `cohesive_runs/`, matching `strain_runs/`/`elastic_runs/`):
 - `atoms_bsse_check/` (one extra cutoff) or `atoms_bsse_check_<cutoff>/`
   (2+ cutoffs, a scan) — only with `--bsse-convergence-check`.
 
-### 2.2 No `calc.fdf` prerequisite — and why
+### 2.2 The `calc.fdf`: built-in, or your own (`-c/--calc`)
 
-Unlike `stb-strain`/`stb-elasticInputs`, `stb-cohesive` takes **no**
-`-c/--calc-fdf` input at all — it always builds its own single-point SCF
-`calc.fdf` internally (DZP basis, GGA-PBE, `MeshCutoff 320 Ry`,
-`SCF.DM.Tolerance 1e-5 eV`), identically across the full structure and every
-isolated-atom-type calculation. This is deliberate: a cohesive-energy
-comparison is only meaningful if every energy in the sum comes from
-*exactly* the same basis/functional/mesh — safer to guarantee that by
-generating every `calc.fdf` from one template than to trust a hand-edited
-file to stay in sync everywhere. `-k/--k-density` (default `0.2` 1/Ang) and
-`--spin`/`--dispersion` are the only physics knobs Stage 1 exposes for the
-full structure; everything else about the SCF setup is fixed on purpose.
+A cohesive-energy comparison is only meaningful if every energy in the sum
+comes from *exactly* the same basis, functional and mesh. `stb-cohesive`
+guarantees that by generating every folder's `calc.fdf` from **one**
+template:
+
+- **Without `-c`** it uses a built-in single-point template (DZP, GGA-PBE,
+  `PAO.EnergyShift 0.02 Ry`, `Mesh.Cutoff 320 Ry`, `SCF.DM.Tolerance 1e-5 eV`).
+  `-k/--k-density` (default `0.2` 1/Ang), `--spin` and `--dispersion` are then
+  the only knobs for the full structure. The numbers of this README were made
+  this way.
+- **With `-c mycalc.fdf`** (since 2.1.0) the template is yours: the basis,
+  `PAO.EnergyShift`, `Mesh.Cutoff`, functional and SCF settings of your study.
+  It must `%include structure.fdf`. It is copied **untouched** into the full
+  structure and into every atomic reference; what the workflow has to impose
+  goes into a `config_extra.fdf` that is `%include`d on top of it (SIESTA keeps
+  the first occurrence of a label):
+
+  | Folder | `config_extra.fdf` forces |
+  |---|---|
+  | `structure/` | `--spin`, `--dispersion`, and the k-grid only when the template has none or `-k` is given |
+  | `atoms/`, `atoms_bsse*/` | `Spin polarized`, a Gamma-only k-grid, a single point (`MD.Steps 0`, fixed cell), `--dispersion` |
+
+  The report prints the template's level of theory (basis size, energy shift,
+  mesh cutoff, functional), so the run records what it used. The basis range
+  matters a great deal here: for GaAs the uncorrected cohesive energy is
+  `-4.69` eV/atom at `PAO.EnergyShift 0.02 Ry` and `-3.87` at `0.01 Ry`.
 
 ### 2.3 The vacuum-buffer guarantee, live
 
@@ -386,10 +401,17 @@ backend like the `MPLBACKEND=Agg` this example's own script uses).
 ### 3.7 Running it both ways
 
 Both CLI and `stb-suite` → `5.3.2` (which now also prompts for
-`--save-report`/`--view`, not just the required filename/directory) produce
+`--view`, not just the required filename/directory) produce
 the identical report for identical answers.
 
 ## 4. Worked example: a real GaAs calculation, end-to-end
+
+> **Energy convention of the numbers in this section.** They were obtained with 2.0.0, which used
+> SIESTA's `FreeEng` (E_KS minus TS of the electronic smearing). Since 2.1.0 `stb-cohesiveAnalysis`
+> uses the Kohn-Sham energy E_KS by default, because the isolated Ga atom (p1, degenerate orbitals,
+> `ElectronicTemperature 300 K`) carries `-TS = -49.4 meV` that is not physical; As has none. With
+> the default the GaAs values below come out 25 meV/atom more negative; `--energy free` reproduces
+> them exactly. Section `[2b]` of the report lists E_KS, FreeEng and -TS of every run.
 
 This is not illustrative data — it's the exact real investigation that
 motivated sections 1.5/1.6/2.4 and the multi-cutoff scan feature itself,
@@ -421,13 +443,17 @@ Reading this the way sections 1.2/1.5 set up:
 
 That large jump is what triggered the actual investigation: was it real
 physics (the cutoff genuinely too small), or the vacuum-box artifact section
-1.6 warns about? The evidence pointed at the box: with the *old* fixed 20
+1.6 warns about? The box was the first suspect: with the *old* fixed 20
 Ang cube, the 6.0 Ang-cutoff cluster's outermost ghost atom sat only `4.0`
-Ang from the box edge (`half_box - cutoff = 10 - 6`) — and the real PAO
-orbital cutoff radii read straight out of `calc.out` (`grep "rc ="`) showed
-Ga's own basis reaching as far as **7.12 Ang**, comfortably farther than
-that 4.0 Ang buffer. A real risk of periodic self-interaction, not a
-theoretical one.
+Ang from the box edge (`half_box - cutoff = 10 - 6`), i.e. `8.0` Ang from
+its own periodic image. The PAO cutoff radii in `calc.out` (`grep "rc ="`)
+show Ga's longest orbital at `rc = 7.12` — in **Bohr**, the unit SIESTA
+prints `rc` in (the `PAO.Basis` block of the same `calc.out` confirms it),
+which is **3.77 Ang**. Two such orbitals on facing images reach `2 x 3.77 =
+7.54` Ang, just short of the 8.0 Ang between them: by the numbers the old
+box was close to the limit but not over it. (An earlier version of this
+text read the 7.12 as Angstrom and concluded that the images overlapped;
+they did not.) The second pass confirms it.
 
 **Second pass**, after fixing the vacuum-buffer bug (section 1.6: box side
 `= 2*cutoff + vacuum`, guaranteeing a constant `10.0 Ang` buffer at *any*
@@ -440,9 +466,8 @@ cutoff) and re-running for real:
 
 **The numbers barely moved at all** — about 1-3 meV, an order of magnitude
 smaller than typical real-space-grid ("eggbox") noise, let alone a
-correction of order 1 eV. If the old fixed box really had been contaminating
-the result, tripling its buffer (4.0 → 10.0 Ang) should have changed the
-answer visibly. It didn't.
+correction of order 1 eV. This is what the orbital radii above predict: the
+old box did not let the images overlap, so widening it changes nothing.
 
 **Conclusion**: the large 4.0→6.0 Ang shift is **real physics, not a box
 -size artifact** — 4.0 Ang (4 ghost neighbors, the first coordination shell
@@ -452,10 +477,26 @@ a real risk that, for a different material or a larger requested cutoff,
 absolutely could bite — sections 1.6/2.3), but it wasn't *this* material's
 actual problem. This is exactly what directly motivated building the
 multi-cutoff scan (section 1.5/2.4): a single before/after pair can't tell
-you *whether* a shift is converging, only that it changed. **An honest note
-for anyone reproducing this**: a real multi-point scan
-(`--bsse-convergence-increment 4 8 12`, say) has not yet been run on this
-real structure — a genuine next step, not a result already in hand.
+you *whether* a shift is converging, only that it changed.
+
+**6.0 Ang is not converged either.** The scan was later continued with the
+same settings (2.0.0, the default `calc.fdf` of `stb-cohesive`: DZP,
+`PAO.EnergyShift 0.02 Ry`, `Mesh.Cutoff 320 Ry`), which reproduces the three
+values above exactly:
+
+| Ghost cutoff (Ang) | E_coh, BSSE-corrected (eV/atom) | Step (meV/atom) |
+|---|---|---|
+| 4.0 | -3.6502 | |
+| 6.0 | -3.1741 | +476 |
+| 8.0 | -3.0814 | +93 |
+| 10.0 | -3.0584 | +23 |
+| 12.0 | -3.0514 | +7 |
+
+The corrected value keeps moving: `-3.1741` at 6 Ang is 0.12 eV/atom from the
+12 Ang value, and the last step is still 7 meV/atom. For GaAs with this basis
+quote the scan, not the 6 Ang number, and take at least 10-12 Ang of ghosts.
+The uncorrected value also depends strongly on the basis range: with
+`PAO.EnergyShift 0.01 Ry` it is `-3.87` instead of `-4.69` eV/atom.
 
 One more small, secondary finding along the way, purely for illustration of
 how much a numbered report surfaces without being asked: `stb-cohesive`
@@ -529,8 +570,8 @@ result (section 1.7) on a less trivial structure.
    if `[3b]`'s last step is still large, go back to step 2 with a larger
    cutoff/wider scan.
 
-7. **(Optional) persist or view**: `--save-report` writes
-   `cohesive_results.dat`; `--view` opens `cohesive_correction.png`
+7. **(Optional) view** (the report is always saved to
+   `stb_cohesiveAnalysis_report.txt`): `--view` opens `cohesive_correction.png`
    interactively (it's always saved to disk regardless, section 3.6).
 
 ## 7. Files in this folder

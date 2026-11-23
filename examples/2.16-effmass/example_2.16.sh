@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 # Guided example: stb-effmass (code 2.16 in the stb-suite menu)
 #
 # Not an automated test (see test/2-analysis/16-effmass/test.sh for that) --
@@ -49,7 +52,7 @@ energy differences between ALL bands at that k-point, so it must always
 be computed on the FULL multi-band eigenstate, never after isolating one
 band -- doing so silently gives values wrong by orders of magnitude.
 
-Every run prints a numbered [0]...[8] report. --save-report persists it;
+Every run prints a numbered [0]...[8] report. It is always saved;
 --save-gnuplot writes effmass.dat/velocity.dat + a real 2-panel bar-chart
 .gplot script (off by default); --view shows the same as a matplotlib
 preview (off by default).
@@ -196,13 +199,12 @@ pause
 
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[8] report to the console.
---save-report additionally persists it to stb_effmass_report.txt, and
---save-gnuplot writes effmass.dat/velocity.dat + a real 2-panel bar-chart
-.gplot script -- both off by default:
+It is always saved to stb_effmass_report.txt; --save-gnuplot writes effmass.dat/velocity.dat + a real 2-panel bar-chart
+.gplot script -- off by default:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.selected.WFSX Sn3O4.HSX "$OUT/full-report/"
@@ -210,12 +212,12 @@ echo "\$ stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm 
 (cd "$OUT/full-report" && stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX \
     --band vbm --fermi -3.200055 --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only references.bib -- no effmass.dat/velocity.dat/.gplot, no stb_effmass_report.txt)"
+echo "(only stb_effmass_references.bib -- no effmass.dat/velocity.dat/.gplot, no stb_effmass_report.txt)"
 echo
 echo "\$ stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm --fermi -3.200055 \\"
-echo "      --save-report --save-gnuplot --no-intro"
+echo "      --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX \
-    --band vbm --fermi -3.200055 --save-report --save-gnuplot --no-intro > console_saved.log 2>&1)
+    --band vbm --fermi -3.200055 --save-gnuplot --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_effmass_report.txt:"
 grep -o "^\[[0-9]\] [A-Za-z& (),.'-]*" "$OUT/full-report/stb_effmass_report.txt" | sort -u
 echo
@@ -240,7 +242,7 @@ B -- interactive stb-suite menu:
 Both paths call the exact same underlying tool -- proven directly below.
 The menu asks for the label and the .HSX path SEPARATELY (default
 suggested if <label>.HSX exists), gained a Fermi-source submenu for
-VBM/CBM, and save-report/save-gnuplot/view prompts.
+VBM/CBM, and save-gnuplot/view prompts.
 EOF
 TMP="$(mktemp -d)"
 cp Sn3O4.selected.WFSX Sn3O4.HSX "$TMP/"
@@ -249,8 +251,8 @@ echo "\$ stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm 
 (cd "$TMP" && stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm \
     --fermi -3.200055 --no-intro > cli.log 2>&1)
 echo
-echo "\$ printf '2.16\\nSn3O4\\n\\n2\\n1\\n-3.200055\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.16\nSn3O4\n\n2\n1\n-3.200055\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.16\\nSn3O4\\n\\n2\\n1\\n-3.200055\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.16\nSn3O4\n\n2\n1\n-3.200055\n\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Eigenvalue" "$TMP/cli.log")
 MENU_LINE=$(grep "Eigenvalue" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -270,7 +272,7 @@ Eight self-contained folders were generated under output/:
   basic-run/       vbm/            cbm/             nspin-fix/
   nspin4/          label-plus-hsx/ fermi-shift/     full-report/
 
-Each has references.bib; full-report/ additionally has effmass.dat/
+Each has stb_effmass_references.bib; full-report/ additionally has effmass.dat/
 velocity.dat/effmass.gplot/effmass.pdf and stb_effmass_report.txt.
 
 Recap of what this walkthrough covered:
@@ -290,7 +292,7 @@ Recap of what this walkthrough covered:
   - a real bug: --label + --hsx-file used to be rejected outright; fixed
     the same way as stb-wfdensity/stb-sts/stb-coop
   - --band vbm/cbm's Fermi-source hierarchy, shared with those same tools
-  - the numbered [0]...[8] report, --save-report, --save-gnuplot (a real
+  - the numbered [0]...[8] report (always saved), --save-gnuplot (a real
     2-panel bar-chart script, previously no plot output existed at all),
     --view
 

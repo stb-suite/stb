@@ -1,5 +1,6 @@
 output/
-references.bib
+stb_*_references*.bib
 stb_workfunction_report.txt
 workfunction_data.dat
 workfunction.gplot
+stb_*_report*.txt

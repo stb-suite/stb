@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -124,6 +124,7 @@ E_KS, is the physically appropriate "conserved-ish" quantity to watch.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -141,7 +142,6 @@ from stb.core.md_traj import read_frame_lattices, read_md_timestep_fs, unwrap_tr
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_aimdAnalysis_report.txt"
-BIB_FILE = "references.bib"
 
 
 def cell_min_perpendicular_width(cell):
@@ -448,7 +448,7 @@ def main():
                "  stb-aimdAnalysis -l aimd --pair O-H --skip 50\n"
                "  stb-aimdAnalysis -l aimd --fit-start 5000 --fit-end 15000\n"
                "  stb-aimdAnalysis -l aimd --track-atom 0 --track-pair 0-1\n"
-               "  stb-aimdAnalysis -l aimd --save-report --save-gnuplot --view\n"
+               "  stb-aimdAnalysis -l aimd --save-gnuplot --view\n"
                "  stb-aimdAnalysis --trajectory si_bulk_md_traj.xyz --dt 10",
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -506,10 +506,10 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write <stem>_*.dat/.gplot (with --save-gnuplot) and "
-                             f"{REPORT_FILE}/{BIB_FILE} into (default: current directory). "
+                             f"{citations.run_references_path()} into (default: current directory; the report always goes to the current folder). "
                              "Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .dat + .gplot pair for every computed quantity "
                              "(RDF, MSD, VACF, VDOS, and the atom-displacement/pair-distance "
@@ -568,7 +568,7 @@ def main():
             "Siesta ToolBox Suite - AIMD Trajectory Analysis",
             "RDF, MSD/diffusion, VACF-derived VDOS, atom/pair tracking",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if args.list_atoms:
@@ -602,7 +602,7 @@ def main():
     print("-" * 60)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("aimdAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -1058,12 +1058,12 @@ def main():
     print_section("[9] REFERENCES", f_out)
     bib_path = None
     if args.label:
-        bib_path = os.path.join(args.output_dir, BIB_FILE)
+        bib_path = citations.run_references_path()
         bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-        citations.write_bib_file(bib_path, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{bib_path}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
     else:
         print_dual("No SIESTA-specific references for a generic --trajectory input -- cite "
                    "whichever tool produced it instead (e.g. stb-mlmd's own MACE/foundation-"
@@ -1096,7 +1096,7 @@ def main():
     for path in written_files:
         print_dual(f"  - {path}", f_out)
     if bib_path:
-        print_dual(f"References        : {bib_path}", f_out)
+        print_dual(f"References        : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report            : {report_path}", f_out)
 

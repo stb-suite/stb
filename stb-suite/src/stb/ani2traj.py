@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import io
@@ -207,7 +208,7 @@ def main():
                         help="SIESTA output log. Default: <label>.out, else the only *.out next to the .ANI.")
     parser.add_argument("--dry-run", action="store_true", help="Report only; write no trajectory.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (next to the .ANI). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-ani2traj {VERSION}")
     args = parser.parse_args()
@@ -217,7 +218,7 @@ def main():
             "Siesta ToolBox Suite - AIMD Trajectory Converter",
             "Adds back the lattice SIESTA's own .ANI file doesn't carry",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     label = args.label
@@ -234,7 +235,7 @@ def main():
     ani_file = f"{label}.ANI"
     output_file = args.output if args.output else f"{label}_traj{default_ext}"
 
-    report_path = os.path.join(folder, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("ani2traj")
     buf = io.StringIO() if report_path else None
     sec = Sections(buf)
     warnings = []

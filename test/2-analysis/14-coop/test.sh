@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-coop (COOP/COHP Bonding Analysis, item 2.14)
@@ -35,6 +38,16 @@ check_success() {
     else
         echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -108,6 +121,48 @@ timeout 120 stb-coop --label Sn3O4 --quantity cohp --pair-species Sn O $COMMON -
 check_exit_code $? 0
 check_contains "Selected pairs: \['Sn-O'\]" log_cohp.txt
 check_success cohp_out/cohp.dat
+
+
+echo "Testing: COHP sign convention -- a real Sn-O bond (0-6) is NEGATIVE and labelled bonding"
+timeout 120 stb-coop --label Sn3O4 --quantity cohp --pair 0 6 $OCCUPIED --bond-order -o cohp_bond_out \
+    --no-intro > log_cohp_bond.txt 2>&1
+check_exit_code $? 0
+check_contains "e+00 (bonding)" log_cohp_bond.txt
+check_contains "COHP < 0 = bonding" log_cohp_bond.txt
+check_contains "integrated -COHP positive, bond order positive -> \[OK\] signs agree" log_cohp_bond.txt
+
+
+echo "Testing: a bond across the cell edge (Sn 0 - O 7, image +1 0 0, 2.08 Ang) is summed, not ~0"
+timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 7 $OCCUPIED --bond-order -o image_out \
+    --no-intro > log_image.txt 2>&1
+check_exit_code $? 0
+check_contains "0-7  | .* | 1\.3[0-9]*e-01 (bonding)" log_image.txt
+check_contains "Image (N1 N2 N3)" log_image.txt
+check_contains "+1 +0 +0         | 2\.077" log_image.txt
+
+echo "Testing: --image 1 0 0 selects that one bond (label 0-7[1,0,0])"
+timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 7 --image 1 0 0 $OCCUPIED --bond-order \
+    -o image1_out --no-intro > log_image1.txt 2>&1
+check_exit_code $? 0
+check_contains "Selected pairs: \['0-7\[1,0,0\]'\]" log_image1.txt
+check_contains "0-7\[1,0,0\] | .* | 1\.3[0-9]*e-01 (bonding)" log_image1.txt
+
+echo "Testing: --image outside the Hamiltonian's supercell, and --image without --pair, are clean errors"
+stb-coop --label Sn3O4 --quantity coop --pair 0 7 --image 9 0 0 $COMMON --no-intro > log_image_bad.txt 2>&1
+check_exit_code $? 2
+check_contains "outside the auxiliary supercell" log_image_bad.txt
+stb-coop --label Sn3O4 --quantity coop --pair-species Sn O --image 1 0 0 $COMMON --no-intro > log_image_nopair.txt 2>&1
+check_exit_code $? 2
+check_contains "--image needs --pair" log_image_nopair.txt
+
+
+echo "Testing: x4 normalization column and the magnitude check (x4 ICOOP / bond order ~ 1 from band bottom to E_F)"
+timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 7 --shift fermi --fermi -3.352 --erange -25 0 \
+    --npoints 60 --sigma 300 --bond-order -o ratio_out --no-intro > log_ratio.txt 2>&1
+check_exit_code $? 0
+check_contains "x4 (both spins, i<->j)" log_ratio.txt
+check_contains "Magnitude: x4 ICOOP / bond order (1 for a window from the bottom of the bands to E_F):" log_ratio.txt
+check_contains "0-7: +0.5[0-9]* / +0.527[0-9] = 1.0[0-9]* \[OK\]" log_ratio.txt
 
 
 # --- 4. Multiple --pair given together ---
@@ -226,13 +281,14 @@ check_contains "needs a Fermi energy" log_missing_fermi.txt
 # --- 9. --save-report / --save-gnuplot (off by default) ---
 echo -e "\n--- Testing --save-report / --save-gnuplot ---"
 
+rm -f stb_coop_report*.txt stb_coop_references*.bib
 timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 1 $COMMON \
     --save-report --save-gnuplot -o report_out --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_success report_out/coop.dat
 check_success report_out/coop.gplot
-check_success report_out/stb_coop_report.txt
-check_success report_out/references.bib
+check_success stb_coop_report.txt
+check_success stb_coop_references.bib
 
 echo "Testing: coop.gplot uses a bare basename (not the full --output-dir path)"
 if grep -q '"coop.dat"' report_out/coop.gplot && ! grep -q "report_out" report_out/coop.gplot; then
@@ -251,13 +307,14 @@ else
     echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed in this environment"
 fi
 
-echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes coop.dat + references.bib"
+echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes coop.dat + stb_coop_references.bib"
 rm -rf plain_out
+rm -f stb_coop_report*.txt stb_coop_references*.bib
 timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 1 $COMMON -o plain_out --no-intro > log_plain.txt 2>&1
 check_exit_code $? 0
 check_success plain_out/coop.dat
-check_success plain_out/references.bib
-if [ ! -f plain_out/coop.gplot ] && [ ! -f plain_out/stb_coop_report.txt ]; then
+check_success stb_coop_references.bib
+if [ ! -f plain_out/coop.gplot ] && [ -f stb_coop_report.txt ]; then
     echo -e "   -> ${GREEN}Verified:${NC} no .gplot/report written without --save-gnuplot/--save-report"
     PASS=$((PASS+1))
 else
@@ -310,7 +367,7 @@ check_contains "erange" log_help.txt
 check_contains "sigma" log_help.txt
 check_contains "bond-order" log_help.txt
 check_contains "dm-file" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "view" log_help.txt
 
@@ -320,13 +377,13 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.14) ---"
 
 echo "Testing: navigate 2.14 -> label Sn3O4 -> default HSX -> quantity 1 (coop) -> pair mode 1 (index) -> 0 1 -> erange -10 5 -> sigma 300 -> no shift -> no bond-order -> default output -> no report/gnuplot/view"
 rm -f coop.dat
-printf '2.14\nSn3O4\n\n1\n1\n0\n1\n-10\n5\n300\n\nn\n\nn\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+printf '2.14\nSn3O4\n\n1\n1\n0\n1\n-10\n5\n300\n\nn\n\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success coop.dat
 
 echo "Testing: interactive menu's --bond-order + default .DM prompt"
 rm -f coop.dat
-printf '2.14\nSn3O4\n\n1\n1\n0\n6\n-25\n-3.203856\n300\n\ny\n\n\nn\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu_bo.txt 2>&1
+printf '2.14\nSn3O4\n\n1\n1\n0\n6\n-25\n-3.203856\n300\n\ny\n\n\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu_bo.txt 2>&1
 check_exit_code $? 0
 check_contains "signs agree" log_menu_bo.txt
 

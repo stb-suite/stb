@@ -1,3 +1,4 @@
 output/
-references.bib
-stb_2dstacking_report.txt
+stb_*_references*.bib
+stb_2Dstacking_report.txt
+stb_*_report*.txt

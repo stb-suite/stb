@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-passivate (Surface Passivator, item 4.9)
@@ -150,7 +153,7 @@ check_contains "bond-length" log_help.txt
 echo -e "\n--- Testing the standardized report (full symmetry, --save-report, provenance header) ---"
 
 echo "Testing: --save-report writes the full symmetry report to file"
-rm -f stb_passivate_report.txt
+rm -f stb_passivate_report*.txt stb_passivate_references*.bib
 stb-passivate -f si111_slab.fdf --save-report -o report_test.fdf --no-intro > log_save_report.txt 2>&1
 check_success stb_passivate_report.txt
 check_contains "\[6\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_passivate_report.txt
@@ -162,6 +165,7 @@ echo "Testing: provenance header written into the output .fdf"
 check_contains "# Dangling bonds passivated by stb-passivate" report_test.fdf
 check_contains "# Passivant: H. Dangling bonds found: 8, auto-passivated: 8, unresolved (2+ missing bonds): 0." report_test.fdf
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --ml-relax pre-relaxes the passivated structure with MACE-MP-0, vacuum axis fixed"
 stb-passivate -f si111_slab.fdf --ml-relax --ml-relax-cell -o ml_relaxed.fdf --no-intro > log_ml_relax.txt 2>&1
 check_exit_code $? 0
@@ -182,6 +186,9 @@ if [ $? -eq 0 ]; then
 else
     echo -e "   -> ${RED}Failed:${NC} vacuum axis changed under --ml-relax-cell"
     FAIL=$((FAIL+1))
+fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
 fi
 
 

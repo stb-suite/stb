@@ -69,13 +69,13 @@ cp -a "$WORK/si" "$WORK/si_two"; cp "$WORK/si_two/si.RHO" "$WORK/si_two/si_old.R
 report guard_ambiguous si_two -t RHO
 
 echo "== 7. From the parent folder, label found automatically, report saved"
-report label_path . -l si/si -t VT --potential-unit Ry --save-report
+report label_path . -l si/si -t VT --potential-unit Ry
 report autolabel h2o -t DRHO --dry-run
 
 echo "== 8. The interactive menu (stb-suite, code 3.3)"
 mkdir -p "$REF/menu"
 # type 10 = VH, label h2o, spin total, unit Ha, default output, no dry run, no report, Enter, 0 = exit
-(cd "$WORK/h2o" && printf '3.3\n10\nh2o\n1\nHa\n\nn\nn\n\n0\n' | stb-suite 2>&1) | sed 's/\x1b\[[0-9;]*m//g' \
+(cd "$WORK/h2o" && printf '3.3\n10\nh2o\n1\nHa\n\nn\n\n0\n' | stb-suite 2>&1) | sed 's/\x1b\[[0-9;]*m//g' \
     | sed "s#$WORK#<work>#g" | sed -E 's/^(Date\/time *: ).*/\1<date>/; s/(written )[0-9-]+ [0-9:]+\)/\1<date>)/' \
     | sed -n '/STB-CUBE REPORT/,/hip to be square/p' > "$REF/menu/report.txt"
 

@@ -28,6 +28,16 @@ check_success() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' unexpectedly found in '$2'"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent from '$2'"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -286,14 +296,14 @@ check_contains "1   6   C" atoms_bsse/C/structure.fdf
 check_contains "2   -6   C_ghost" atoms_bsse/C/structure.fdf
 check_contains "NumberOfSpecies    2" atoms_bsse/C/structure.fdf
 
-echo "Verifying the ghost pseudopotential is symlinked from the real element's file"
+echo "Verifying the ghost pseudopotential is a copy of the real element's file"
 stb-cohesive -s phantom.fdf -O . -p pp --no-intro > log_bsse_pp.txt 2>&1
 check_success atoms_bsse/C/C_ghost.psf
-if [ "$(readlink -f atoms_bsse/C/C_ghost.psf)" = "$(readlink -f atoms_bsse/C/C.psf)" ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} C_ghost.psf resolves to the same file as the real C.psf"
+if [ ! -L atoms_bsse/C/C_ghost.psf ] && cmp -s atoms_bsse/C/C_ghost.psf atoms_bsse/C/C.psf; then
+    echo -e "   -> ${GREEN}Verified:${NC} C_ghost.psf is a copy of the real C.psf (same bytes, not a symlink)"
     PASS=$((PASS+1))
 else
-    echo -e "   -> ${RED}Failed:${NC} C_ghost.psf does not resolve to the real C.psf"
+    echo -e "   -> ${RED}Failed:${NC} C_ghost.psf is not a byte copy of the real C.psf"
     FAIL=$((FAIL+1))
 fi
 
@@ -443,7 +453,7 @@ check_contains "bsse-multi-site" log_help.txt
 check_contains "bsse-convergence-check" log_help.txt
 check_contains "dispersion" log_help.txt
 check_contains "symprec" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 
 
 # --- 14. Interactive path (stb-suite, shortcut 5.3.1) ---
@@ -456,7 +466,7 @@ rm -rf structure atoms atoms_bsse cohesive_runs
 # (blank -> Y, default), multi-site choice (blank -> Y, default),
 # convergence-check choice (n), advanced settings (n -> skip), save report
 # (n), then the "Press Enter to continue" pause, then quit.
-printf '5.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.3.1\nstructure.fdf\n\n\n\nn\nn\n\n\n\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_success cohesive_runs/structure/calc.fdf
 check_success cohesive_runs/atoms/C/calc.fdf
@@ -466,7 +476,7 @@ check_success cohesive_runs/atoms_bsse/C/site_k_x6/calc.fdf
 
 echo "Testing: navigate 5.3.1 -> decline BSSE -> no atoms_bsse/ created (multi-site/conv-check prompts skipped entirely)"
 rm -rf structure atoms atoms_bsse cohesive_runs
-printf '5.3.1\nstructure.fdf\n\n\nn\nn\n\nn\n\nn\n\n0\n' | stb-suite > log_menu_nobsse.txt 2>&1
+printf '5.3.1\nstructure.fdf\n\n\n\nn\nn\n\nn\n\nn\n\n0\n' | stb-suite > log_menu_nobsse.txt 2>&1
 check_contains "BSSE correction.*OFF" log_menu_nobsse.txt
 check_success cohesive_runs/structure/calc.fdf
 if [ -d cohesive_runs/atoms_bsse ]; then
@@ -485,13 +495,73 @@ rm -rf structure atoms atoms_bsse atoms_bsse_check atoms_bsse_check_6.0 atoms_bs
 # vacuum-gap (blank), output dir (blank), bsse-cutoff (blank), symprec
 # (blank), convergence increment(s) ('2 4 6' -- the new multi-value scan),
 # save report (n), then "Press Enter to continue", then quit.
-printf '5.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\ny\ny\n\n\n\n\n2 4 6\nn\n\n0\n' | stb-suite > log_menu_scan.txt 2>&1
+printf '5.3.1\nstructure.fdf\n\n\n\nn\nn\n\n\n\ny\ny\n\n\n\n\n2 4 6\nn\n\n0\n' | stb-suite > log_menu_scan.txt 2>&1
 check_contains "BSSE convergence check.*ON .+2, +4, +6 Ang." log_menu_scan.txt
 check_contains "Also generated 3 BSSE convergence-check references" log_menu_scan.txt
 check_success cohesive_runs/atoms_bsse_check_6.0/C/site_k_x6/calc.fdf
 check_success cohesive_runs/atoms_bsse_check_8.0/C/site_k_x6/calc.fdf
 check_success cohesive_runs/atoms_bsse_check_10.0/C/site_k_x6/calc.fdf
 
+
+# --- 14b. --calc template with kgrid.Cutoff (N4) and FilterCutoff (N9) ---
+echo -e "\n--- Testing --calc with 'kgrid.Cutoff' (a k-grid of the template: not overridden) and FilterCutoff ---"
+rm -rf cutoff_run && mkdir -p cutoff_run
+printf '%%include structure.fdf\nSystemLabel siesta\nkgrid.Cutoff 15.0 Ang\nFilterCutoff 150 Ry\nMesh.Cutoff 300 Ry\n' > cutoff_calc.fdf
+stb-cohesive -s structure.fdf -c cutoff_calc.fdf -O cutoff_run --no-bsse-correction --no-intro > log_cutoff.txt 2>&1
+check_contains "K-grid (full structure): kgrid.Cutoff 15.0 Ang -- the template's own" log_cutoff.txt
+check_not_contains "kgrid.MonkhorstPack" cutoff_run/structure/config_extra.fdf
+check_contains "\[WARNING\] The orbital filter is ON (FilterCutoff 150 Ry)" log_cutoff.txt
+echo "Testing: -k still replaces it"
+rm -rf cutoff_run_k && mkdir -p cutoff_run_k
+stb-cohesive -s structure.fdf -c cutoff_calc.fdf -k 0.2 -O cutoff_run_k --no-bsse-correction --no-intro > log_cutoff_k.txt 2>&1
+check_contains "kgrid.MonkhorstPack" cutoff_run_k/structure/config_extra.fdf
+
+# --- 14c. --calc with a per-species block (LiF needs 'Li non-perturbative'): every folder gets
+#     it re-keyed to ITS species in config_extra.fdf -- dropped where there is no Li (SIESTA:
+#     'WRONG species symbol in PAO.PolarizationScheme: Li'), copied to Li_ghost where Li is a
+#     ghost (else the ghost's polarization orbital fails, or gets another basis). ---
+echo -e "\n--- Testing --calc per-species blocks re-keyed per folder (LiF, Li non-perturbative) ---"
+rm -rf lif_run && mkdir -p lif_run
+cat > lif.fdf <<'FDFEOF'
+NumberOfAtoms 2
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1 3 Li
+ 2 9 F
+%endblock ChemicalSpeciesLabel
+LatticeConstant 4.03 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0 0.0 0.0 1
+ 0.5 0.5 0.5 2
+%endblock AtomicCoordinatesAndAtomicSpecies
+FDFEOF
+printf '%%include structure.fdf\nSystemLabel siesta\nMesh.Cutoff 300 Ry\n%%block PAO.PolarizationScheme\n Li non-perturbative\n%%endblock PAO.PolarizationScheme\n' > lif_calc.fdf
+stb-cohesive -s lif.fdf -c lif_calc.fdf -p dojo --bsse-cutoff 2.5 -O lif_run --no-intro > log_lif.txt 2>&1
+check_exit_code $? 0
+echo "Testing: atoms/F (no Li at all) -> an empty PAO.PolarizationScheme block overrides the template's"
+check_contains "%block PAO.PolarizationScheme" lif_run/atoms/F/config_extra.fdf
+check_not_contains "Li non-perturbative" lif_run/atoms/F/config_extra.fdf
+echo "Testing: atoms_bsse/F (F + Li ghosts) -> Li_ghost gets Li's entry"
+check_contains "Li_ghost non-perturbative" lif_run/atoms_bsse/F/config_extra.fdf
+echo "Testing: atoms/Li and the full structure fit the template -> nothing re-keyed"
+check_not_contains "PAO.PolarizationScheme" lif_run/atoms/Li/config_extra.fdf
+check_not_contains "PAO.PolarizationScheme" lif_run/structure/config_extra.fdf
+echo "Testing: no false 'Li polarization' warning when config_extra.fdf (read first) has the re-keyed block"
+check_not_contains "gives Li" log_lif.txt
+echo "Testing: built-in template (no --calc) on LiF -> Li non-perturbative in every folder with Li, Li_ghost too"
+rm -rf lif_builtin && mkdir -p lif_builtin
+stb-cohesive -s lif.fdf -p dojo --bsse-cutoff 2.5 -O lif_builtin --no-intro > log_lif_builtin.txt 2>&1
+check_contains "^  Li non-perturbative" lif_builtin/structure/calc.fdf
+check_contains "^  Li non-perturbative" lif_builtin/atoms/Li/calc.fdf
+check_contains "^  Li_ghost non-perturbative" lif_builtin/atoms_bsse/F/calc.fdf
+check_not_contains "non-perturbative" lif_builtin/atoms/F/calc.fdf
+check_not_contains "gives Li" log_lif_builtin.txt
 
 popd > /dev/null
 

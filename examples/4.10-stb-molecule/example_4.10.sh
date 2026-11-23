@@ -60,7 +60,7 @@ B -- interactive stb-suite menu:
 
 Every run always writes a numbered report ([0] RUN METADATA ... [8]
 SUMMARY & FILES -- [3] only appears with --ml-relax) and a point-group
-symmetry check before and after. A full text report (--save-report), MACE
+symmetry check before and after. A full text report (always written), MACE
 pre-relaxation (--ml-relax), and an interactive 3D view (--view) are all
 off by default.
 EOF
@@ -169,16 +169,15 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_molecule_references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_molecule_report.txt with
---save-report) includes the structure-validation checklist and a
-references.bib with SIESTA:
+The full numbered report (always written to stb_molecule_report.txt) includes the structure-validation checklist and a
+stb_molecule_references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
-echo "\$ stb-molecule --name H2O --save-report --no-intro"
-(cd "$OUT/full-report" && stb-molecule --name H2O --save-report --no-intro > console.log)
+echo "\$ stb-molecule --name H2O --no-intro"
+(cd "$OUT/full-report" && stb-molecule --name H2O --no-intro > console.log)
 echo
 echo "Report sections written to stb_molecule_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_molecule_report.txt"
@@ -186,8 +185,8 @@ echo
 echo "Provenance header written into the output .fdf:"
 head -3 "$OUT/full-report/molecule.fdf"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_molecule_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_molecule_references.bib"
 pause
 
 echo "=================================================================="
@@ -197,8 +196,8 @@ echo "Driving the same H2O case through the interactive menu's manual"
 echo "entry mode and checking it reaches the same point group."
 TMP="$(mktemp -d)"
 echo
-echo "\$ printf '4.10\\nH2O\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.10\nH2O\n\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '4.10\\nH2O\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.10\nH2O\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 if grep -q "Point group    : C2v" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-molecule command as the CLI walkthrough above"
@@ -219,8 +218,8 @@ symmetry-preserved/ skipped if the optional 'ml' extra isn't installed):
   vacuum-and-dimensionality/     ml-relax-symmetry-preserved/
   full-report/
 
-Each has references.bib (SIESTA, always); full-report/ additionally has
-stb_molecule_report.txt; ml-relax-symmetry-preserved/'s references.bib
+Each has stb_molecule_references.bib (SIESTA, always); full-report/ additionally has
+stb_molecule_report.txt; ml-relax-symmetry-preserved/'s stb_molecule_references.bib
 also cites the MACE architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -234,7 +233,7 @@ Recap of what this walkthrough covered:
     group, which stays correct regardless)
   - --ml-relax correcting the G2 geometry while providably preserving the
     molecule's point group
-  - the structure-validation checklist, references.bib, and --save-report
+  - the structure-validation checklist, stb_molecule_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the as-built

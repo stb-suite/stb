@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 # Guided example: stb-aimdAnalysis (code 2.18 in the stb-suite menu)
 #
 # Not an automated test (see test/2-analysis/18-aimdanalysis/test.sh for
@@ -57,7 +60,7 @@ by stb-mlmd) -- into five kinds of physics:
   [7] Thermodynamic time series: energy/temperature/volume/pressure,
       one 4-panel figure, straight from SIESTA's own <label>.MDE file
 
-Every run prints a numbered [0]...[10] report. --save-report persists it;
+Every run prints a numbered [0]...[10] report. It is always saved;
 --save-gnuplot writes a .dat + .gplot pair for every computed quantity
 (off by default -- this tool used to write matplotlib PNGs unconditionally
 on every run, with no gnuplot output at all); --view shows the same as an
@@ -85,7 +88,7 @@ mkdir -p "$OUT/basic-run"
 cp aimd.ANI aimd.fdf aimd.out aimd.XV "$OUT/basic-run/"
 cat <<'EOF'
 A plain run with no flags: the report prints to the console, but nothing
-is written to disk except references.bib (this IS a real SIESTA run, so
+is written to disk except stb_aimdAnalysis_references.bib (this IS a real SIESTA run, so
 the SIESTA citation is always written, unlike the --trajectory case
 further down).
 EOF
@@ -95,7 +98,7 @@ echo "\$ stb-aimdAnalysis --label aimd --no-intro"
 echo
 echo "Files written:"
 (cd "$OUT/basic-run" && ls)
-echo "(only references.bib -- no .dat/.gplot/report without --save-gnuplot/--save-report)"
+echo "(only stb_aimdAnalysis_references.bib -- no .dat/.gplot without --save-gnuplot; the report is always written)"
 pause
 
 
@@ -261,10 +264,10 @@ pause
 
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report/--save-gnuplot/--view (all off by default)"
+echo " output/full-report/  --  --save-gnuplot/--view (off by default)"
 echo "=================================================================="
 cat <<'EOF'
---save-report persists the full numbered report to disk;
+The full numbered report is always saved to disk;
 --save-gnuplot writes a .dat + .gplot pair per computed quantity;
 --view shows an interactive matplotlib preview (a no-op here, since
 MPLBACKEND=Agg has no GUI to show it on -- try this yourself without
@@ -273,9 +276,9 @@ EOF
 mkdir -p "$OUT/full-report"
 cp aimd.ANI aimd.fdf aimd.out aimd.XV "$OUT/full-report/"
 echo "\$ stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 \\"
-echo "      --save-report --save-gnuplot --view --no-intro"
+echo "      --save-gnuplot --view --no-intro"
 (cd "$OUT/full-report" && stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 \
-    --save-report --save-gnuplot --view --no-intro > console.log 2>&1)
+    --save-gnuplot --view --no-intro > console.log 2>&1)
 echo "Report sections written to stb_aimdAnalysis_report.txt:"
 grep -o "^\[[0-9]\] [A-Za-z& ()-]*" "$OUT/full-report/stb_aimdAnalysis_report.txt" | sort -u
 echo
@@ -332,7 +335,7 @@ The menu asks for the input source (label/generic trajectory), stride/
 skip, the RDF species pair -- then asks whether to list every atom's
 index/species/coordinates (y/N) right before the --track-atom/
 --track-pair prompts, so you can check valid indices before being asked
-to pick one -- then the output directory, and save-report/save-gnuplot/
+to pick one -- then the output directory, and save-gnuplot/
 view prompts.
 EOF
 TMP="$(mktemp -d)"
@@ -342,8 +345,8 @@ echo "\$ stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 --no-intr
 (cd "$TMP" && stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 \
     --no-intro > cli.log 2>&1)
 echo
-echo "\$ printf '2.18\\n\\naimd\\n\\n\\n\\n\\nn\\n0\\n0-1\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.18\n\naimd\n\n\n\n\nn\n0\n0-1\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.18\\n\\naimd\\n\\n\\n\\n\\nn\\n0\\n0-1\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.18\n\naimd\n\n\n\n\nn\n0\n0-1\n\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Pair 0-1 distance" "$TMP/cli.log")
 MENU_LINE=$(grep "Pair 0-1 distance" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -364,7 +367,7 @@ Nine self-contained folders were generated under output/:
   thermo/          species-pair/    full-report/     trajectory/
 
 Only full-report/ has the persisted .txt report + .dat/.gplot files;
-the rest only ever write references.bib (SIESTA-input runs) or nothing
+the rest only ever write stb_aimdAnalysis_references.bib (SIESTA-input runs) or nothing
 at all (the generic --trajectory run and --list-atoms).
 
 Recap of what this walkthrough covered:
@@ -383,7 +386,7 @@ Recap of what this walkthrough covered:
     (+ energy per atom) in one 4-panel figure, read from SIESTA's own
     <label>.MDE file -- verified on a real 500-step Nose (NVT) run that
     E_tot is ~140x more stable than E_KS
-  - the numbered [0]...[10] report, --save-report, --save-gnuplot
+  - the numbered [0]...[10] report (always saved), --save-gnuplot
     (off by default), --view (off by default)
   - --trajectory: generic ASE input independent of SIESTA, and how the
     REFERENCES section correctly adapts to that (no assumed SIESTA cite)
@@ -392,5 +395,5 @@ Recap of what this walkthrough covered:
 As a next step, try on your own with a real SIESTA AIMD run:
   stb-aimdAnalysis --label my_calc --geometry-file my_calc.fdf \\
       --track-atom 12 --track-pair 12-47 \\
-      --save-report --save-gnuplot --view
+      --save-gnuplot --view
 EOF

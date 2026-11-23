@@ -21,6 +21,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 export MPLBACKEND=Agg           # headless-safe; the PNG figures are written either way
 DEVICE="${DEVICE:-cpu}"
 R2="$DIR/../7.2-mlmd/model"
@@ -60,7 +65,7 @@ neb() {
     mkdir -p "$OUT/$case"
     local t0=$SECONDS
     (cd "$OUT/$case" && stb-mlneb --initial "$DIR/vac_initial.fdf" --final "$DIR/vac_final.fdf" --device "$DEVICE" \
-        -o . --save-report --save-data --no-intro "$@" < /dev/null > log.txt 2>&1)
+        -o . --save-data --no-intro "$@" < /dev/null > log.txt 2>&1)
     echo "  (stb-mlneb took $((SECONDS - t0)) s on $DEVICE)"
 }
 report() { echo "$OUT/$1/stb_mlneb_report.txt"; }
@@ -181,7 +186,7 @@ pause
 banner "Case 4 -- SIESTA's results go into the folders"
 cat <<'EOF'
 Here you would run SIESTA in each folder (about 3 minutes per image on 6 cores, 63 atoms):
-    for d in output/case3/siesta_check/image_*/; do (cd $d && mpirun -np 6 siesta < calc.fdf > siesta.out); done
+    for d in output/case3/siesta_check/image_*/; do (cd $d && mpirun -np 6 siesta calc.fdf < /dev/null > siesta.out); done
 They were run once, in the real loop (README section 6.4), and are kept in reference_results/loop_round2/. The band of
 Case 3 is the same band (same model, same endpoints, same settings), so their output belongs in these folders -- the
 script checks the stamps first, as stb-mlneb itself will:
@@ -297,10 +302,11 @@ if [ "$DEVICE" != "cuda" ]; then
 EOF
 else
     mkdir -p "$OUT/case10"
-    printf '7.5\n%s\n%s\n%s\n\nmedium\ncuda\n7\nn\nn\n%s\ny\nn\nn\nmenu_out\nn\ny\ny\nn\ny\n\n0\n' \
+    rm -f "$OUT/case10"/stb_mlneb_report*.txt    # the report goes to the folder the menu runs in
+    printf '7.5\n%s\n%s\n%s\n\nmedium\ncuda\n7\nn\nn\n%s\ny\nn\nn\nmenu_out\nn\ny\ny\nn\n\n0\n' \
         "$DIR/vac_initial.fdf" "$DIR/vac_final.fdf" "$R3/mlff_model_compiled.model" "$WF" \
         | (cd "$OUT/case10" && stb-suite > log.txt 2>&1) || true
-    R="$OUT/case10/menu_out/stb_mlneb_report.txt"
+    R="$OUT/case10/stb_mlneb_report.txt"
     if [ -f "$R" ]; then
         section "$R" "RUN METADATA"
         section "$R" "SIESTA CHECK" | head -6

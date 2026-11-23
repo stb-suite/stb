@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -48,6 +48,7 @@ no longer depends on it.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -71,7 +72,7 @@ sisl = require_sisl()
 CONFIG_EXTRA_FILE = "config_extra.fdf"
 HIRSHFELD_MANIFEST_FILE = "hirshfeld_manifest.json"
 HIRSHFELD_IONS_MANIFEST_FILE = "hirshfeld_ions_manifest.json"
-REPORT_FILE = "hirshfeld_ions_report.txt"
+REPORT_FILE = "stb_hirshfeldIons_report.txt"
 N_RADIAL_BINS = None  # None: bin width from the grid spacing (core.hirshfeld)
 
 FIXED_CELL_BLOCK = (
@@ -202,7 +203,7 @@ def main():
                               "auto-detection of combined/'s own '*.out' (which assumes that "
                               "log was left with a .out extension; use --ref if yours wasn't).")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false",
                          help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hirshfeldIons {VERSION}")
@@ -214,10 +215,10 @@ def main():
             "Siesta ToolBox Suite - Hirshfeld-I Ions (Stage 2/3)",
             "Write BOTH cation and anion references, per species",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("hirshfeldIons")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-HIRSHFELDIONS REPORT =====", 'magenta'), f_out)

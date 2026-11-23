@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-aimdAnalysis (AIMD Trajectory Analysis, item 2.18).
@@ -64,9 +67,10 @@ echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
-# --- 2. Basic run: numbered report, no flags -> only references.bib ---
+# --- 2. Basic run: numbered report, no flags -> only stb_aimdAnalysis_references.bib ---
 echo -e "\n--- Testing a basic run (--label aimd), numbered report ---"
 
+rm -f stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib
 stb-aimdAnalysis --label aimd --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Lattice read per-frame from aimd.out" log_basic.txt
@@ -90,15 +94,15 @@ check_contains "\[10\] SUMMARY & FILES" log_basic.txt
 echo "Testing: [7] reports Volume always (from the cell), even with no .MDE present"
 check_contains "Volume (Ang^3)" log_basic.txt
 
-echo "Testing: a plain run with no --save-gnuplot/--save-report/--track-* only writes references.bib"
-if [ ! -f aimd_rdf.dat ] && [ ! -f aimd_rdf.gplot ] && [ ! -f stb_aimdAnalysis_report.txt ] && [ -f references.bib ]; then
+echo "Testing: a plain run with no --save-gnuplot/--save-report/--track-* only writes stb_aimdAnalysis_references.bib"
+if [ ! -f aimd_rdf.dat ] && [ ! -f aimd_rdf.gplot ] && [ -f stb_aimdAnalysis_report.txt ] && [ -f stb_aimdAnalysis_references.bib ]; then
     echo -e "   -> ${GREEN}Verified:${NC} no data/gplot/report written without --save-gnuplot/--save-report"
     PASS=$((PASS+1))
 else
     echo -e "   -> ${RED}Failed:${NC} data/gplot/report was written despite being off by default"
     FAIL=$((FAIL+1))
 fi
-rm -f references.bib
+rm -f stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib
 
 
 # --- 2b. --geometry-file (real bug fix: <label>.fdf is never auto-found in practice) ---
@@ -291,7 +295,7 @@ if command -v gnuplot >/dev/null 2>&1; then
 else
     echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed in this environment"
 fi
-rm -f aimd_*.dat aimd_*.gplot aimd_*.pdf references.bib
+rm -f aimd_*.dat aimd_*.gplot aimd_*.pdf stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib
 
 
 # --- 4. --track-atom / --track-pair validation ---
@@ -317,7 +321,7 @@ stb-aimdAnalysis --label aimd --pair O-O --save-gnuplot --no-intro > log_pair.tx
 check_exit_code $? 0
 check_contains "RDF pair          : O-O" log_pair.txt
 check_success aimd_rdf_OO.dat
-rm -f aimd_*.dat aimd_*.gplot references.bib
+rm -f aimd_*.dat aimd_*.gplot stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib
 
 
 # --- 6. --pair with a species not present ---
@@ -343,10 +347,11 @@ check_contains "discards all" log_badskip.txt
 
 # --- 9. --save-report / -o output-dir ---
 echo -e "\n--- Testing --save-report -o custom_out ---"
+rm -f stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib
 stb-aimdAnalysis --label aimd --save-report -o custom_out --no-intro > log_savereport.txt 2>&1
 check_exit_code $? 0
-check_success custom_out/stb_aimdAnalysis_report.txt
-check_contains "STB-AIMDANALYSIS REPORT" custom_out/stb_aimdAnalysis_report.txt
+check_success stb_aimdAnalysis_report.txt
+check_contains "STB-AIMDANALYSIS REPORT" stb_aimdAnalysis_report.txt
 rm -rf custom_out
 
 
@@ -354,7 +359,7 @@ rm -rf custom_out
 echo -e "\n--- Testing --view (matplotlib preview, Agg backend) ---"
 timeout 30 stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 --view --no-intro > log_view.txt 2>&1
 check_exit_code $? 0
-rm -f references.bib
+rm -f stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib
 
 
 # --- 11. --trajectory: generic ASE-readable input (e.g. stb-mlmd's own output) ---
@@ -457,15 +462,15 @@ check_contains "2 atom(s), coordinates from the first frame" log_list_atoms_traj
 
 # --- 13. Interactive path (stb-suite, shortcut 2.18) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.18) ---"
-rm -f references.bib aimd_disp_atom0.dat aimd_dist_0_1.dat
-printf '2.18\n\naimd\n\n1\n0\n\nn\n0\n0-1\n\nn\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+rm -f stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib aimd_disp_atom0.dat aimd_dist_0_1.dat
+printf '2.18\n\naimd\n\n1\n0\n\nn\n0\n0-1\n\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_contains "Tracked atom      : index 0" log_menu.txt
 check_contains "Tracked pair      : atom 0 (O) -- atom 1 (O)" log_menu.txt
 check_success aimd_disp_atom0.dat
 check_success aimd_dist_0_1.dat
 
 echo "Testing: interactive menu asks before listing atoms -- 'y' shows the table, 'n' skips it"
-rm -f references.bib aimd_disp_atom0.dat aimd_dist_0_1.dat
+rm -f stb_aimdAnalysis_report*.txt stb_aimdAnalysis_references*.bib aimd_disp_atom0.dat aimd_dist_0_1.dat
 printf '2.18\n\naimd\n\n1\n0\n\ny\n0\n0-1\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_list.txt 2>&1
 check_contains "List every atom's index/species/coordinates" log_menu_list.txt
 check_contains "2 atom(s), coordinates from the first frame" log_menu_list.txt

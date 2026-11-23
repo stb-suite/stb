@@ -28,7 +28,7 @@ export MPLBACKEND=Agg
 r2=(--custom-model "$R2/mlff_model_compiled.model" --custom-model-card "$R2/mlff_model_card.json")
 r3=(--custom-model "$R3/mlff_model_compiled.model" --custom-model-card "$R3/mlff_model_card.json")
 ends=(--initial "$HERE/vac_initial.fdf" --final "$HERE/vac_final.fdf")
-common=(--no-intro --device "$DEVICE" --save-data --save-report)
+common=(--no-intro --device "$DEVICE" --save-data)
 
 run() {   # run <case> <args...>
     local case="$1"; shift
@@ -37,7 +37,9 @@ run() {   # run <case> <args...>
     fi
     echo "  [run]  $case: stb-mlneb $*"
     local t0=$SECONDS
-    (cd "$RUN" && stb-mlneb "${ends[@]}" "${common[@]}" -o "$case" "$@" > "$case.log" 2>&1) || {
+    # Run inside the case folder: the report goes to the current folder.
+    mkdir -p "$RUN/$case"; rm -f "$RUN/$case"/stb_mlneb_report*.txt
+    (cd "$RUN/$case" && stb-mlneb "${ends[@]}" "${common[@]}" -o . "$@" > "../$case.log" 2>&1) || {
         echo "  [FAIL] $case -- see $RUN/$case.log"; exit 1; }
     echo "         $((SECONDS - t0)) s"
 }

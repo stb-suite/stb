@@ -29,6 +29,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 # Stage 2's --view calls plt.show() -- MPLBACKEND=Agg makes that a no-op
 # instead of blocking on a GUI window, same convention test.sh itself uses.
 export MPLBACKEND=Agg
@@ -281,11 +286,11 @@ EOF
 mkdir -p "$OUT/case9-interactive"
 cp structure.fdf calc.fdf "$OUT/case9-interactive/"
 echo "\$ stb-suite  (5.4.1, defaults, dojo bank)"
-(cd "$OUT/case9-interactive" && printf '5.4.1\n\n\n\n\n\n1\nn\nn\nn\n\n0\n' | stb-suite 2>&1 \
+(cd "$OUT/case9-interactive" && printf '5.4.1\n\n\n\n\n\n1\n\n\n\nn\nn\n\n0\n' | stb-suite 2>&1 \
     | sed -n '/\[3\] SYMMETRY REDUCTION/,/\[4\] DISPLACEMENT FOLDERS/p')
 cp -r "$PHONON_RUNS_ML" "$OUT/case9-interactive/phonon_runs_ml"
 echo "\$ stb-suite  (5.4.2, phonon_runs_ml, 'all' shortcut)"
-(cd "$OUT/case9-interactive" && printf '5.4.2\nphonon_runs_ml\n\n20 20 20\n\n\n\nall\nn\nn\nn\nn\n\n0\n' | stb-suite 2>&1 \
+(cd "$OUT/case9-interactive" && printf '5.4.2\nphonon_runs_ml\n\n20 20 20\n\n\n\nall\nn\nn\nn\n\n0\n' | stb-suite 2>&1 \
     | grep "Selected:")
 pause
 

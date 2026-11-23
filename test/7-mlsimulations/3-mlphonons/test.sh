@@ -234,7 +234,7 @@ fi
 
 # --- 1d. --qha ---
 echo -e "\n--- Testing --qha (small volume scan) ---"
-stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 8 8 8 --qha --n-volumes 4 --strain-range 3.0 \
+stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 8 8 8 --qha --n-volumes 5 --strain-range 3.0 \
     --save-data --no-intro -o mlphonons_qha > log_qha.txt 2>&1
 check_exit_code $? 0
 check_contains "VOLUME SCAN" log_qha.txt
@@ -257,7 +257,7 @@ check_python "F_vib in vol_*/phonopy_disp.yaml x cell factor reproduces the repo
 import glob, re, sys, warnings, numpy as np, phonopy
 warnings.filterwarnings('ignore')
 p = phonopy.load(sorted(glob.glob('mlphonons_qha/vol_*'))[0] + '/phonopy_disp.yaml', log_level=0)
-p.run_mesh([8, 8, 8]); p.run_thermal_properties(temperatures=[300])
+p.run_mesh([8, 8, 8], is_gamma_center=True); p.run_thermal_properties(temperatures=[300], cutoff_frequency=0.01)
 f_prim = p.get_thermal_properties_dict()['free_energy'][0]          # kJ/mol per 2-atom cell
 expect = f_prim * 4 / 8 * 10.3642688                                 # meV/atom
 t = re.sub(r'\x1b\[[0-9;]*m', '', open('log_qha.txt').read())
@@ -266,10 +266,10 @@ got = float(row.split()[8])
 sys.exit(0 if abs(got - expect) < 0.05 else 1)
 "
 
-echo "Testing: --qha requires --n-volumes >= 4 (expects failure)"
-stb-mlphonons --file si8.fdf --qha --n-volumes 3 --no-intro > log_qha_toofew.txt 2>&1
+echo "Testing: --qha requires --n-volumes >= 5 (expects failure)"
+stb-mlphonons --file si8.fdf --qha --n-volumes 4 --no-intro > log_qha_toofew.txt 2>&1
 check_exit_code $? 2
-check_contains "n-volumes must be at least 4" log_qha_toofew.txt
+check_contains "n-volumes must be at least 5" log_qha_toofew.txt
 
 rm -rf mlphonons_qha
 
@@ -396,7 +396,7 @@ if command -v gnuplot &> /dev/null; then
     check_contains "gnuplot figure" log_gp.txt
 fi
 check_contains "show needs a display" log_gp.txt
-MPLBACKEND=Agg stb-mlphonons --file si8.fdf --qha --n-volumes 4 --dim 1 1 1 --mesh 6 6 6 --save-gnuplot \
+MPLBACKEND=Agg stb-mlphonons --file si8.fdf --qha --n-volumes 5 --dim 1 1 1 --mesh 6 6 6 --save-gnuplot \
     --no-intro -o mlphonons_gp_qha > log_gp_qha.txt 2>&1
 check_exit_code $? 0
 check_success mlphonons_gp_qha/plot/qha.gplot
@@ -419,11 +419,12 @@ check_contains "custom-model-card" log_custommodel_nocard.txt
 
 # --- 3. --save-report ---
 echo -e "\n--- Testing --save-report ---"
+rm -f stb_mlphonons_report*.txt stb_mlphonons_references*.bib
 stb-mlphonons --file si_bulk.fdf --dim 1 1 1 --mesh 8 8 8 --band-points 11 \
     -o report_test --save-report --no-intro > log_savereport.txt 2>&1
 check_exit_code $? 0
-check_success report_test/stb_mlphonons_report.txt
-check_contains "STB-MLPHONONS REPORT" report_test/stb_mlphonons_report.txt
+check_success stb_mlphonons_report.txt
+check_contains "STB-MLPHONONS REPORT" stb_mlphonons_report.txt
 rm -rf report_test
 
 
@@ -473,7 +474,7 @@ check_contains "convergence-tol" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 7.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 7.3) ---"
 rm -rf interactive_out
-printf '7.3\nsi_bulk.fdf\n\nsmall\n\n1 1 1\ninteractive_out\n\nn\nn\nn\ny\nn\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
+printf '7.3\nsi_bulk.fdf\n\nsmall\n\n1 1 1\ninteractive_out\n\nn\nn\nn\ny\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/bands.png
 check_success interactive_out/dos.png
@@ -484,7 +485,7 @@ check_success interactive_out/plot/bands.gplot
 if [ -n "$QUICK_MODEL" ]; then
     echo "Testing: the 7.3 menu asks for the device with a custom model too"
     rm -rf interactive_custom_out
-    printf '7.3\nsi8.fdf\n%s\n%s\ncpu\n1 1 1\ninteractive_custom_out\n\nn\nn\nn\nn\nn\nn\nn\n\n0\n' \
+    printf '7.3\nsi8.fdf\n%s\n%s\ncpu\n1 1 1\ninteractive_custom_out\n\nn\nn\nn\nn\nn\nn\n\n0\n' \
         "$QUICK_MODEL" "$QUICK_CARD" | MPLBACKEND=Agg stb-suite > log_menu_custom.txt 2>&1
     check_exit_code $? 0
     check_contains "Device \[cpu/cuda" log_menu_custom.txt

@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -28,9 +29,10 @@ except ImportError:
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core import kspace
 from stb.core.phonon_workflow import (
+    THERMAL_FREQ_MIN_THZ,
     detect_system_label, load_phonon_with_force_constants, IMAGINARY_MODE_TOL_THZ)
 
-REPORT_FILE = "phonon_properties.txt"
+REPORT_FILE = "stb_phononsPos_report.txt"
 # Same palette as elastic_analysis.py's PLOT_COLORS (first 3 entries), kept
 # here as its own short list since the thermal-properties plot always has
 # exactly these 3 series.
@@ -40,6 +42,10 @@ PLOT_COLORS = ['#2255cc', '#cc5522', '#22aa55']
 SPECIES_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaaa',
                   '#cc2266', '#66cc22', '#2266cc', '#cc6622', '#8822cc', '#22cc88']
 
+
+
+# Lowest frequency (THz) that enters the thermal displacement (ADP) sums -- see run_thermal_displacement_matrices.
+TDM_FREQ_MIN_THZ = THERMAL_FREQ_MIN_THZ
 
 def _pbc_atomic_shift(positions_new, positions_ref, cell):
     """Per-atom displacement magnitude between two position arrays of the
@@ -478,6 +484,16 @@ def main():
                              "the copied calc.fdf/structure.fdf, falling back to 'siesta')")
     parser.add_argument("-m", "--mesh", type=int, nargs=3, default=[20, 20, 20],
                         help="Q-point mesh for thermal properties (default: 20 20 20)")
+    parser.add_argument("--shifted-mesh", action="store_true",
+                        help="Use phonopy's half-grid shift for even mesh divisions (what versions up to 2.0.0 "
+                             "did). Default: a Gamma-centred mesh, which keeps the point-group symmetry of every "
+                             "lattice -- on a hexagonal lattice the shifted 30x30x1 mesh is not symmetric and "
+                             "phonopy falls back to time reversal only (MeshSymmetryFallbackWarning).")
+    parser.add_argument("--symmetrize-fc", action="store_true",
+                        help="Symmetrize the force constants by the space group before anything is computed "
+                             "(phonopy's symmetrize_force_constants_by_space_group). Section [2] always reports "
+                             "how much the Gamma frequencies would change, i.e. how far the raw force constants "
+                             "are from the crystal's symmetry; this option applies it.")
     parser.add_argument("--tmin", type=float, default=0.0, help="Minimum temperature in K (default: 0)")
     parser.add_argument("--tmax", type=float, default=1000.0, help="Maximum temperature in K (default: 1000)")
     parser.add_argument("--tstep", type=float, default=10.0, help="Temperature step in K (default: 10)")
@@ -518,7 +534,7 @@ def main():
                              "fail to reconstruct force constants -- loosen, don't tighten, "
                              "if in doubt.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .dat + .gplot pair for every computed quantity "
                              "(thermal properties, bands, group velocity, DOS, PDOS, thermal "
@@ -538,7 +554,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("PHONON POST-PROCESSING:", 'bold'))
@@ -578,7 +594,7 @@ def main():
 
     # Report writing is opt-in (--save-report); print_dual still prints
     # to stdout unconditionally either way.
-    report_path = os.path.join(phonon_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("phononsPos")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== PHONON PROPERTIES REPORT =====', 'magenta')}", f_out)
@@ -625,11 +641,35 @@ def main():
     # stb-mlphonons (see core/phonon_workflow.py::IMAGINARY_MODE_TOL_THZ).
     phonon.symmetrize_force_constants(show_drift=False)
 
+    # How far the force constants are from the space group's symmetry: Gamma
+    # frequencies before and after symmetrizing by it. SIESTA forces from a
+    # supercell whose k-grid or real-space mesh does not have the full symmetry
+    # split modes that are degenerate by symmetry (graphene 5x5, E2g: 45.55 and
+    # 45.96 THz).
+    fc_symmetry = None
+    try:
+        fc = phonon.force_constants
+        if fc.shape[0] != fc.shape[1]:
+            # phonopy.load gives compact force constants (n_prim x n_super); the space-group projection needs the
+            # full ones (with compact ones phonopy 4.5 raised 'index 2 is out of bounds' and the check was skipped)
+            phonon.produce_force_constants()
+            phonon.symmetrize_force_constants(show_drift=False)
+        raw_fc = np.array(phonon.force_constants, copy=True)
+        gamma_raw = np.array(phonon.get_frequencies([0.0, 0.0, 0.0]))
+        phonon.symmetrize_force_constants_by_space_group(show_drift=False)
+        phonon.symmetrize_force_constants(show_drift=False)
+        gamma_sym = np.array(phonon.get_frequencies([0.0, 0.0, 0.0]))
+        fc_symmetry = (gamma_raw, gamma_sym)
+        if not args.symmetrize_fc:
+            phonon.force_constants = raw_fc
+    except Exception as error:
+        print(f"[INFO] Force-constant symmetry check skipped ({error}).")
+
     print(f"[INFO] Running thermal properties calculation ...")
-    print(f"       -> Q-Mesh: {args.mesh}")
+    print(f"       -> Q-Mesh: {args.mesh} ({'half-grid shifted' if args.shifted_mesh else 'Gamma-centred'})")
     print(f"       -> Temperature Range: {args.tmin} K to {args.tmax} K (step: {args.tstep} K)")
 
-    phonon.run_mesh(args.mesh)
+    phonon.run_mesh(args.mesh, is_gamma_center=not args.shifted_mesh)
     min_freq = phonon.mesh.frequencies.min()
 
     print_section('[2] DYNAMICAL STABILITY', f_out)
@@ -642,6 +682,24 @@ def main():
     disp_mag = np.linalg.norm(disp0) * internal_to_angstrom
     print_dual(f"Supercell used         : {supercell_dim[0]} x {supercell_dim[1]} x {supercell_dim[2]} "
                 f"({len(phonon.dataset['first_atoms'])} displacements, {disp_mag:.4f} Ang each)", f_out)
+    print_dual(f"Q-mesh                 : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}, "
+               + ("half-grid shifted (--shifted-mesh)" if args.shifted_mesh else "Gamma-centred"), f_out)
+    if fc_symmetry is not None:
+        gamma_raw, gamma_sym = fc_symmetry
+        change = np.abs(gamma_raw - gamma_sym)
+        worst = int(np.argmax(change))
+        print_dual(f"Force-constant symmetry: symmetrizing by the space group moves the Gamma frequencies by at "
+                   f"most {change.max():.3f} THz ({change.max() * 33.35641:.1f} cm^-1; mode {worst + 1}: "
+                   f"{gamma_raw[worst]:.3f} -> {gamma_sym[worst]:.3f} THz)"
+                   + (" -- applied (--symmetrize-fc)" if args.symmetrize_fc else ""), f_out)
+        if change.max() > 0.05 and not args.symmetrize_fc:
+            print_dual(color_text(
+                "[WARNING] The force constants do not have the crystal's symmetry: modes that are degenerate "
+                "by symmetry come out split, and every frequency carries an error of this size. Usual causes: "
+                "a supercell k-grid that does not keep the point group (a coarse or shifted grid on a "
+                "hexagonal cell), a low Mesh.Cutoff (egg-box), or loose SCF convergence in the displaced "
+                "runs. Fix the runs, or pass --symmetrize-fc to project the force constants onto the space "
+                "group (it removes the splitting, not the underlying noise).", 'yellow'), f_out)
     print_dual(f"Minimum mesh frequency : {min_freq:.4f} THz", f_out)
     mesh_unstable, mesh_note = _stability_verdict(min_freq)
     if mesh_unstable:
@@ -772,7 +830,8 @@ def main():
             print(color_text(f" -> Saved distorted structure as "
                               f"'{os.path.join(phonon_dir, frozen_mode_filename)}'", 'cyan'))
 
-    phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+    phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep,
+                                  cutoff_frequency=THERMAL_FREQ_MIN_THZ)
 
     print("[INFO] Exporting results ...")
 
@@ -824,17 +883,28 @@ def main():
     cif_filename = None
     disp_dat_filename = None
     tdm = None
+    tdm_failed = False
     if args.pdos or args.thermal_displacements:
         print(f"[INFO] Re-running a denser, symmetry-unreduced mesh with eigenvectors "
               f"for {'PDOS' if args.pdos else ''}"
               f"{' + ' if args.pdos and args.thermal_displacements else ''}"
               f"{'thermal displacements' if args.thermal_displacements else ''} ...")
-        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False)
+        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False,
+                        is_gamma_center=not args.shifted_mesh)
         if args.pdos:
             phonon.run_projected_dos()
         if args.thermal_displacements:
-            phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
-            tdm = phonon.thermal_displacement_matrices
+            # The acoustic modes at Gamma are rigid translations (a Gamma-centred mesh contains Gamma),
+            # and a mode at ~0 THz carries a ~1/f^2 weight that blows up round-off: both are left out,
+            # as are imaginary modes (phonopy's own default already drops f <= 0).
+            try:
+                phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep,
+                                                         freq_min=TDM_FREQ_MIN_THZ, exclude_gamma_acoustic=True)
+                tdm = phonon.thermal_displacement_matrices
+            except AssertionError:
+                # phonopy checks that the summed ADP tensors are real; with soft/imaginary modes the
+                # q / -q partners can enter the sum differently and it stops. Report it, keep the rest.
+                tdm_failed = True
 
     symbols = phonon.primitive.symbols
     species = list(dict.fromkeys(symbols))
@@ -877,7 +947,7 @@ def main():
             if args.view:
                 phonon.plot_projected_dos(pdos_indices=species_indices, legend=species)
 
-    if args.thermal_displacements:
+    if args.thermal_displacements and tdm is not None:
         matrices = tdm.thermal_displacement_matrices  # (n_temps, n_atoms, 3, 3)
         u_iso = np.trace(matrices, axis1=2, axis2=3) / 3  # (n_temps, n_atoms)
         atom_labels = []
@@ -923,6 +993,8 @@ def main():
             species_uiso[sp] = u_iso[:, idx].mean(axis=1)
 
         print_section('[3c] THERMAL DISPLACEMENTS', f_out)
+        print_dual(f"Modes summed        : f > {TDM_FREQ_MIN_THZ} THz on the {' x '.join(map(str, args.mesh))} mesh; "
+                   "Gamma acoustic (rigid translations) and imaginary modes left out", f_out)
         print_dual(f"ADP CIF (@ {tdm.temperatures[-1]:.1f} K) : {cif_filename}", f_out)
         for sp in species:
             print_dual(f"  {sp} U_iso @ {tdm.temperatures[-1]:.1f} K : {species_uiso[sp][-1]:.6f} Ang^2", f_out)
@@ -936,6 +1008,12 @@ def main():
         # tool never makes -- it uses run_thermal_displacement_matrices()
         # (full ADP tensors) instead, and there's no matrices-plotting
         # equivalent in phonopy's API.
+    elif args.thermal_displacements and tdm_failed:
+        print_section('[3c] THERMAL DISPLACEMENTS', f_out)
+        print_dual(color_text("[WARNING] Thermal displacements not computed: phonopy found imaginary parts in "
+                              "the summed ADP tensors, which happens next to soft/imaginary modes (see [2]). "
+                              "Relax the structure (or freeze the unstable mode, --freeze-unstable-mode) and "
+                              "rerun; the rest of this analysis is unaffected.", 'yellow'), f_out)
 
     os.chdir(original_dir)
 

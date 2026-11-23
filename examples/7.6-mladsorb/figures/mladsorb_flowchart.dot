@@ -20,7 +20,7 @@ digraph mladsorb {
     comm    [label="8. Committee on every minimum\n(custom model): spread of E_ads,\nsame site first?"];
     found   [label="9. Same screening with the\nfoundation model (custom model;\n--skip-foundation-comparison)"];
     domain  [label="10. Trained range of the card"];
-    report  [label="Report (sections, warnings last) + mladsorb.png\nminima as .fdf; --show, --save-data, --save-gnuplot,\n--save-xyz, --save-report",
+    report  [label="Report (sections, warnings last) + mladsorb.png\nminima as .fdf; --show, --save-data, --save-gnuplot,\n--save-xyz,",
              fillcolor="#e6f4e6", color="#2e7d32"];
     q       [label="Trust the ranking?", shape=diamond, style="filled", fillcolor="#f2f2f2", color="#666666"];
     siesta  [label="SIESTA on the best sites\nstb-adsorb (5.8): sites, BSSE, Gibbs", shape=box3d, fillcolor="#fde8e8", color="#b22222"];

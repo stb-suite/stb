@@ -40,7 +40,7 @@ of the true integral (the result changes noticeably if you add more);
 enough of them and the result converges to a stable value.
 
 "Monkhorst-Pack" (Monkhorst & Pack, 1976 -- the exact reference stb-kgrid
-itself writes to references.bib below) is the standard convention for HOW
+itself writes to stb_kgrid_references.bib below) is the standard convention for HOW
 to lay out that finite set: a uniform mesh of N1 x N2 x N3 points along the
 three reciprocal lattice directions, instead of picking points ad hoc.
 
@@ -81,11 +81,11 @@ echo "The most common case: a real 3D bulk crystal."
 mkdir -p "$OUT/silicon"
 cp structure.fdf "$OUT/silicon/"
 echo
-echo "\$ stb-kgrid --file structure.fdf --density 0.2 --save-report --no-intro"
-(cd "$OUT/silicon" && stb-kgrid --file structure.fdf --density 0.2 --save-report --no-intro > console.log)
+echo "\$ stb-kgrid --file structure.fdf --density 0.2 --no-intro"
+(cd "$OUT/silicon" && stb-kgrid --file structure.fdf --density 0.2 --no-intro > console.log)
 grep -E "Dimensionality|Suggested Monkhorst-Pack" "$OUT/silicon/console.log"
 echo
-echo "Folder contents (report + citations, saved via --save-report):"
+echo "Folder contents (report + citations, always written):"
 ls "$OUT/silicon"
 pause
 
@@ -133,8 +133,8 @@ for case in molecule chain graphene; do
     echo "=================================================================="
     mkdir -p "$OUT/$case"
     cp "$struct" "$OUT/$case/"
-    echo "\$ stb-kgrid --file $struct --density 0.2 --save-report --no-intro"
-    (cd "$OUT/$case" && stb-kgrid --file "$struct" --density 0.2 --save-report --no-intro > console.log)
+    echo "\$ stb-kgrid --file $struct --density 0.2 --no-intro"
+    (cd "$OUT/$case" && stb-kgrid --file "$struct" --density 0.2 --no-intro > console.log)
     grep -E "Dimensionality|Suggested Monkhorst-Pack" "$OUT/$case/console.log"
     pause
 done
@@ -233,7 +233,7 @@ cat <<EOF
 Four self-contained folders were generated under output/:
   silicon/   molecule/   chain/   graphene/
 
-Each has stb_kgrid_report.txt (the exact console report) and references.bib
+Each has stb_kgrid_report.txt (the exact console report) and stb_kgrid_references.bib
 (SIESTA + Monkhorst-Pack citations) -- everything you need to justify the
 k-grid choice in a paper or a lab notebook.
 

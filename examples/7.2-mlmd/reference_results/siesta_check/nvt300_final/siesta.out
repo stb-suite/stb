@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/5.1/example_ref/siesta_check/nvt300_final
+* Directory : /path/to/run/stb/5.1/example_ref/siesta_check/nvt300_final
 * Running on 6 nodes in parallel.
 >> Start of run:  24-OCT-2026  15:06:49
 

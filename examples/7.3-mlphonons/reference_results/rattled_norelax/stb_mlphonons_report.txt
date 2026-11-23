@@ -5,13 +5,13 @@
 Date/time         : 2026-10-28 14:58:47
 Software          : stb 1.9.298, phonopy 4.4.0, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cpu
-Input file        : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/si8_rattled.fdf
+Input file        : /path/to/stb/examples/7.3-mlphonons/si8_rattled.fdf
 Mode              : single-volume
 Supercell dim     : 2 x 2 x 2
 Displacement dist.: 0.01 Ang
 q-mesh / path     : 20 x 20 x 20 (DOS, thermal), 101 points per band segment
 Temperatures      : 0 .. 1000 K, step 10
-Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model)
+Model             : custom (/path/to/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model)
 Report file       : ./stb_mlphonons_report.txt
 
 [1] STRUCTURE
@@ -27,8 +27,8 @@ Supercell         : 2 x 2 x 2 -> 64 atoms; face-to-face widths 10.96, 10.96, 10.
 ------------------------------------------------------------
 
 Model card -- identity
-Card file         : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
-Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model
+Card file         : /path/to/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /path/to/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model
 SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
 Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
 Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)

@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-nebAnalysis (NEB Analysis, item 5.9.2). Uses stb-neb
@@ -92,6 +95,7 @@ printf 'siesta: FreeEng =    -298.700000\nsiesta: Atomic forces (eV/Ang):\n   Ma
 printf 'siesta: FreeEng =    -299.100000\nSCF cycle converged after 12 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n' > neb_run/cycle_00/image_03/calc.out
 printf 'siesta: FreeEng =    -299.900000\nSCF cycle converged after 12 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n' > neb_run/cycle_00/image_04/calc.out
 
+rm -f stb_nebAnalysis_report*.txt stb_nebAnalysis_references*.bib
 stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz --no-intro > log_analysis.txt 2>&1
 check_exit_code $? 0
 check_contains "\[NOTE\] Analyzing 'cycle_00' -- NOT YET CONVERGED" log_analysis.txt
@@ -106,31 +110,31 @@ check_contains "residual force above --force-tolerance.*image_02" log_analysis.t
 check_success neb_run/plot/neb_curve.dat
 check_success neb_run/plot/neb_curve.gplot
 check_success neb_run/neb_energy_profile.png
-check_success neb_run/neb_report.txt
-check_contains "\[0\] RUN METADATA" neb_run/neb_report.txt
-check_contains "\[1\] IMAGE ENERGIES" neb_run/neb_report.txt
-check_contains "\[2\] CONSISTENCY CHECKS" neb_run/neb_report.txt
-check_contains "\[3\] BARRIER ANALYSIS" neb_run/neb_report.txt
-check_contains "\[4\] ENERGY PROFILE PLOT" neb_run/neb_report.txt
-check_contains "\[5\] SUMMARY" neb_run/neb_report.txt
-check_contains "\[7\] LIBRARY WARNINGS" neb_run/neb_report.txt
+check_success stb_nebAnalysis_report.txt
+check_contains "\[0\] RUN METADATA" stb_nebAnalysis_report.txt
+check_contains "\[1\] IMAGE ENERGIES" stb_nebAnalysis_report.txt
+check_contains "\[2\] CONSISTENCY CHECKS" stb_nebAnalysis_report.txt
+check_contains "\[3\] BARRIER ANALYSIS" stb_nebAnalysis_report.txt
+check_contains "\[4\] ENERGY PROFILE PLOT" stb_nebAnalysis_report.txt
+check_contains "\[5\] SUMMARY" stb_nebAnalysis_report.txt
+check_contains "\[7\] LIBRARY WARNINGS" stb_nebAnalysis_report.txt
 echo "Testing: gnuplot .dat energy is relative to the first point (image_00), not absolute"
 check_contains "0.615000  0.500000" neb_run/plot/neb_curve.dat
 echo "Testing: >=4 images with distinct reaction coords -> gnuplot smooth line present"
 check_contains "smooth csplines" neb_run/plot/neb_curve.gplot
 
 echo "Testing: consistency checks all pass for a clean, freshly-fabricated band"
-check_contains "\[OK\] Image count" neb_run/neb_report.txt
-check_contains "\[OK\] Reaction coordinate is strictly increasing" neb_run/neb_report.txt
-check_contains "\[OK\] All 5 image(s) share the same composition" neb_run/neb_report.txt
-check_contains "\[OK\] Recomputed path length" neb_run/neb_report.txt
+check_contains "\[OK\] Image count" stb_nebAnalysis_report.txt
+check_contains "\[OK\] Reaction coordinate is strictly increasing" stb_nebAnalysis_report.txt
+check_contains "\[OK\] All 5 image(s) share the same composition" stb_nebAnalysis_report.txt
+check_contains "\[OK\] Recomputed path length" stb_nebAnalysis_report.txt
 
 echo "Testing: only 1 complete cycle so far -- no convergence-history plot yet"
-check_contains "Not enough complete cycles yet" neb_run/neb_report.txt
+check_contains "Not enough complete cycles yet" stb_nebAnalysis_report.txt
 
 echo "Testing: --save-path-xyz writes the currently-analyzed (not-yet-converged) band"
-check_contains "\[6b\] PATH EXPORT" neb_run/neb_report.txt
-check_contains "\[Saved\] neb_run/neb_path_current.xyz (5 frame(s), NOT YET CONVERGED" neb_run/neb_report.txt
+check_contains "\[6b\] PATH EXPORT" stb_nebAnalysis_report.txt
+check_contains "\[Saved\] neb_run/neb_path_current.xyz (5 frame(s), NOT YET CONVERGED" stb_nebAnalysis_report.txt
 check_success neb_run/neb_path_current.xyz
 n_frames=$(grep -c "^9$" neb_run/neb_path_current.xyz)
 if [ "$n_frames" -eq 5 ]; then
@@ -168,6 +172,7 @@ check_contains "with linespoints" tiny/neb_run/plot/neb_curve.gplot
 
 
 # --- 2b. Mode 1 (MACE-MP-0) -sourced band gets the stronger caveat wording ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --mode 1 caveat wording ---"
 mkdir -p mode1
 cp initial.fdf final.fdf calc.fdf mode1/
@@ -183,11 +188,22 @@ cp initial.fdf final.fdf calc.fdf mode1/
     stb-nebAnalysis --dir neb_run --save-path-xyz --no-intro > log_mode1_analysis.txt 2>&1
 )
 check_contains "already converged a real climbing-image band on MACE-MP-0" mode1/log_mode1_analysis.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: mode 1's images live directly under the root (no cycle_NN/ nesting)"
 check_success mode1/neb_run/image_02/calc.out
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --save-path-xyz on mode 1 (single-point on Stage 1's MACE-MP-0 path)"
 check_contains "single-point on Stage 1's MACE-MP-0 path" mode1/log_mode1_analysis.txt
 check_success mode1/neb_run/neb_path_current.xyz
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 2d. Mode 2: multi-cycle auto-discovery + convergence-history plot ---
@@ -204,6 +220,7 @@ cp initial.fdf final.fdf calc.fdf mode2/
     printf 'siesta: FreeEng =    -299.300000\nSCF cycle converged after 12 iterations\n' > neb_run/cycle_00/image_03/calc.out
     printf 'siesta: FreeEng =    -299.900000\nSCF cycle converged after 12 iterations\n' > neb_run/cycle_00/image_04/calc.out
 )
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: only cycle_00 exists -> analyzed, correctly flagged NOT YET CONVERGED"
 (cd mode2 && stb-nebAnalysis --dir neb_run --no-intro > log_mode2_analysis1.txt 2>&1)
 check_contains "\[NOTE\] Analyzing 'cycle_00' -- NOT YET CONVERGED" mode2/log_mode2_analysis1.txt
@@ -215,19 +232,23 @@ printf 'siesta: FreeEng =    -299.650000\nSCF cycle converged after 12 iteration
 printf 'siesta: FreeEng =    -298.900000\nSCF cycle converged after 12 iterations\n' > mode2/neb_run/cycle_01/image_02/calc.out
 printf 'siesta: FreeEng =    -299.350000\nSCF cycle converged after 12 iterations\n' > mode2/neb_run/cycle_01/image_03/calc.out
 printf 'siesta: FreeEng =    -299.900000\nSCF cycle converged after 12 iterations\n' > mode2/neb_run/cycle_01/image_04/calc.out
+rm -f mode2/stb_nebAnalysis_report*.txt mode2/stb_nebAnalysis_references*.bib
 (cd mode2 && stb-nebAnalysis --dir neb_run --save-report --no-intro > log_mode2_analysis2.txt 2>&1)
 check_contains "\[NOTE\] Analyzing 'cycle_01' -- NOT YET CONVERGED" mode2/log_mode2_analysis2.txt
 check_contains "Highest-energy image (approx. TS) : image_02  (E = -298.900000 eV)" mode2/log_mode2_analysis2.txt
 
 echo "Testing: barrier-vs-cycle convergence-history plot, 2 complete cycles"
-check_contains "\[3b\] BARRIER VS. CYCLE" mode2/neb_run/neb_report.txt
+check_contains "\[3b\] BARRIER VS. CYCLE" mode2/stb_nebAnalysis_report.txt
 check_success mode2/neb_run/neb_cycle_convergence.png
 check_success mode2/neb_run/neb_energy_profile.png
-check_contains "cycle_00: forward barrier" mode2/neb_run/neb_report.txt
-check_contains "cycle_01: forward barrier" mode2/neb_run/neb_report.txt
+check_contains "cycle_00: forward barrier" mode2/stb_nebAnalysis_report.txt
+check_contains "cycle_01: forward barrier" mode2/stb_nebAnalysis_report.txt
 
 echo "Testing: cycle_01 (not cycle_00) reports path-length drift as informational, not a warning"
-check_contains "Path length has evolved by" mode2/neb_run/neb_report.txt
+check_contains "Path length has evolved by" mode2/stb_nebAnalysis_report.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 # --- Regression: stb-nebCycle writes cycle_{N+1}/ (structure.fdf/calc.fdf
 #     only, no calc.out yet -- the NEXT geometry to run SIESTA on) as soon
@@ -235,6 +256,7 @@ check_contains "Path length has evolved by" mode2/neb_run/neb_report.txt
 #     before SIESTA has run in the new folder, must still pick cycle_01
 #     (the latest cycle WITH results), not fail on the freshly-written,
 #     still-empty cycle_02. Live bug, reported against a real 30+-cycle run. ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: a freshly-written NEXT cycle with no calc.out yet doesn't break analysis"
 mkdir -p mode2/neb_run/cycle_02
 for img in image_00 image_01 image_02 image_03 image_04; do
@@ -257,8 +279,9 @@ touch mode2/neb_run/NEB_CONVERGED
 check_contains "\[NOTE\] Analyzing 'cycle_01' -- NEB_CONVERGED." mode2/log_mode2_analysis3.txt
 
 echo "Testing: --save-path-xyz reports NEB_CONVERGED status once the sentinel exists"
+rm -f mode2/stb_nebAnalysis_report*.txt mode2/stb_nebAnalysis_references*.bib
 (cd mode2 && stb-nebAnalysis --dir neb_run --save-report --save-path-xyz --no-intro > log_mode2_analysis_xyz.txt 2>&1)
-check_contains "\[Saved\] neb_run/neb_path_current.xyz (5 frame(s), NEB_CONVERGED)" mode2/neb_run/neb_report.txt
+check_contains "\[Saved\] neb_run/neb_path_current.xyz (5 frame(s), NEB_CONVERGED)" mode2/stb_nebAnalysis_report.txt
 check_success mode2/neb_run/neb_path_current.xyz
 
 echo "Testing: --apply on a mode-2 cycle copies from the auto-discovered cycle_01, not cycle_00"
@@ -274,6 +297,9 @@ cycle1 = structure_io.to_pymatgen(structure_io.read_fdf('mode2/neb_run/cycle_01/
 sys.exit(0 if np.allclose(applied.cart_coords, cycle1.cart_coords) else 1)
 "
 check_exit_code $? 0
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 2e. --apply copies the highest-energy image's structure.fdf (mode 3, root case) ---
@@ -299,7 +325,7 @@ mkdir -p no_setup
 cp -r neb_run/cycle_00/image_00 neb_run/cycle_00/image_01 neb_run/cycle_00/image_02 neb_run/cycle_00/image_03 neb_run/cycle_00/image_04 no_setup/
 (cd no_setup && stb-nebAnalysis --dir . --no-intro > log_fallback.txt 2>&1)
 check_exit_code $? 0
-check_contains "No 'neb_setup.txt' image table found" no_setup/log_fallback.txt
+check_contains "No band record (neb_setup.json) found" no_setup/log_fallback.txt
 check_contains "Highest-energy image (approx. TS) : image_02" no_setup/log_fallback.txt
 
 
@@ -373,7 +399,7 @@ check_contains "save-path-xyz" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.9.2) ---"
 
 echo "Testing: navigate 5.9.2 -> defaults -> quit"
-rm -rf neb_run/plot neb_run/neb_report.txt neb_run/neb_energy_profile.png
+rm -rf neb_run/plot stb_nebAnalysis_report*.txt stb_nebAnalysis_references*.bib neb_run/neb_energy_profile.png
 # 5.9.2 (menu code) / neb_run (dir) / "" (out_file default) / "" (force-
 # tolerance default) / "" (apply_target: skip) / "" (save_gnuplot: skip) /
 # "" (view_plots: skip) / "" (view_path: skip) / "" (Press Enter to

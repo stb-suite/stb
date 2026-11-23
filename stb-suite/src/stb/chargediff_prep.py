@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -40,6 +40,7 @@ DIPOLE_CORRECTION_BLOCK/VDW_CORRECTION_BLOCK for the reused blocks.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -55,9 +56,10 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, fdf_directives, kspace
 from stb.core import adsorption_sites
-from stb.core.bsse import make_ghost_variant
+from stb.core.bsse import make_ghost_variant, species_block_overrides
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import copy_pseudo, resolve_pseudo_source, pseudo_valence, BANKS
+from stb.core.pseudopotentials import (BANK_HELP, copy_pseudo, resolve_pseudo_source, pseudo_valence,
+                                       pseudo_source_name)
 from stb.core import citations
 
 DEFAULT_MESH_CUTOFF_RY = 400.0
@@ -70,8 +72,7 @@ DEFAULT_MESH_CUTOFF_RY = 400.0
 # element, is used to mark a ghost atom.
 GHOST_OCCUPANCY_FRACTION = 0.15
 
-REPORT_FILE = "chargediff_prep_report.txt"
-BIB_FILE = "references.bib"
+REPORT_FILE = "stb_chargediffPrep_report.txt"
 CONFIG_EXTRA_FILE = "config_extra.fdf"
 CHARGEDIFF_MANIFEST_FILE = "chargediff_manifest.json"
 
@@ -446,8 +447,13 @@ def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutof
         config_extra += adsorption_sites.SPIN_POLARIZED_BLOCK
     if dipole_corrected:
         config_extra += adsorption_sites.DIPOLE_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DIPOLE_BENGTSSON)
     if vdw_corrected:
         config_extra += adsorption_sites.VDW_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DFT_D3)
+    config_extra += species_block_overrides(calc_text, structure_io.species_list(fdf_structure))
     config_extra_path = os.path.join(out_dir, CONFIG_EXTRA_FILE)
     with open(config_extra_path, "w") as f:
         f.write(config_extra)
@@ -461,7 +467,7 @@ def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutof
         if strip_ghost_only:
             source_label = label[:-len("_ghost")] if label.endswith("_ghost") else label
         else:
-            source_label = structure_io.real_element(label, fdf_structure.species_meta)
+            source_label = pseudo_source_name(pp_path, label, fdf_structure.species_meta)
         copy_pseudo(pp_path, source_label, out_dir, dest_label=label)
         pseudo_labels.append(label)
 
@@ -533,10 +539,13 @@ def main():
                               "for a finer grid (recommended for a production CDD map) or type a "
                               "different value here.")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
-                         help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                         help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                               "folder path (same convention as stb-adsorb/stb-her/stb-hubbardu). "
                               "Default: reuse the directory --structure lives in, which already "
-                              "has every pseudopotential the combined calculation needed.")
+                              "has every pseudopotential the combined calculation needed. For "
+                              "each species label the file named after the label (without a "
+                              "'_ghost' suffix: 'Ag_slab.psml' for Ag_slab and Ag_slab_ghost) is "
+                              "used when the folder has one, else the element's ('Ag.psml').")
 
     parser.add_argument("--force-spin", dest="force_spin", action="store_true", default=None,
                          help="Force spin-polarized SCF in every fragment folder (default: "
@@ -572,7 +581,7 @@ def main():
     parser.add_argument("--png", action="store_true",
                          help="Save that figure as <output-dir>/chargediff_fragments.png. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-chargediffPrep {VERSION}")
 
@@ -583,11 +592,11 @@ def main():
             "Siesta ToolBox Suite - Charge Density Difference (Prep)",
             "Writes one ghosted SIESTA fragment folder per N-fragment split",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("chargediffPrep")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== CHARGE DENSITY DIFFERENCE -- STAGE 1: PREP =====", 'magenta'), f_out)
@@ -730,10 +739,15 @@ def main():
         elements = [structure_io.real_element(labeled_structure.atoms[i][0], labeled_structure.species_meta) for i in idx]
         formula = "".join(f"{el}{elements.count(el) if elements.count(el) > 1 else ''}" for el in sorted(set(elements)))
         valence = 0.0
-        for el in set(elements):
-            zval, _src = pseudo_valence(el, pseudo_source or combined_dir)
+        fragment_labels = [labeled_structure.atoms[i][0] for i in idx]
+        for lab in set(fragment_labels):
+            zval, _src = pseudo_valence(
+                pseudo_source_name(pp_path, lab, labeled_structure.species_meta), pp_path)
+            if zval is None:
+                zval, _src = pseudo_valence(
+                    structure_io.real_element(lab, labeled_structure.species_meta), pp_path)
             if zval is not None:
-                valence += zval * elements.count(el)
+                valence += zval * fragment_labels.count(lab)
         total_valence += valence
         rows.append(([name + "/", formula, str(len(idx)), f"{idx[0] + 1}-{idx[-1] + 1}" if idx == list(range(idx[0], idx[-1] + 1)) else "non-contiguous",
                       ", ".join(sorted(labels)), f"{valence:g}"], None))
@@ -886,9 +900,9 @@ def main():
     # --- [6] REFERENCES. ---
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations written to '{os.path.join(args.output_dir, BIB_FILE)}'.", 'green'), f_out)
+        f"[OK] Citations written to '{citations.run_references_path()}'.", 'green'), f_out)
 
     # --- [7] SUMMARY & NEXT STEPS. ---
     print_section("[7] SUMMARY & NEXT STEPS", f_out)

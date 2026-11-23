@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import xml.etree.ElementTree as ET
 import numpy as np
@@ -23,7 +24,6 @@ from stb.core.orbitals import ORBITAL_MAP, ORBITAL_ORDER, get_orbital_name, get_
 from stb.core.siesta_bands import read_data as read_bands_data, read_eig_mesh, cbm_vbm
 
 REPORT_FILE = "stb_dos_report.txt"
-BIB_FILE = "references.bib"
 
 
 def parse_data_string(data_str):
@@ -683,7 +683,7 @@ def main():
                              "Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .gplot gnuplot script next to every .dat file "
@@ -710,7 +710,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     try:
@@ -743,7 +743,7 @@ def main():
         print(f"Error: Could not create output directory '{args.output_dir}': {e}", file=sys.stderr)
         sys.exit(1)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("dos")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-DOS REPORT =====", 'magenta'), f_out)
@@ -826,10 +826,10 @@ def main():
 
     print_section("[4] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -837,7 +837,7 @@ def main():
         print_dual(f"Data file      : {path}", f_out)
     for path in gplot_files:
         print_dual(f"Gnuplot script : {path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

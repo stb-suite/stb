@@ -484,7 +484,7 @@ The warnings include:
 | `neb_band.dat` (`neb_band_foundation.dat`): image, `s`, `E − E0`, `max\|F\|`, shortest distance, shift | `--save-data` |
 | `plot/band_K.dat`, `plot/spline_K.dat`, `plot/convergence_K.dat`, `plot/neb_profile.gplot`, `plot/neb_profile.pdf` | `--save-gnuplot` (the PDF when gnuplot is installed) |
 | `image_NN.fdf` (bare structures, e.g. for `stb-neb`) | `--save-images` |
-| `stb_mlneb_report.txt` | `--save-report` |
+| `stb_mlneb_report.txt` | always |
 | `siesta_check/image_NN/` (SIESTA inputs + stamp) | `--siesta-check` |
 | `<workflow run>/configs_round_NN/neb_<out>/image_II[_rattle_K]/`, and the updated `mlff_workflow.json` (+ `.bak`) | `--to-mlff` |
 
@@ -512,13 +512,13 @@ Everything else goes into `-o/--output-dir` (default `mlneb_out`).
 
 ```bash
 # a first look with the foundation model
-stb-mlneb --initial vac_initial.fdf --final vac_final.fdf --model medium --device cuda --save-report
+stb-mlneb --initial vac_initial.fdf --final vac_final.fdf --model medium --device cuda
 
 # a fine-tuned model, its committee and a SIESTA check of every image (first pass: writes the folders)
 stb-mlneb --initial vac_initial.fdf --final vac_final.fdf \
           --custom-model best_model/mlff_model_compiled.model --custom-model-card best_model/mlff_model_card.json \
           --mlff-workflow mlff_runs/mlff_workflow.json --siesta-check --siesta-check-images all \
-          --device cuda -o neb_r2 --save-data --save-gnuplot --save-report
+          --device cuda -o neb_r2 --save-data --save-gnuplot
 for d in neb_r2/siesta_check/image_*/; do (cd $d && mpirun -np 6 siesta < calc.fdf > siesta.out); done
 
 # second pass: the same command reads them; --to-mlff sends the band to the next training round
@@ -576,7 +576,7 @@ replays it without the 2 GB (section 11).
 stb-mlneb --initial vac_initial.fdf --final vac_final.fdf \
           --custom-model best_model/mlff_model_compiled.model --custom-model-card best_model/mlff_model_card.json \
           --mlff-workflow mlff_runs/mlff_workflow.json --siesta-check --siesta-check-images all \
-          --skip-foundation-comparison --device cuda -o neb_r2 --save-data --save-report
+          --skip-foundation-comparison --device cuda -o neb_r2 --save-data
 ```
 
 **Endpoints.** The hand-built vacancy is not a minimum: the model relaxes the three atoms around it by 0.13 Å
@@ -894,7 +894,7 @@ medium) · `--custom-model PATH` + `--custom-model-card JSON` (always both) · `
 (default 7, ≥ 3) · `--autosort-tol Å` (0.5) · `--no-idpp` · `--idpp-fmax eV/Å` (0.1) · `--idpp-steps N` (100) ·
 `--no-pre-relax-endpoints` · `--freeze-substrate` · `--freeze-threshold Å` (0.3) · `--k eV/Å²` (0.1) · `--fmax eV/Å`
 (0.05) · `--max-steps N` (200, both stages) · `--device {cpu,cuda}` · `-o/--output-dir DIR` (default `mlneb_out`) ·
-`--show` · `--save-gnuplot` · `--save-data` · `--save-images` · `--save-report` · `--no-intro` · `-v`.
+`--show` · `--save-gnuplot` · `--save-data` · `--save-images` · `--no-intro` · `-v`.
 
 ## 13. What's next
 

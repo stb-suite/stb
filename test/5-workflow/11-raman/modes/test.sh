@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-ramanModes (Raman Spectrum, Stage 2: Modes & Optical
@@ -104,9 +107,10 @@ check_contains "run stb-raman" log_no_stage1.txt
 # --- 3. Normal generation: 3 selected modes ---
 echo -e "\n--- Testing default generation (--modes 1 2 3) ---"
 make_phonon_disp
+rm -f stb_ramanModes_report*.txt stb_ramanModes_references*.bib
 stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 3 --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "Force files found : 84" log_basic.txt
+check_contains "Force files found : 42" log_basic.txt
 check_contains "FORCE_SETS       : generated successfully" log_basic.txt
 check_contains "Dimensionality    : 3D (bulk material)" log_basic.txt
 check_contains "Non-acoustic Gamma modes : 39" log_basic.txt
@@ -117,18 +121,18 @@ check_success raman_study/optical_disp/mode_01_plus_x/calc.fdf
 check_success raman_study/optical_disp/mode_01_minus_z/structure.fdf
 check_success raman_study/optical_disp/mode_01_plus_x/O.psf
 check_success raman_study/optical_disp/mode_01_plus_x/Sn.psf
-check_contains "OpticalCalculation T" raman_study/optical_disp/mode_01_plus_x/calc.fdf
+check_contains "OpticalCalculation T" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
 check_contains "Optical.PolarizationType    polarized" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
-check_contains "Optical.Vector" raman_study/optical_disp/mode_01_plus_x/calc.fdf
-check_contains "MD.TypeOfRun.*CG" raman_study/optical_disp/mode_01_plus_x/calc.fdf
+check_contains "Optical.Vector" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
+check_contains "MD.TypeOfRun.*CG" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
 check_contains "MD.Steps.*0" raman_study/optical_disp/mode_01_plus_x/calc.fdf
-check_contains "MODE_TABLE" raman_study/raman_stage2.txt
-check_contains "\[2\] PSEUDOPOTENTIALS" raman_study/raman_stage2.txt
-check_contains "Elements needed   : O, Sn" raman_study/raman_stage2.txt
-check_contains "reused from Stage 1's disp-\* folders" raman_study/raman_stage2.txt
-check_contains "Found all required" raman_study/raman_stage2.txt
-check_contains "O.psf" raman_study/raman_stage2.txt
-check_contains "Sn.psf" raman_study/raman_stage2.txt
+check_success raman_study/raman_modes.json
+check_contains "\[3\] PSEUDOPOTENTIALS" stb_ramanModes_report.txt
+check_contains "Elements needed   : O, Sn" stb_ramanModes_report.txt
+check_contains "reused from Stage 1's disp-\* folders" stb_ramanModes_report.txt
+check_contains "Found all required" stb_ramanModes_report.txt
+check_contains "O.psf" stb_ramanModes_report.txt
+check_contains "Sn.psf" stb_ramanModes_report.txt
 
 echo "Testing: mode_01_plus_x and mode_01_plus_y share the SAME displaced structure (only Optical.Vector differs)"
 python3 -c "
@@ -163,7 +167,7 @@ echo -e "\n--- Testing --freq-min/--freq-max filtering ---"
 make_phonon_disp
 stb-ramanModes --directory raman_study --calc calc.fdf --freq-min 1.0 --no-intro > log_freqfilter.txt 2>&1
 check_exit_code $? 0
-check_contains "Selected modes    : 1" log_freqfilter.txt
+check_contains "Selected modes    : 2" log_freqfilter.txt
 
 
 # --- 4b. Missing pseudopotentials in Stage 1's disp-* folders -> hard error, not silent ---
@@ -196,7 +200,7 @@ check_success raman_study/optical_disp/mode_01_plus_yz/structure.fdf
 check_success raman_study/optical_disp/mode_01_minus_xy/structure.fdf
 
 echo "Testing: mode_01_plus_xy uses the (x+y)/sqrt(2) Optical.Vector direction"
-check_contains "0.7071  0.7071  0.0000" raman_study/optical_disp/mode_01_plus_xy/calc.fdf
+check_contains "0.7071  0.7071  0.0000" raman_study/optical_disp/mode_01_plus_xy/config_extra.fdf
 
 
 # --- 5a2. --export-animations: looping .axsf per selected mode ---
@@ -205,7 +209,7 @@ make_phonon_disp
 stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 --export-animations \
     --animation-frames 8 --no-intro > log_animations.txt 2>&1
 check_exit_code $? 0
-check_contains "Mode animations   : 2 .axsf file(s), 8 frames each." log_animations.txt
+check_contains "Mode animations   : 2 .axsf file(s) under 'raman_study/optical_disp', 8 frames each." log_animations.txt
 check_success raman_study/optical_disp/mode_01_animation.axsf
 check_success raman_study/optical_disp/mode_02_animation.axsf
 
@@ -228,6 +232,7 @@ check_contains "OK" log_animations_check.txt
 # degenerate optical mode is T2g (Si's actual, experimentally known Raman
 # mode) -- this is the mandatory correctness gate for --use-symmetry's group
 # theory (see core/raman_symmetry.py's own docstring for the derivation).
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing core.raman_symmetry.classify_modes() against known silicon (Oh) result ---"
 python3 - <<'PYEOF' > log_symmetry_gate.txt 2>&1
 import numpy as np
@@ -269,6 +274,9 @@ assert len(optical) == 1 and optical[0].label == "T2g" and optical[0].is_raman_a
 print("SYMMETRY_GATE_OK")
 PYEOF
 check_contains "SYMMETRY_GATE_OK" log_symmetry_gate.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5b-2. core.raman_symmetry correctness gate: graphene (2D, point group D6h) ---
@@ -280,6 +288,7 @@ check_contains "SYMMETRY_GATE_OK" log_symmetry_gate.txt
 # Raman-SILENT (not in D6h's quadratic basis) -- neither is a centrosymmetric
 # g/u-only shortcut result, so this also exercises the general (non-g/u)
 # path of the reduction formula on a real, physically meaningful case.
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing core.raman_symmetry.classify_modes() against known graphene (D6h) result ---"
 python3 - <<'PYEOF' > log_symmetry_gate_2d.txt 2>&1
 import numpy as np
@@ -321,6 +330,9 @@ assert len(e2g) == 1 and e2g[0].is_raman_active is True, f"E2g (G-band) must be 
 print("SYMMETRY_GATE_2D_OK")
 PYEOF
 check_contains "SYMMETRY_GATE_2D_OK" log_symmetry_gate_2d.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5b-3. get_gamma_modes 0D fix: H2O molecule (3 translations + 3 rotations) ---
@@ -330,6 +342,7 @@ check_contains "SYMMETRY_GATE_2D_OK" log_symmetry_gate_2d.txt
 # (rotation) are both far below the genuine vibrational bending/stretching
 # modes (~44.5/111.6/115.2 THz for water). get_gamma_modes must return
 # exactly 3 non-acoustic modes here (the real vibrations), not 6.
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing get_gamma_modes 0D trivial-mode exclusion (H2O molecule) ---"
 python3 - <<'PYEOF' > log_0d_gate.txt 2>&1
 import numpy as np
@@ -380,6 +393,9 @@ assert all(f > 5.0 for f in freqs_after), f"leftover modes must be real vibratio
 print("ZERO_D_FIX_OK")
 PYEOF
 check_contains "ZERO_D_FIX_OK" log_0d_gate.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5b-4. core.raman_symmetry.tensor_form() correctness gate: water (C2v/mm2) ---
@@ -394,6 +410,7 @@ check_contains "ZERO_D_FIX_OK" log_0d_gate.txt
 # the diagonal-only x/y/z probe set, so there's nothing to reduce to
 # without it -- correctly declining is just as important a check here as
 # succeeding).
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing core.raman_symmetry.tensor_form() against known water (C2v) result ---"
 python3 - <<'PYEOF' > log_tensor_form_gate.txt 2>&1
 import numpy as np
@@ -450,6 +467,9 @@ assert abs(t0[1, 2]) > 1e-3 and abs(t0[0, 1]) < 1e-6 and abs(t0[0, 2]) < 1e-6, \
 print("TENSOR_FORM_GATE_OK")
 PYEOF
 check_contains "TENSOR_FORM_GATE_OK" log_tensor_form_gate.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5c. --use-symmetry CLI wiring (Sn3O4 fixture) ---
@@ -464,7 +484,7 @@ make_phonon_disp
 stb-ramanModes --directory raman_study --calc calc.fdf --use-symmetry --no-intro > log_symmetry.txt 2>&1
 check_exit_code $? 0
 check_contains "\[1b\] SYMMETRY ANALYSIS" log_symmetry.txt
-check_contains "Point group       : 1" log_symmetry.txt
+check_contains "Point group       : -1" log_symmetry.txt
 check_contains "Symmetry-forbidden (Raman-inactive) : 0/39" log_symmetry.txt
 
 echo "Testing: --use-symmetry + explicit --modes is informational only, never auto-skips"
@@ -513,8 +533,9 @@ check_contains "Folders to write  : 2 modes x 2 signs x 3 axes = 12" log_skipdeg
 
 echo "Testing: no DERIVED row is written when nothing was collapsed"
 python3 -c "
-from stb.raman_analysis import read_mode_table, group_by_mode
-rows = read_mode_table('raman_study/raman_stage2.txt')
+import json
+from stb.raman_analysis import group_by_mode
+rows = json.load(open('raman_study/raman_modes.json'))['modes']
 modes = group_by_mode(rows)
 derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
 assert derived == {}, f'unexpected derived mode(s): {derived}'
@@ -529,6 +550,7 @@ check_contains "OK" log_skipdeg_noop_check.txt
 # directly as an ML-sourced (embedded force_constants) phonopy_disp.yaml,
 # same has_embedded_fc path stb-mlphonons produces, so no SIESTA .FA/
 # FORCE_SETS extraction or real stb-raman Stage 1 run is needed.
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --skip-degenerate against a real doubly-degenerate mode (graphene E2g) ---"
 rm -rf raman_study
 python3 - <<'PYEOF' > log_skipdeg_fixture.txt 2>&1
@@ -582,10 +604,11 @@ print('OK')
 " > log_skipdeg_folders.txt 2>&1
 check_contains "OK" log_skipdeg_folders.txt
 
-echo "Testing: MODE_TABLE records the derived mode against a fully-computed representative"
+echo "Testing: the modes JSON records the derived mode against a fully-computed representative"
 python3 -c "
-from stb.raman_analysis import read_mode_table, group_by_mode
-rows = read_mode_table('raman_study/raman_stage2.txt')
+import json
+from stb.raman_analysis import group_by_mode
+rows = json.load(open('raman_study/raman_modes.json'))['modes']
 modes = group_by_mode(rows)
 derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
 assert len(derived) == 1, f'expected exactly 1 derived mode, got {derived}'
@@ -597,13 +620,16 @@ print('OK')
 check_contains "OK" log_skipdeg_table.txt
 
 echo "Testing: --skip-degenerate + --use-symmetry together (E2g pair survives, B1g filtered out)"
-rm -rf raman_study/optical_disp raman_study/raman_stage2.txt
+rm -rf raman_study/optical_disp stb_ramanModes_report*.txt stb_ramanModes_references*.bib
 stb-ramanModes --directory raman_study --calc calc.fdf --pseudo-dir . --use-symmetry --skip-degenerate \
     --no-intro > log_skipdeg_sym.txt 2>&1
 check_exit_code $? 0
 check_contains "Selected modes    : 2" log_skipdeg_sym.txt
 check_contains "E2g" log_skipdeg_sym.txt
 check_contains "Degenerate groups : 1 mode(s) skipped" log_skipdeg_sym.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 6. Error cases ---
@@ -647,6 +673,7 @@ make_phonon_disp
   echo "y"              # skip_degenerate_choice -> Y (no-op on this asymmetric fixture)
   echo ""               # displacement (default 0.02)
   echo "y"              # animations_choice -> Y
+  echo ""              # view_animation_choice (default N)
   echo ""               # animation_frames (default 20)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
@@ -668,6 +695,7 @@ make_phonon_disp
   echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
   echo ""               # animations_choice (default N)
+  echo ""               # view_animation_choice (default N)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
@@ -688,6 +716,7 @@ make_phonon_disp
   echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
   echo ""               # animations_choice (default N)
+  echo ""               # view_animation_choice (default N)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
@@ -706,9 +735,11 @@ make_phonon_disp
   echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
   echo ""               # animations_choice (default N)
+  echo ""               # view_animation_choice (default N)
   echo "y"              # show_advanced -> Y
   echo "8 8 8"           # mesh_input
   echo "0.15"            # optical_broaden
+  echo ""              # scf k-grid of the Optical runs (default: the template's own)
   echo ""                # freq_min (skip)
   echo ""                # freq_max (skip)
   echo ""                # pseudo_dir prompt (skip)

@@ -20,6 +20,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 export MPLBACKEND=Agg           # headless-safe; the PNG figures are written either way
 DEVICE="${DEVICE:-cpu}"
 MODEL="$DIR/../7.2-mlmd/model/mlff_model_compiled.model"
@@ -56,7 +61,7 @@ section() {   # $1 = file, $2 = start of the title
 mlel() {
     local case=$1 file=$2; shift 2
     mkdir -p "$OUT/$case"
-    (cd "$OUT/$case" && stb-mlelastic --file "$file" --device "$DEVICE" -o . --save-report --no-intro "$@" \
+    (cd "$OUT/$case" && stb-mlelastic --file "$file" --device "$DEVICE" -o . --no-intro "$@" \
         < /dev/null > log.txt 2>&1)
 }
 report() { echo "$OUT/$1/stb_mlelastic_report.txt"; }
@@ -87,7 +92,7 @@ si8.fdf is the 8-atom conventional diamond cell at SIESTA's relaxed lattice cons
 first relaxes the cell to ITS OWN stress-free minimum: the fine-tuned model hardly moves it (it reproduces SIESTA),
 the foundation model shrinks it by 1.35 % (its silicon is smaller). Then 6 directions x 5 strains each.
 EOF
-echo "\$ stb-mlelastic --file si8.fdf $FT --steps 5 --save-data --save-gnuplot --save-report"
+echo "\$ stb-mlelastic --file si8.fdf $FT --steps 5 --save-data --save-gnuplot"
 mlel case1_si "$DIR/si8.fdf" $FT --steps 5 --save-data --save-gnuplot
 R1=$(report case1_si)
 section "$R1" "REFERENCE STATE"
@@ -139,7 +144,7 @@ banner "Case 4: the outputs"
 cat <<'EOF'
 PNG figures are always written: stress_strain.png (every fit), directional_moduli.png (polar E and compressibility),
 anisotropy_surface.png (3D E surface). --save-data writes the numbers, --save-gnuplot .dat + .gplot (+ PDF when
-gnuplot is installed), --save-report the report, --show opens the figures. The last section lists every warning.
+gnuplot is installed), the report, --show opens the figures. The last section lists every warning.
 EOF
 ls -1 "$OUT/case1_si" "$OUT/case1_si/plot" | sed 's/^/  /'
 section "$R1" "SUMMARY" | sed -n '1,4p'
@@ -233,10 +238,11 @@ foundation comparison, keep the anisotropy surface, no display, no gnuplot, no d
 EOF
 mkdir -p "$OUT/case11_menu"
 cd "$OUT/case11_menu"
-printf '7.4\n%s\n%s\n\ncpu\n1.0\n5\n\nmenu_out\nn\nn\nn\nn\nn\nn\ny\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
+rm -f stb_mlelastic_report*.txt    # the report goes to the folder the menu runs in
+printf '7.4\n%s\n%s\n\ncpu\n1.0\n5\n\nmenu_out\nn\nn\nn\nn\nn\nn\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
     stb-suite > menu_log.txt 2>&1 || true
 ls -1 menu_out 2>/dev/null | sed 's/^/  /'
-strip_colors < menu_out/stb_mlelastic_report.txt 2>/dev/null | grep -E "^Device|^SHA-256|^Status|^Results" | sed 's/^/  /'
+strip_colors < stb_mlelastic_report.txt 2>/dev/null | grep -E "^Device|^SHA-256|^Status|^Results" | sed 's/^/  /'
 cd "$DIR"
 pause
 

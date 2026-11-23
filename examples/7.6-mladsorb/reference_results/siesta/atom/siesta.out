@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/5.10/siesta/atom
+* Directory : /path/to/run/stb/5.10/siesta/atom
 * Running on 2 nodes in parallel.
 >> Start of run:  30-OCT-2026   9:36:20
 

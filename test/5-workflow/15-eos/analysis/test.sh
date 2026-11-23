@@ -138,6 +138,7 @@ echo "E0=-300 eV, B0=90 GPa, B0'=4.3, V0=160.103 Ang^3, analytic stress tensor).
 
 # --- 2. The report; the fit recovers the known ground truth exactly ---
 echo -e "\n--- Testing the report and that the EOS fit recovers the known synthetic ground truth ---"
+rm -f stb_eosAnalysis_report*.txt stb_eosAnalysis_references*.bib
 stb-eosAnalysis --dir eos_runs --no-intro --save-report > log_fit.txt 2>&1
 check_exit_code $? 0
 for sec in "\[0\] RUN METADATA" "\[1\] SCAN & LEVEL OF THEORY" "\[2\] READING FOLDERS" \
@@ -363,7 +364,7 @@ check_contains "stb-eosAnalysis" log_version.txt
 echo "Testing: --help documents the options"
 stb-eosAnalysis --help > log_help.txt 2>&1
 for opt in "\-\-dir" "\-\-file" "\-\-eos" "target-pressure" "\-\-output" "\-\-show" "\-\-png" "save-gnuplot" \
-           "save-data" "save-report"; do
+           "save-data"; do
     check_contains "$opt" log_help.txt
 done
 

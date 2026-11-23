@@ -35,6 +35,16 @@ check_success() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -208,13 +218,13 @@ check_contains "fmax" log_help.txt
 check_contains "model" log_help.txt
 check_contains "custom-model" log_help.txt
 check_contains "custom-model-card" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-data" log_help.txt
 check_contains "view" log_help.txt
 
 
-# --- 5b. --save-report / --save-data / references.bib / structure validation ---
-echo -e "\n--- Testing --save-report, --save-data, references.bib, and structure validation sections ---"
+# --- 5b. --save-report / --save-data / stb_mlrelax_references.bib / structure validation ---
+echo -e "\n--- Testing --save-report, --save-data, stb_mlrelax_references.bib, and structure validation sections ---"
 rm -rf report_test && mkdir report_test
 (cd report_test && stb-mlrelax -f ../si_ge_defect.fdf --save-report --save-data --no-intro > console.log 2>&1)
 check_success report_test/stb_mlrelax_report.txt
@@ -226,9 +236,9 @@ check_contains "\[OK\]" report_test/stb_mlrelax_report.txt
 check_contains "BEFORE / AFTER COMPARISON" report_test/stb_mlrelax_report.txt
 check_contains "Quantity" report_test/stb_mlrelax_report.txt
 check_contains "Energy (eV)" report_test/stb_mlrelax_report.txt
-check_success report_test/references.bib
-check_contains "Soler2002" report_test/references.bib
-check_contains "Batatia" report_test/references.bib
+check_success report_test/stb_mlrelax_references.bib
+check_contains "Soler2002" report_test/stb_mlrelax_references.bib
+check_contains "Batatia" report_test/stb_mlrelax_references.bib
 check_success report_test/relaxed_relax_convergence.dat
 rm -rf report_test
 

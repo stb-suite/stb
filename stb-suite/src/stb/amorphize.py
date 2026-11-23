@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import os
@@ -29,7 +30,6 @@ from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_sect
 from stb.core.deps import require_mace
 
 REPORT_FILE = "stb_amorphize_report.txt"
-BIB_FILE = "references.bib"
 
 # Same 3-format trajectory choice as stb-ani2traj/stb-mlmd, for OVITO/VMD
 # viewer consistency: xsf (multi-frame AXSF, native to OVITO/VMD's xsf
@@ -213,7 +213,7 @@ vacuum-padded axis is detected.""",
         epilog="Usage examples:\n"
                "  %(prog)s -f bulk_supercell.fdf\n"
                "  %(prog)s -f bulk_supercell.fdf --melt-temp 4000 --quench-steps 2000\n"
-               "  %(prog)s -f bulk_supercell.fdf --save-report --view\n"
+               "  %(prog)s -f bulk_supercell.fdf --view\n"
                "  %(prog)s -f bulk_supercell.fdf --save-data --save-traj --traj-format xsf\n"
                "\n"
                "Notes:\n"
@@ -284,8 +284,7 @@ vacuum-padded axis is detected.""",
                         help="Symmetry tolerance in Angstroms for the before/after "
                              "symmetry analysis (default: 0.01).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry "
-                             f"analysis) to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "crystalline structure and the final amorphized structure "
@@ -307,10 +306,10 @@ vacuum-padded axis is detected.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("amorphize")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-AMORPHIZE REPORT =====", 'magenta'), f_out)
@@ -563,16 +562,16 @@ vacuum-padded axis is detected.""",
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.MACE]
     if not args.custom_model:
         bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[9] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Input file     : {args.filename}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
     print_dual(color_text(

@@ -5,7 +5,7 @@
 Date/time         : 2026-10-28 14:57:10
 Software          : stb 1.9.298, phonopy 4.4.0, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cpu
-Input file        : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/si8.fdf
+Input file        : /path/to/stb/examples/7.3-mlphonons/si8.fdf
 Mode              : QHA (volume scan)
 Supercell dim     : 2 x 2 x 2
 Displacement dist.: 0.01 Ang

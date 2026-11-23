@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -12,6 +12,7 @@
 # emitted during the run instead of letting it leak into the terminal interleaved
 # with the report.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -28,7 +29,7 @@ from stb.core.cli import (color_text, show_intro, print_dual, print_section, pri
                           capture_library_noise)
 from stb.core import model_card
 from stb.core.deps import require_pyxtal, require_mace
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core import structure_io, kspace, mace_relax
 # First reuse of inputfile.py's generate_calculation() as a library call (previously only
 # ever invoked via the stb-inputfile CLI). It writes 'calc.fdf' (and a citations .bib file)
@@ -37,7 +38,7 @@ from stb.core import structure_io, kspace, mace_relax
 # flood this tool's own report.
 from stb.inputfile import generate_calculation
 
-REPORT_FILE = "xrdsearch_stage1.txt"
+REPORT_FILE = "stb_xrdsearch_report.txt"
 MACE_VACUUM_GAP_ANG = 10.0  # matches stb-kgrid/stb-mlrelax's own default
 
 
@@ -203,7 +204,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
     parser.add_argument("-p", "--pseudo-dir", type=str, default="", dest="pseudo_dir",
                         metavar="PATH_OR_BANK",
                         help=f"Pseudopotentials source (optional): a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder path. If given, the required "
+                             f"({BANK_HELP}) or a folder path. If given, the required "
                              "pseudopotential for every species actually present in the cast "
                              "candidates is copied into every candidate folder.")
     parser.add_argument("--view", action="store_true",
@@ -211,8 +212,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
                              "through every candidate structure. Needs a display. Off by "
                              "default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by "
-                             "default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-o", "--output-dir", type=str, default="xrd_search",
                         help="Folder to write candidate structures into (default: xrd_search); "
                              "each candidate gets its own '<output-dir>/<name>/'. Created if it "
@@ -282,7 +282,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -292,7 +292,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
             "different -o to avoid mixing batches.", 'red'))
         sys.exit(1)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("xrdsearch")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

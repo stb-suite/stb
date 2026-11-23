@@ -4,7 +4,8 @@
 # Smoke test for the documentation site (mkdocs.yml + docs/gen_pages.py).
 # Builds the whole site with `mkdocs build --strict` into test_files/site and
 # checks what came out: every menu item has a guide page (a real one from
-# examples/, or a generated stub), every console command has a reference page,
+# examples/; an item without one gets a generated stub, tested on the fixture
+# extension's 5.98), every console command has a reference page,
 # the sidebars follow menu order, links between guides and to the reference
 # were written, build tooling was not published, each README keeps the
 # list/table/code structure GitHub gives it (check_markdown_structure.py), and
@@ -109,12 +110,12 @@ check_success "$SITE_DIR/index.html"
 check_success "$SITE_DIR/guides/index.html"
 check_success "$SITE_DIR/assets/stb-icon.png"
 
-echo "Testing: the home page carries the large 'still under development' notice (and only the home page)"
-check_contains "This version is still under development" "$SITE_DIR/index.html"
+echo "Testing: the home page carries the large 'Stable version X, under testing' notice (and only the home page)"
+check_contains "Stable version [0-9.]*, under testing" "$SITE_DIR/index.html"
 check_contains "Verify every result" "$SITE_DIR/index.html"
 check_contains "dev-notice" "$SITE_DIR/index.html"
 check_success "$SITE_DIR/assets/notice.css"
-check_not_contains "still under development" "$SITE_DIR/guides/index.html"
+check_not_contains "under testing" "$SITE_DIR/guides/index.html"
 
 
 # --- 2. Every menu item has a guide page (real or stub) ---
@@ -126,11 +127,41 @@ check_success "$SITE_DIR/guides/1-inputs/1.3-stb-kgrid/index.html"
 check_success "$SITE_DIR/guides/2-analysis/2.11-stm/index.html"
 check_success "$SITE_DIR/guides/5-workflows/5.8-adsorption/index.html"
 
-echo "Testing: an item with no example gets a generated stub that says so and lists its commands"
-stub="$SITE_DIR/guides/3-utils/3.3-grid-to-cube-converter/index.html"
-check_success "$stub"
-check_contains "no hands-on guide for this tool yet" "$stub"
-check_contains 'href="../../../reference/stb-cube/"' "$stub"
+echo "Testing: every menu item of this repository has a real guide (no stub page, no stub table)"
+stubs_main=$(grep -rl "no hands-on guide for this tool yet" "$SITE_DIR/guides" --include=index.html | wc -l)
+check_equal "$stubs_main" "0" "stub pages in the main site"
+check_not_contains "Tools without a hands-on guide yet" "$SITE_DIR/guides/index.html"
+echo "Testing: 3.3-stb-cube (examples/3.3-stb-cube/) is a real guide, with its figures"
+real33="$SITE_DIR/guides/3-utils/3.3-stb-cube/index.html"
+check_success "$real33"
+check_absent "$SITE_DIR/guides/3-utils/3.3-grid-to-cube-converter"
+check_contains "6.748" "$real33"
+check_success "$SITE_DIR/guides/3-utils/3.3-stb-cube/figures/h2o.png"
+echo "Testing: 3.4-stb-siesta2wtb (examples/3.4-stb-siesta2wtb/) is a real guide, with its figures"
+real34="$SITE_DIR/guides/3-utils/3.4-stb-siesta2wtb/index.html"
+check_success "$real34"
+check_contains "SaveHS" "$real34"
+check_success "$SITE_DIR/guides/3-utils/3.4-stb-siesta2wtb/figures/hbn_bands.png"
+echo "Testing: 3.5-stb-ani2traj (examples/3.5-stb-ani2traj/) is a real guide, with its figures"
+real35="$SITE_DIR/guides/3-utils/3.5-stb-ani2traj/index.html"
+check_success "$real35"
+check_contains "WriteCoorStep" "$real35"
+check_success "$SITE_DIR/guides/3-utils/3.5-stb-ani2traj/figures/thermo.png"
+echo "Testing: 3.6-stb-status (examples/3.6-stb-status/) is a real guide, with its figures"
+real36="$SITE_DIR/guides/3-utils/3.6-stb-status/index.html"
+check_success "$real36"
+check_contains "Final (unrelaxed)" "$real36"
+check_success "$SITE_DIR/guides/3-utils/3.6-stb-status/figures/relax_progress.png"
+echo "Testing: 3.7-stb-archive (examples/3.7-stb-archive/) is a real guide, with its figures"
+real37="$SITE_DIR/guides/3-utils/3.7-stb-archive/index.html"
+check_success "$real37"
+check_contains "SHA256SUMS" "$real37"
+check_success "$SITE_DIR/guides/3-utils/3.7-stb-archive/figures/contents.png"
+echo "Testing: 2.19-stb-nativecharges (examples/2.19-stb-nativecharges/) is a real guide, with its figures"
+real219="$SITE_DIR/guides/2-analysis/2.19-stb-nativecharges/index.html"
+check_success "$real219"
+check_contains "Mulliken" "$real219"
+check_success "$SITE_DIR/guides/2-analysis/2.19-stb-nativecharges/figures/basis_dependence.png"
 echo "Testing: 3.2-stb-clean (examples/3.2-stb-clean/) is a real guide, with its figures"
 real62="$SITE_DIR/guides/3-utils/3.2-stb-clean/index.html"
 check_success "$real62"
@@ -158,7 +189,6 @@ check_contains "5.5 Convergence Tests" "$real45"
 check_contains 'href="../../../reference/stb-convergence/"' "$real45"
 check_contains 'href="../../../reference/stb-convergenceAnalysis/"' "$real45"
 check_not_contains "no hands-on guide for this tool yet" "$real45"
-check_contains "Tools without a hands-on guide yet" "$SITE_DIR/guides/index.html"
 
 echo "Testing: 5.13-gqca shows a figure -- the image is copied next to the page and the link works"
 gqca="$SITE_DIR/guides/5-workflows/5.13-gqca/index.html"
@@ -223,6 +253,25 @@ labels = list(dict.fromkeys(re.findall(r'<span class="md-ellipsis">\s*(4\.\d+) '
 sys.exit(0 if labels == [f"4.{i}" for i in range(1, 13)] else 1)
 PYEOF
 check_exit_code $? 0
+
+
+# --- 3b. Changelog: an overview table and one page per version of stb-suite/CHANGELOG.md ---
+echo -e "\n--- Testing the changelog section ---"
+check_success "$SITE_DIR/changelog/index.html"
+check_absent "$SITE_DIR/changelog.html"
+check_contains 'href="2.1.0/"' "$SITE_DIR/changelog/index.html"
+check_contains 'href="2.0.0/"' "$SITE_DIR/changelog/index.html"
+check_contains "Before 2.0.0" "$SITE_DIR/changelog/index.html"
+check_success "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="fixed"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="changed"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="added"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="known-issues"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_success "$SITE_DIR/changelog/2.0.0/index.html"
+echo "Testing: the per-tool history before 2.0.0 is not published, and the home page links the version's changelog"
+check_not_contains "Last per-tool version of every command" "$SITE_DIR/changelog/2.0.0/index.html"
+check_contains 'href="changelog/2.1.0/"' "$SITE_DIR/index.html"
+check_absent "$SITE_DIR/changelog/SUMMARY"
 
 
 # --- 4. Links between guides and back to GitHub ---
@@ -306,6 +355,13 @@ check_not_contains "/edit/main/" "$demo"
 check_contains "usage: stb-demoext" "$EXT_SITE/reference/stb-demoext/index.html"
 check_contains 'href="../../guides/5-workflows/5.99-demo/"' "$EXT_SITE/reference/stb-demoext/index.html"
 check_contains "5.99.1" "$EXT_SITE/reference/stb-suite/index.html"
+echo "Testing: an item with no example (the fixture's 5.98) gets a generated stub that says so and lists its commands"
+stub="$EXT_SITE/guides/5-workflows/5.98-demo-stub-tool/index.html"
+check_success "$stub"
+check_contains "no hands-on guide for this tool yet" "$stub"
+check_contains 'href="../../../reference/stb-demoext/"' "$stub"
+check_contains "Tools without a hands-on guide yet" "$EXT_SITE/guides/index.html"
+check_contains 'href="5-workflows/5.98-demo-stub-tool/"' "$EXT_SITE/guides/index.html"
 echo "Testing: the regular pages are still there, and the main site (built without the variable) has none of the extension's"
 check_success "$EXT_SITE/guides/1-inputs/1.3-stb-kgrid/index.html"
 check_absent "$SITE_DIR/guides/5-workflows/5.99-demo"

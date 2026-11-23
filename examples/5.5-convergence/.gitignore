@@ -1,2 +1,3 @@
 output/
 convergence_runs/
+/stb_*_report*.txt

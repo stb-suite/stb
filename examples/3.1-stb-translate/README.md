@@ -295,7 +295,7 @@ In batch mode the `INPUT` to `OUTPUT` sections repeat for each file, titled with
 
 ```bash
 stb-translate -i CONTCAR -o structure.fdf                       # both formats from the names
-stb-translate -i siesta.STRUCT_OUT -o relaxed.cif --save-report # a relaxation, for a paper or VESTA
+stb-translate -i siesta.STRUCT_OUT -o relaxed.cif # a relaxation, for a paper or VESTA
 stb-translate -i relaxed.STRUCT_OUT -o relaxed_p1.cif --cif-symprec 0   # the CIF exactly as relaxed
 stb-translate -i POSCAR -o structure.fdf -cf cartesian          # choose the output coordinates
 stb-translate -i water.xyz -o water.fdf --lattice-vectors 15 0 0 0 15 0 0 0 15
@@ -628,7 +628,7 @@ other cases run `stb-translate` on them; Case 12 drives the menu (`stb-suite`, c
   {cif,dftb,fdf,fhi,lammps,poscar,xsf,xyz}` · `--out-dir DIR` (batch);
 - what is written: `-cf/--coord-format {direct,cartesian}` · `--cif-symprec Å` (0.01; 0 = P1 as read) ·
   `--lattice-vectors AX AY AZ BX BY BZ CX CY CZ` (XYZ input);
-- report and viewing: `--dry-run` · `--save-report` · `--view` · `--view-image PATH` · `--no-intro` · `-v`.
+- report and viewing: `--dry-run` · `--view` · `--view-image PATH` · `--no-intro` · `-v`.
 
 ## 14. What's next
 

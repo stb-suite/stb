@@ -22,8 +22,9 @@ from stb.core.deps import require_sisl
 sisl = require_sisl()
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
-REPORT_FILE = "stb_wtb_report.txt"
+REPORT_FILE = "stb_siesta2wtb_report.txt"
 VACUUM_GAP = 4.0              # Ang of empty space that make an axis non-periodic (2D/1D/0D)
 BYTES_PER_LINE = 84           # a tb-*.ham matrix-element line, for the --dry-run size estimate
 NEAR_EF = 5.0                 # eV: the energy window the read-back check is judged on
@@ -60,7 +61,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--dry-run', action='store_true',
                         help='Report only: read the Hamiltonian and say what would be written; write nothing.')
     parser.add_argument('--save-report', action='store_true',
-                        help=f'Also write the report to {REPORT_FILE} (current folder). Off by default.')
+                        help=argparse.SUPPRESS)
     parser.add_argument('-q', '--quiet', action='store_false',
                         help='Suppress terminal animations and colors')
     parser.add_argument("-v", "--version", action="version",
@@ -405,7 +406,9 @@ def main():
         print("\n" + color_text("SIESTA-WANTIBEXOS Interface:", 'bold'))
         print("-"*60)
 
-    buf = io.StringIO() if args.save_report else None
+    buf = io.StringIO()
+
+    report_file = new_report_path("siesta2wtb")
     sec = Sections(buf)
     warnings = []
 
@@ -417,7 +420,7 @@ def main():
 
     def finish(code=0):
         if buf is not None:
-            with open(REPORT_FILE, "w") as fh:
+            with open(report_file, "w") as fh:
                 fh.write(buf.getvalue())
         if code:
             sys.exit(code)
@@ -726,7 +729,7 @@ def main():
     out(f"System            : {''.join(f'{k}{v if v > 1 else str()}' for k, v in counts.items())}, {spin_suffix}, "
         f"{dim} orbitals, {ncell} cells, E_F {fermi:.4f} eV")
     if buf is not None:
-        out(f"Report            : {REPORT_FILE}")
+        out(f"Report            : {report_file}")
 
     sec("WARNINGS")
     if warnings:

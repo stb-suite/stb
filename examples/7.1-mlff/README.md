@@ -420,7 +420,7 @@ and works without the file.
 ```
 mlff_runs/
 ├── mlff_workflow.json            <- the state file (paths relative to it; .bak kept)
-├── stb_mlff_report.txt           <- Stage 1 report (--save-report)
+├── (the Stage 1 report, stb_mlff_report.txt, goes to the current folder)
 ├── coverage/                     <- Stage 1 plots: gnuplot .dat/.gplot + mlff_coverage.png
 ├── configs_round_01/             <- configs that train round 1 (Stage 1)
 │   └── mlff_config_001/ ...      <- calc.fdf  structure.fdf  config_extra.fdf  C.psf  (+ SIESTA output)
@@ -757,7 +757,7 @@ reference cells (here 75 Å), so a folder written with a different grid is flagg
 $ stb-supercell -f graphene.fdf -d 3 3 1 -o structure.fdf        # 18-atom reference
 $ stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault --n-configs 16 \
       --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n-test 9 \
-      --ml-screen --export-traj --save-report
+      --ml-screen --export-traj
 ```
 
 ```
@@ -827,7 +827,7 @@ MD.VariableCell       false
 ### 8.4 Stage 2: round 1
 
 ```
-$ stb-mlffAnalysis --committee 3 --device cpu --save-data --save-report
+$ stb-mlffAnalysis --committee 3 --device cpu --save-data
 ```
 
 ```
@@ -888,7 +888,7 @@ How to read it:
 ### 8.5 Stage 3: round 1 on the test set, phonons, E(V)
 
 ```
-$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --save-data --save-report
+$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --save-data
 ```
 
 ```
@@ -944,7 +944,7 @@ round 1 | 0.48 | 0.33     | 0.60    | -0.22 | 2.15      | 48.33 / 48.31 | +0.37 
 ### 8.6 Stage 4: active learning with molecular dynamics
 
 ```
-$ stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-data --save-report
+$ stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-data
 ```
 
 ```
@@ -1004,8 +1004,8 @@ round 1.
 
 ```
 $ for d in mlff_runs/configs_round_02/mlff_config_*; do (cd $d && mpirun -np 2 siesta < calc.fdf > siesta.out); done
-$ stb-mlffAnalysis --committee 3 --device cpu --init-from previous --save-data --save-report
-$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-data --save-report
+$ stb-mlffAnalysis --committee 3 --device cpu --init-from previous --save-data
+$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-data
 ```
 
 ```
@@ -1088,7 +1088,7 @@ trajectory **run with the model**, whose frames SIESTA then labels:
 $ stb-mlffValidate --md-check --md-check-temperature 600 --md-check-frames 6 --target-force 30
 #   -> mlff_runs/md_check/r02_600K/frame_000 .. frame_005 (recorded as their own set, never the test set)
 $ for d in mlff_runs/md_check/*/frame_*; do (cd $d && mpirun -np 2 siesta < calc.fdf > siesta.out); done
-$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-report
+$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2
 ```
 
 ```
@@ -1270,18 +1270,18 @@ for d in phonons/phonon_runs/disp-* phonons/phonon_runs/perfect_supercell; do
 # --- the workflow: Sections 8.2-8.8, in order -------------------------------------------
 stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault --n-configs 16 \
     --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n-test 9 \
-    --ml-screen --export-traj --save-report
+    --ml-screen --export-traj
 #   SIESTA in mlff_runs/configs_round_01/* and mlff_runs/mlff_test/*
-stb-mlffAnalysis --committee 3 --device cpu --save-data --save-report
-stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --save-data --save-report
-stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-data --save-report
+stb-mlffAnalysis --committee 3 --device cpu --save-data
+stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --save-data
+stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-data
 #   SIESTA in mlff_runs/configs_round_02/*
-stb-mlffAnalysis --committee 3 --device cpu --init-from previous --save-data --save-report
-stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-data --save-report
+stb-mlffAnalysis --committee 3 --device cpu --init-from previous --save-data
+stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-data
 python phonon_dispersion_compare.py --phonon-dir phonons/phonon_runs --rounds 1 2 -o figures/phonon_dispersion.png
 stb-mlffValidate --md-check --md-check-temperature 600 --md-check-frames 6 --target-force 30
 #   SIESTA in mlff_runs/md_check/*/frame_*
-stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-report
+stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2
 ```
 
 Training is stochastic (seeds fix the splits and the initial order, but threads on
@@ -1412,7 +1412,7 @@ cd ../run && stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault -o
 % ...` · `--n-test N` (0) · `--from-aimd LABEL` + `--n-samples N` · `--d3` · `-o DIR`
 (`mlff_runs`) · `--workflow JSON` · `--seed N` (42) · `--ml-screen` + `--ml-model` +
 `--ml-device` · `--dup-threshold X` (0.25) · `--export-traj [FILE]` · `--no-plots` ·
-`--show` · `--view` · `--save-report` · `--no-intro` · `-v`.
+`--show` · `--view` · `--no-intro` · `-v`.
 
 **`stb-mlffAnalysis`** (Stage 2) — `--workflow JSON` · `--path GLOB` · `--skip-unlabelled`
 · `--committee M` (3) · `--make-cards [ROUND]` (cards only, no training) · `--cv K` · `--foundation-model {small,medium,large}` (medium) ·
@@ -1421,7 +1421,7 @@ cd ../run && stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault -o
 `--no-stress-training` · `--valid-fraction F` · `--device {cpu,cuda}` (auto) · `--name` ·
 `--seed N` (123) · `-o DIR` · `--skip-foundation-comparison` · `--no-stability` ·
 `--stability-temperature K` · `--stability-steps N` · `--view-worst N` · `--show` ·
-`--save-data` · `--export-lammps` · `--save-report` · `--no-intro` · `-v`.
+`--save-data` · `--export-lammps` · `--no-intro` · `-v`.
 
 **`stb-mlffValidate`** (Stage 3) — `--workflow JSON` · `--rounds K ...` · `--detail-round K`
 · `--model PATH ...` · `--test-path GLOB` · `--phonon-ref DIR` + `--phonon-mesh NA NB NC` ·
@@ -1429,7 +1429,7 @@ cd ../run && stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault -o
 `--skip-foundation-comparison` · `--device` (cpu) · `--png FILE` · `--show` ·
 `--save-data` · `--view-worst N` · `--compare A B` · `--md-check` +
 `--md-check-temperature K` (300) + `--md-check-steps N` (2000) + `--md-check-frames N`
-(8) + `--md-check-supercell NA NB NC` · `--md-check-to-train` · `--save-report` ·
+(8) + `--md-check-supercell NA NB NC` · `--md-check-to-train` ·
 `--no-intro` · `-v`.
 
 **`stb-mlffActiveLearning`** (Stage 4) — `--workflow JSON` · `--round K` · `--model PATH
@@ -1441,7 +1441,7 @@ cd ../run && stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault -o
 `--n-candidates N` · `--top-k N` (5) · `--min-novelty X` · `--train-path GLOB` ·
 `--max-force eV/Å` (15) · `--max-energy meV/atom` (1000) · `--frontier F` (1.5) ·
 `--target-force meV/Å` · `--d3` · `--seed N` (42) · `--device` (cpu) · `-o DIR` ·
-`--dry-run` · `--show` · `--save-data` · `--view-picks` · `--save-report` ·
+`--dry-run` · `--show` · `--save-data` · `--view-picks` ·
 `--no-intro` · `-v`.
 
 ## 16. What's next

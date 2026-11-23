@@ -1,4 +1,5 @@
 output/
-references.bib
+stb_*_references*.bib
 stb_symmetry_report.txt
 refined*.fdf
+stb_*_report*.txt

@@ -75,13 +75,14 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. 3D fixture (simple-cubic, bipartite) ---
 echo -e "\n--- Testing 3D fixture (cubic.fdf, Na sublattice -> K) ---"
 rm -rf gqca_study_cubic
+rm -f stb_gqca_report*.txt stb_gqca_references*.bib
 stb-gqca -f cubic.fdf --sublattice Na --species-b K -c calc.fdf -p . \
     -O gqca_study_cubic --no-intro > log_cubic.txt 2>&1
 check_exit_code $? 0
 check_success gqca_study_cubic/cluster_n0/structure.fdf
 check_success gqca_study_cubic/cluster_n1/structure.fdf
 check_success gqca_study_cubic/cluster_n2/structure.fdf
-check_success gqca_study_cubic/gqca_stage1.txt
+check_success stb_gqca_report.txt
 
 echo "Testing: every folder forces MD.TypeOfRun CG (real relaxation, not single-point)"
 check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n0/config_extra.fdf
@@ -98,37 +99,38 @@ check_contains "MD.VariableCell       T" gqca_study_cubic/cluster_n0/config_extr
 check_contains "MD.VariableCell       T" gqca_study_cubic/cluster_n1/config_extra.fdf
 
 echo "Testing: bipartite (simple-cubic) sublattice reaches the ideal -1.0 AB ordering exactly"
-check_not_contains "deviates by" gqca_study_cubic/gqca_stage1.txt
+check_not_contains "deviates by" stb_gqca_report.txt
 
 echo "Testing: report documents the pair orbit and Sublattice/Species B footer"
-check_contains "PAIR ORBIT" gqca_study_cubic/gqca_stage1.txt
-check_contains "CONFIG_EXTRA.FDF" gqca_study_cubic/gqca_stage1.txt
-check_contains "Sublattice     : Na" gqca_study_cubic/gqca_stage1.txt
-check_contains "Species B      : K" gqca_study_cubic/gqca_stage1.txt
+check_contains "PAIR ORBIT" stb_gqca_report.txt
+check_contains "CONFIG_EXTRA.FDF" stb_gqca_report.txt
+check_contains "Sublattice      : Na" stb_gqca_report.txt
+check_contains "Species B       : K" stb_gqca_report.txt
 
 
 # --- 3. 2D fixture (MoS2, frustrated/triangular) ---
 echo -e "\n--- Testing 2D fixture (mos2.fdf, Mo sublattice -> W) ---"
 rm -rf gqca_study_mos2
+rm -f stb_gqca_report*.txt stb_gqca_references*.bib
 stb-gqca -f mos2.fdf --sublattice Mo --species-b W -c calc.fdf -p . \
     -O gqca_study_mos2 --no-intro > log_mos2.txt 2>&1
 check_exit_code $? 0
 check_success gqca_study_mos2/cluster_n0/structure.fdf
 check_success gqca_study_mos2/cluster_n1/structure.fdf
 check_success gqca_study_mos2/cluster_n2/structure.fdf
-check_success gqca_study_mos2/gqca_stage1.txt
+check_success stb_gqca_report.txt
 
 echo "Testing: 2D input is detected and cell relaxation left OFF (positions-only, KNOWN LIMITATION)"
-check_contains "KNOWN LIMITATION" gqca_study_mos2/gqca_stage1.txt
+check_contains "KNOWN LIMITATION" stb_gqca_report.txt
 check_not_contains "MD.VariableCell       T" gqca_study_mos2/cluster_n0/config_extra.fdf
 check_not_contains "MD.VariableCell       T" gqca_study_mos2/cluster_n1/config_extra.fdf
 check_contains "MD.TypeOfRun          CG" gqca_study_mos2/cluster_n1/config_extra.fdf
 
 echo "Testing: frustrated (triangular) Mo sublattice does NOT reach the ideal -1.0 exactly"
-check_contains "deviates by" gqca_study_mos2/gqca_stage1.txt
+check_contains "deviates by" stb_gqca_report.txt
 
 echo "Testing: frustrated-lattice Delta_1 sensitivity check ran (larger-cell probe)"
-check_contains "sensitivity check" gqca_study_mos2/gqca_stage1.txt
+check_contains "sensitivity check" stb_gqca_report.txt
 
 echo "Testing: AB structure's vacuum axis was preserved (not expanded into by the enumeration)"
 python3 -c "

@@ -1,4 +1,10 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-phononsPos (Phonons Analysis, item 5.4.2), covering both
@@ -122,6 +128,7 @@ for i, d in enumerate(sorted(glob.glob("phonon_runs/disp-*")), start=1):
             vals = [float(v) * scale for v in parts[1:]]
             out.write(f"{idx:>6}  {vals[0]: .9E}  {vals[1]: .9E}  {vals[2]: .9E}\n")
 PYEOF
+rm -f stb_phononsPos_report*.txt stb_phononsPos_references*.bib
 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos --thermal-displacements \
     --freeze-unstable-mode --save-gnuplot --save-report --no-intro > log_pos_siesta.txt 2>&1
 check_contains "Force files found : 42" log_pos_siesta.txt
@@ -132,7 +139,7 @@ check_contains "BAND STRUCTURE" log_pos_siesta.txt
 check_contains "Bravais lattice" log_pos_siesta.txt
 check_contains "DENSITY OF STATES" log_pos_siesta.txt
 check_contains "MODE FREEZE" log_pos_siesta.txt
-check_success phonon_runs/phonon_properties.txt
+check_success stb_phononsPos_report.txt
 check_success phonon_runs/phonon_bands.png
 check_success phonon_runs/band.yaml
 check_success phonon_runs/thermal_properties.dat
@@ -156,6 +163,39 @@ echo -e "\n--- Testing --symprec (looser than default doesn't crash, changes the
 stb-phononsPos -dir phonon_runs -m 4 4 4 --symprec 0.1 --no-intro > log_pos_symprec.txt 2>&1
 check_exit_code $? 0
 check_contains "Symmetry precision: 0.1 Ang" log_pos_symprec.txt
+
+echo -e "\n--- Testing graphene 5x5 (real SIESTA forces, one P6/mmm displacement): space group and E2g ---"
+# N1 (2.1.0): the analysis must see P6/mmm at --symprec; under phonopy's 1e-5 the relaxed cell (2/3 -> 0.66667844)
+# is Cmmm and the force constants built from the single P6/mmm displacement split E2g.
+rm -rf gr && cp -r "$FIXTURE_DIR/graphene_5x5" gr
+stb-phononsPos -dir gr -m 8 8 1 --no-intro > log_gr.txt 2>&1
+check_exit_code $? 0
+check_contains "Space group      : P6/mmm" log_gr.txt
+check_contains "Force-constant symmetry: symmetrizing by the space group moves" log_gr.txt
+check_not_contains "Force-constant symmetry check skipped" log_gr.txt
+python3 - <<'PYEOF'
+import os, numpy as np, phonopy
+from phonopy.interface.siesta import get_physical_units
+from stb.core.phonon_workflow import _ensure_symmetry_tolerance
+os.chdir("gr")
+ph = phonopy.load("phonopy_disp.yaml", force_sets_filename="FORCE_SETS", symprec=1e-5)   # what 2.1.0.dev33 got on the cluster
+before = ph.primitive_symmetry.get_international_table()
+ph = _ensure_symmetry_tolerance(ph, 0.01, get_physical_units().Bohr)
+ph.run_qpoints([[0, 0, 0]]); f = np.sort(ph.qpoints.frequencies[0])
+split = abs(f[-1] - f[-2])
+print(f"RESULT before={before} after={ph.primitive_symmetry.get_international_table()} E2g split={split:.4f} THz")
+open("e2g.txt", "w").write(f"{split:.4f}\n")
+PYEOF
+if awk '{exit !($1 < 0.01)}' gr/e2g.txt; then echo -e "   -> ${GREEN}Verified:${NC} E2g degenerate after the rebuild ($(cat gr/e2g.txt) THz)"; PASS=$((PASS+1));
+else echo -e "   -> ${RED}Failed:${NC} E2g split $(cat gr/e2g.txt) THz after the rebuild"; FAIL=$((FAIL+1)); fi
+echo "Testing: a phonopy_disp.yaml written with phonopy's 1e-5 tolerance is reported"
+sed -i 's/symmetry_tolerance: .*/symmetry_tolerance: 1.00000e-05/' gr/phonopy_disp.yaml
+stb-phononsPos -dir gr -m 8 8 1 --no-intro > log_gr_tol.txt 2>&1
+check_contains "Prep tolerance   : 5.29e-06 Ang in phonopy_disp.yaml (Cmmm at it)" log_gr_tol.txt
+check_contains "Displacements    : 1 in the folders, 1 needed by P6/mmm" log_gr_tol.txt
+echo "Testing: an analysis --symprec too tight for the set (Cmmm needs more than the one P6/mmm displacement)"
+stb-phononsPos -dir gr -m 8 8 1 --symprec 1e-6 --no-intro > log_gr_tight.txt 2>&1
+check_contains "\[WARNING\] The displacement set (1) is smaller than the one Cmmm" log_gr_tight.txt
 
 echo -e "\n--- Testing --view completes headlessly without hanging (matplotlib Agg backend) ---"
 MPLBACKEND=Agg timeout 60 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos \
@@ -220,6 +260,7 @@ sys.exit(0 if 'Bohr' in open('phonon_runs/perfect_supercell/structure.fdf').read
 #     the exact pipeline that surfaced the "bands didn't do anything" menu
 #     bug (typing "y" at the old free-text prompt silently dropped --bands);
 #     covered again in the interactive section below ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing the ML-computed (stb-mlphonons) path with --bands ---"
 rm -rf phonon_ml_runs
 stb-mlphonons --file structure.fdf --dim 1 1 1 --mesh 4 4 4 --band-points 5 \
@@ -231,6 +272,9 @@ check_contains "Force constants already embedded" log_pos_ml.txt
 check_contains "BAND STRUCTURE" log_pos_ml.txt
 check_success phonon_ml_runs/phonon_bands.png
 check_success phonon_ml_runs/band.yaml
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 4. Error and robustness cases ---
@@ -266,27 +310,35 @@ check_contains "view" log_help.txt
 #     prompts ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.4.2) ---"
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: select '1' from the numbered list -> bands actually runs"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
-printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
 check_contains "Selected: bands" log_menu_bands.txt
 check_contains "BAND STRUCTURE" log_menu_bands.txt
 check_success phonon_ml_runs/phonon_bands.png
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: an unrecognized token (old y/n habit) is now flagged instead of silently ignored"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
-printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
 check_contains "Ignored unrecognized option(s): y" log_menu_typo.txt
 check_not_contains "BAND STRUCTURE" log_menu_typo.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: 'all' shortcut selects bands+dos+pdos+thermal but not freeze, and --save-report writes the report"
-rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml phonon_ml_runs/phonon_properties.txt
-printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
+rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml stb_phononsPos_report*.txt stb_phononsPos_references*.bib
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
 check_contains "Selected: bands, dos, pdos, thermal" log_menu_all.txt
 check_contains "BAND STRUCTURE" log_menu_all.txt
 check_contains "DENSITY OF STATES" log_menu_all.txt
 check_not_contains "MODE FREEZE" log_menu_all.txt
-check_success phonon_ml_runs/phonon_properties.txt
+check_success stb_phononsPos_report.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 popd > /dev/null

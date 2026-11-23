@@ -81,6 +81,17 @@ check_python() {   # $1 = description, $2 = python code exiting 0 on success
 
 echo "--- Starting tester for stb-mlffValidate (item 7.1.3) ---"
 
+# No mace needed: the default --phonon-mesh of --phonon-ref has 1 along a vacuum axis (2.1.0): an 8x8x8 mesh on
+# graphene sampled q along the vacuum (largest deviation at q = (0.3125, 0.3125, 0.0625)).
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+check_python "default phonon q-mesh: graphene 8 8 1, bulk Si 8 8 8" "
+from stb.mlff_validate import default_phonon_mesh
+g = default_phonon_mesh('$ROOT_DIR/test/5-workflow/4-phonons/analysis/graphene_5x5')[0]
+b = default_phonon_mesh('$ROOT_DIR/examples/7.3-mlphonons/reference_results/siesta_phonons')[0]
+print('graphene', g, 'Si', b)
+assert g == [8, 8, 1] and b == [8, 8, 8]
+"
+
 if ! command -v mace_run_train &> /dev/null; then
     echo -e "${YELLOW}SKIPPED${NC}: 'mace_run_train' not on PATH (needs 'pip install stb_suite[ml]')."
     exit 0
@@ -125,6 +136,7 @@ stb-mlffAnalysis --committee 2 $TRAIN --no-intro > log_train1.txt 2>&1
 check_exit_code $? 0
 check_contains "Round directory   : round_01" log_train1.txt
 
+rm -f stb_mlffValidate_report*.txt stb_mlffValidate_references*.bib
 stb-mlffValidate --save-report --save-data --foundation-model small --no-intro > log_val1.txt 2>&1
 check_exit_code $? 0
 for sec in "\[0\] RUN METADATA" "\[1\] TEST SET" "\[2\] MODELS SCORED" "\[3\] TEST ERRORS" "\[4\] ROUND 1 IN DETAIL" \
@@ -373,7 +385,7 @@ done
 # --- 6. Interactive path (stb-suite, shortcut 7.1.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 7.1.3) ---"
 # target, phonon ref, device, show, data file, worst configs, compare rounds, MD check, report
-printf '7.1.3\n\n\n\nn\nn\n0\n1 2\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '7.1.3\n\n\n\nn\nn\n0\n1 2\nn\nn\n\n0' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "mlff_workflow.json: 6 training + 2 test config(s), 2 round(s)" log_menu.txt
 check_contains "two of 1, 2, e.g. '1 2'" log_menu.txt

@@ -132,7 +132,7 @@ Every run always writes a numbered report ([0] RUN METADATA ... [9]
 SUMMARY & FILES) and a bond-angle mean/std check before and after the MD --
 a crystal starts near 0 deg std; a genuinely amorphized structure shows a
 much broader spread while the mean stays near the same short-range bond
-angle. --save-data/--save-traj/--save-report/--view are all off by default.
+angle. --save-data/--save-traj/--view are off by default (the report is always written).
 EOF
 pause
 
@@ -303,11 +303,10 @@ PYEOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, symmetry, references.bib"
+echo " output/full-report/  --  the report, symmetry, stb_amorphize_references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_amorphize_report.txt with
---save-report) includes a [6] SYMMETRY ANALYSIS BEFORE/AFTER table.
+The full numbered report (always written to stb_amorphize_report.txt) includes a [6] SYMMETRY ANALYSIS BEFORE/AFTER table.
 UNLIKE most other stb-suite before/after tables, these are EXPECTED to
 differ -- a genuine amorphization loses the crystal's long-range symmetry,
 often collapsing all the way down to P1/P-1 (essentially no symmetry
@@ -320,9 +319,9 @@ different specific low-symmetry group each time:
 EOF
 mkdir -p "$OUT/full-report"
 cp si8.fdf "$OUT/full-report/"
-echo "\$ stb-amorphize -f si8.fdf --melt-steps 100 --quench-steps 200 --seed 2 --save-report --no-intro"
+echo "\$ stb-amorphize -f si8.fdf --melt-steps 100 --quench-steps 200 --seed 2 --no-intro"
 (cd "$OUT/full-report" && stb-amorphize -f si8.fdf --melt-steps 100 --quench-steps 200 --seed 2 \
-    --save-report --no-intro > console.log 2>&1)
+    --no-intro > console.log 2>&1)
 echo
 echo "Report sections written to stb_amorphize_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_amorphize_report.txt"
@@ -333,8 +332,8 @@ echo
 echo "Provenance header written into the output .fdf:"
 head -4 "$OUT/full-report/amorphous.fdf"
 echo
-echo "references.bib -- SIESTA + MACE + MACE-MP (foundation model was used):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_amorphize_references.bib -- SIESTA + MACE + MACE-MP (foundation model was used):"
+grep "^@" "$OUT/full-report/stb_amorphize_references.bib"
 pause
 
 echo "=================================================================="
@@ -345,8 +344,8 @@ echo "--save-traj prompts and checking the same files come out."
 TMP="$(mktemp -d)"
 cp "$DIR/si8.fdf" "$TMP/"
 echo
-echo "\$ printf '4.11\\nsi8.fdf\\n3000\\n15\\n300\\n15\\ny\\ny\\nxyz\\n5\\n\\n\\n\\n\\n\\nmenu_out.fdf\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.11\nsi8.fdf\n3000\n15\n300\n15\ny\ny\nxyz\n5\n\n\n\n\n\nmenu_out.fdf\n0\n' | \
+echo "\$ printf '4.11\\nsi8.fdf\\n3000\\n15\\n300\\n15\\ny\\ny\\nxyz\\n5\\n\\n\\n\\n\\nmenu_out.fdf\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.11\nsi8.fdf\n3000\n15\n300\n15\ny\ny\nxyz\n5\n\n\n\n\nmenu_out.fdf\n0\n' | \
     stb-suite > session.log 2>&1) || true
 if [ -f "$TMP/menu_out_md_diagnostics.dat" ] && [ -f "$TMP/menu_out_md_traj.xyz" ]; then
     echo "Confirmed: the interactive menu built and launched the exact same"
@@ -367,7 +366,7 @@ Seven self-contained folders were generated under output/:
   vacuum-rejected/               save-data/
   save-traj/                     full-report/
 
-Each has references.bib; full-report/ additionally has
+Each has stb_amorphize_references.bib; full-report/ additionally has
 stb_amorphize_report.txt; save-data/ additionally has the .dat/.gplot
 (and .pdf, if gnuplot is installed) diagnostics pair.
 
@@ -386,7 +385,7 @@ Recap of what this walkthrough covered:
     axis across melt and quench via gnuplot 'index' blocks
   - --save-traj: a multi-frame trajectory (xsf/pdb/xyz) of the whole MD
     run, for viewing in OVITO/VMD
-  - the symmetry-collapses-to-a-low-symmetry-group diagnostic, references.bib, --save-report
+  - the symmetry-collapses-to-a-low-symmetry-group diagnostic, stb_amorphize_references.bib,
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

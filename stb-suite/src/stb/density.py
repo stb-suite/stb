@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -26,7 +27,6 @@ from stb.core.rho_io import (
 )
 
 REPORT_FILE = "stb_density_report.txt"
-BIB_FILE = "references.bib"
 
 
 def main():
@@ -60,8 +60,8 @@ compare several slices on the same scale.""",
 
     parser.add_argument("-l", "--label", required=True, help="System Label (looks for .RHO file)")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write the data/gnuplot/cube/report files and "
-                             "references.bib into (default: current directory). Created if "
+                        help="Directory to write the data/gnuplot/cube files (the report and its references file go to the current folder) and "
+                             "into (default: current directory). Created if "
                              "it doesn't exist.")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--3d", action="store_true", dest="full_3d", help="Export full 3D volume")
@@ -108,7 +108,7 @@ compare several slices on the same scale.""",
                         help="Overlay contour lines on a 2D slice map/preview (ignored for --3d/--profile)")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .gplot script next to each .dat file this run "
                              "generates. Off by default.")
@@ -129,7 +129,7 @@ compare several slices on the same scale.""",
             "Siesta ToolBox Suite - Density Plotter",
             "Exports RHO to 2D Maps, 3D Clouds, and matplotlib previews",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("DENSITY PLOTTER:", 'bold'))
@@ -227,7 +227,7 @@ compare several slices on the same scale.""",
             "[WARNING] --pos has no effect in --profile mode -- the profile covers the "
             "whole axis.", 'yellow'))
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("density")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-DENSITY REPORT =====", 'magenta'), f_out)
@@ -287,10 +287,10 @@ compare several slices on the same scale.""",
 
     print_section("[4] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -304,7 +304,7 @@ compare several slices on the same scale.""",
             print_dual(f"Spin gnuplot   : {files_written['spin']['gplot']}", f_out)
     if cube_path:
         print_dual(f"Cube file      : {cube_path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

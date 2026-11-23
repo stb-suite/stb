@@ -98,7 +98,7 @@ pause
 
 banner "Case 3 -- The real clean: archive, check, remove; then restore"
 copy_run "$OUT/case3/si_run"
-sc case3 --path si_run -n --save-report
+sc case3 --path si_run -n
 section "$(log case3)" "ARCHIVE" | sed "s#$OUT/case3/#output/case3/#g; s/^/  /"
 echo "  left in the folder:"; ls -A "$OUT/case3/si_run" | sed 's/^/    /'
 ARCH=$(ls "$OUT"/case3/si_run_backup_*.tar.gz)

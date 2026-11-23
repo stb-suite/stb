@@ -3,5 +3,6 @@ xrd_pattern.dat
 xrd_pattern.gplot
 xrd_pattern.pdf
 stb_xrd_report.txt
-references.bib
+stb_*_references*.bib
 output/
+stb_*_report*.txt

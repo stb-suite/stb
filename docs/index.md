@@ -2,12 +2,14 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows.**
 
-!!! warning dev-notice "Stable version 2.0.0, under testing"
+!!! warning dev-notice "Stable version 2.1.0, under testing"
 
-    **This is the first stable release, and it is still being tested in real projects.**
+    **This stable release is still being tested in real projects.**
 
     **Verify every result** before relying on it: check it independently, for
     example against a reference calculation or the literature.
+
+    What changed in this version: [Changelog 2.1.0](changelog/2.1.0.md).
 
 [:material-file-pdf-box: Download the manual (PDF)](assets/stb_manual.pdf){ .md-button .md-button--primary }
 &nbsp; every tool, workflow and option in one document, with the guides of this site.
@@ -24,7 +26,13 @@ all of them.
 
 ## Install
 
-From source:
+From PyPI:
+
+```bash
+pip install stb-suite
+```
+
+From source (`git clone -b dev ...` for the development version):
 
 ```bash
 git clone https://github.com/stb-suite/stb.git
@@ -32,15 +40,13 @@ cd stb/stb-suite
 pip install .
 ```
 
-Python 3.9 to 3.12. The ML Simulations tools additionally need PyTorch and `mace-torch`,
+Python 3.11 and 3.12. The ML Simulations tools additionally need PyTorch and `mace-torch`,
 which the optional `ml` extra installs:
 
 ```bash
-pip install ".[ml]"                 # from stb/stb-suite, instead of the plain install
-pip install "stb_suite[ml]"         # or, to add it to an existing install
+pip install "stb-suite[ml]"         # from PyPI, or to add it to an existing install
+pip install ".[ml]"                 # from stb/stb-suite, instead of the plain source install
 ```
-
-There is no PyPI package: install from source as above.
 
 ## Recommended input layout
 
@@ -112,5 +118,4 @@ interactive menu.
 
 The source code, the example inputs behind every guide, and the issue tracker are on
 [GitHub](https://github.com/stb-suite/stb). Distributed under the MIT License.
-Developed by Dr. Carlos M. O. Bastos, University of Brasília (UnB) —
-[bastoscmo.github.io](https://bastoscmo.github.io).
+Developed at the University of Brasília (UnB); see the [authors](authors.md).

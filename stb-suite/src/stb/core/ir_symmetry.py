@@ -30,7 +30,7 @@ core.raman_symmetry.classify_modes.
 from __future__ import annotations
 
 from stb.core.vibrational_symmetry import (
-    run_gamma_irreps, acoustic_chi_vector, reduction_multiplicity,
+    run_gamma_irreps, acoustic_chi_vector, reduction_multiplicity, is_real_irreducible,
 )
 
 IR_ACTIVE_TOL = 1e-3
@@ -48,8 +48,9 @@ class IRModeSymmetry:
     Raman's already-working call sites isn't worth it for a 3-line class.
     """
 
-    def __init__(self, band_indices, label, is_ir_active):
+    def __init__(self, band_indices, label, is_ir_active, is_real_irrep=True):
         self.band_indices = list(band_indices)
+        self.is_real_irrep = is_real_irrep   # False: an accidental degeneracy of different irreps
         self.label = label
         self.is_ir_active = is_ir_active
 
@@ -98,6 +99,7 @@ def _classify_from_irreps(irreps):
         n_i = reduction_multiplicity(chi_vec, characters[i], n_elem)
         is_active = bool(abs(n_i.real) > IR_ACTIVE_TOL)
         label = labels[i] if labels else None
-        mode_symmetries.append(IRModeSymmetry(bset, label, is_active))
+        mode_symmetries.append(IRModeSymmetry(bset, label, is_active,
+                                              is_real_irreducible(characters[i], irreps.conventional_rotations)))
 
     return mode_symmetries

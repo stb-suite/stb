@@ -276,8 +276,8 @@ while a `sites/site_*/`'s `config_extra.fdf` additionally has:
 Spin                polarized
 ```
 
-Report structure (`[0]`–`[6]`, `--save-report` persists it to
-`adsorption_prep_report.txt`):
+Report structure (`[0]`–`[6]` persists it to
+`stb_adsorb_report.txt`):
 
 ```
 [0] RUN METADATA
@@ -296,10 +296,30 @@ like this graphene fixture (verified: `site_1_ontop_bothsides/structure.fdf`
 has `NumberofAtoms 4` — 2 substrate + 1 adsorbate per face); `--height-sweep
 <min> <max> <step>` writes an approach curve instead of one fixed height.
 
+Three options for a real slab (since 2.1.0):
+
+- `--fix-layers N` holds the N lowest atomic layers of the slab at their input
+  positions, with the same `%block Geometry.Constraints` in `clean_slab/` and
+  in every site folder (so the two energies of `E_ads` relax the same atoms).
+  Without it the whole slab relaxes. `--layer-tol` (0.1 Ang) sets what counts
+  as one layer; the report lists the layers found and the atoms fixed.
+- `--anchor-atom O` (an element, or an atom number of the molecule) turns a
+  molecular adsorbate so that this atom faces the surface, and `--height`
+  becomes the height of that atom. Without it the molecule keeps the
+  orientation of the G2 database: for H2O the hydrogens point to the surface.
+- `--optimizer cg|broyden|fire`, `--force-tol` (eV/Ang) and `--max-displ` (Bohr) force the
+  relaxation settings in every folder; by default the template's own are used. A weakly
+  bound molecule on a metal can keep SIESTA's CG from converging for hundreds of steps:
+  try `--optimizer fire --max-displ 0.05`, and `--force-tol 0.03` on a flat surface.
+  `stb-adsorbAnalysis` flags every run that stopped at the step limit unrelaxed.
+- The slab is recognized by its vacuum (`--vacuum-gap`, 10 Ang). A slab with
+  exactly that much vacuum is accepted, and when no vacuum is found the error
+  gives the gap measured along each axis and the value to pass.
+
 **A caution worth knowing before you script this yourself:** calling
 `stb-adsorb` twice into the *same* `-O` output directory with two
 different single `--site-type` values (e.g. once for `ontop`, once for
-`bridge`) overwrites `sites/adsorption_sites.txt` — the machine-readable
+`bridge`) overwrites `sites/adsorption_sites.json` — the
 site table `stb-adsorbAnalysis` reads for each site's adsorbate/height —
 silently dropping the first call's row. Use a single `--site-type all
 --all-sites` call instead (as Section 4 below does) if you want more than
@@ -311,11 +331,11 @@ flags, same order, as the CLI above. `example_5.8.sh` proves the two agree.
 ## 6. Stage 2 mechanics, live (`stb-adsorbBsse`, code `5.8.2`)
 
 ```
-$ stb-adsorbBsse --dir adsorption_run --save-report
+$ stb-adsorbBsse --dir adsorption_run
 ```
 
-Report structure (`[0]`–`[4]`, `--save-report` persists it to
-`adsorption_bsse_report.txt`):
+Report structure (`[0]`–`[4]` persists it to
+`stb_adsorbBsse_report.txt`):
 
 ```
 [0] RUN METADATA
@@ -337,11 +357,12 @@ stage). Interactive path: `stb-suite`, type `5.8.2`.
 ## 7. Stage 3 mechanics, live (`stb-adsorbAnalysis`, code `5.8.3`)
 
 ```
-$ stb-adsorbAnalysis --dir adsorption_run --save-report --apply production.fdf
+$ stb-adsorbAnalysis --dir adsorption_run --apply production.fdf
 ```
 
-Report structure (`[0]`–`[5]`, `--save-report` persists it to
-`adsorption_report.txt`):
+Report structure (`[0]`–`[5]` persists it to
+`stb_adsorbAnalysis_report.txt` in the current folder, `_1`, `_2`, ... when taken; the curve data,
+gnuplot script and ranking plot go into `--dir`, unless `-o` names another file):
 
 ```
 [0] RUN METADATA
@@ -505,7 +526,7 @@ relaxed)` / `SKIP (missing calc.out)`).
    finishes.
 5. Run SIESTA yourself in every generated `bsse/site_*/bsse_slab/` and
    `bsse/site_*/bsse_adsorbate/`.
-6. Run Stage 3: `stb-adsorbAnalysis --dir adsorption_run --save-report
+6. Run Stage 3: `stb-adsorbAnalysis --dir adsorption_run
    --apply production.fdf`. Read `[3]` for **both** rankings before
    trusting a number — if they disagree, trust the BSSE-corrected one
    (Section 8). Add `--compute-gibbs` if you also want a Gibbs free
@@ -513,7 +534,7 @@ relaxed)` / `SKIP (missing calc.out)`).
    -adsorbate reference to already be relaxed.
 7. If you passed `--compute-gibbs`: run SIESTA yourself in every
    `adsorption_run/gibbs/*/disp_*/` folder, then run Stage 4:
-   `stb-adsorbGibbs --dir adsorption_run --save-report --tmin <T1> --tmax <T2>`
+   `stb-adsorbGibbs --dir adsorption_run --tmin <T1> --tmax <T2>`
    covering whatever temperature range you actually care about. Read `D0`
    (the electronic+ZPE part) alongside `DG(T)` (the full answer, including
    entropy) — don't assume they agree (Section 13.4); check the estimated
@@ -635,7 +656,6 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
 | `--file` | SIESTA output filename inside each folder (default `calc.out`). |
 | `--tmin`/`--tmax`/`--tstep` | Temperature sweep, in K (defaults 200/400/25) — `DG`/`DS` are recomputed at every step (vibrational entropy is temperature-dependent even though `ZPE` itself isn't); the sweep's first point (`--tmin`) is also what `[FINAL RESULT]`/`D0` report. |
 | `--force-tolerance` | Residual atomic force, eV/Ang (default 0.05), above which a folder is flagged as possibly not fully converged/relaxed. Advisory only. |
-| `--save-report` | Persists the full report to `adsorption_gibbs_report.txt`. Off by default. |
 | `--view-plots` | Also shows the `DG`/`D0`/`DS` plot on screen instead of only saving it as a PNG. |
 
 ### 13.3 Interpreting the output
@@ -661,7 +681,7 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
   single number for "is this still bound at the temperature I actually care about."
 - **Desorption kinetics (`[3c]`)** — a rough Eyring-TST estimate of the desorption
   rate `k_desorb(T)` and timescale `tau_desorb(T)` at every temperature already
-  swept in `[3]`. Always printed (console **and** `--save-report` file) directly
+  swept in `[3]`. Always printed (console **and** report file) directly
   under an explicit `[APPROXIMATION]` warning — see Section 13.6 for the full
   derivation, the barrierless assumption behind it, and why `tau_desorb` is a
   **lower bound**, not a prediction. If every row reads `~0 (instant)`, see
@@ -780,7 +800,7 @@ not physically converged" caveat the whole walkthrough already carries.)
 ```bash
 stb-adsorbAnalysis --dir adsorption_run --compute-gibbs --zpe-mode local
 # run SIESTA in every adsorption_run/gibbs/*/disp_*/ folder, then:
-stb-adsorbGibbs --dir adsorption_run --save-report --tmin 200 --tmax 400 --tstep 25
+stb-adsorbGibbs --dir adsorption_run --tmin 200 --tmax 400 --tstep 25
 ```
 
 `stb-adsorbAnalysis --compute-gibbs` needs the winning site AND its isolated-adsorbate
@@ -825,7 +845,7 @@ a real barrier can only make desorption slower/`tau` longer than shown.
 
 This caveat is not a footnote — it is printed as an explicit
 `[APPROXIMATION]` warning immediately above the `[3c]` table on **every**
-run, in the live console output and in `--save-report`'s persisted file
+run, in the live console output and in the report file
 alike (same `print_dual` mechanism that keeps every other section of this
 report identical between the two), precisely so the rough numbers below are
 never read in isolation from what they assume.

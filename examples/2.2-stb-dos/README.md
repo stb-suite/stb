@@ -85,7 +85,7 @@ broadening, so the estimated value can differ meaningfully from the exact
 one a `.bands`/`.EIG` would give. `stb-dos` always prints an explicit
 warning when this path is used, rather than presenting it as exact.
 
-## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+## The report: console output, `--save-gnuplot`, `--view`
 
 Every run prints a numbered report — the same `[0]...[5]` style every
 newer tool in this suite uses:
@@ -98,12 +98,11 @@ newer tool in this suite uses:
   vbm/cbm` hierarchy messages above live here).
 - `[3] WRITING OUTPUT FILES` — one `[OK]` line per `.dat`/directory
   actually written.
-- `[4] REFERENCES` — SIESTA citations, written to `references.bib`.
+- `[4] REFERENCES` — SIESTA citations, written to `stb_dos_references.bib`.
 - `[5] SUMMARY & FILES` — every file this run produced.
 
-`--save-report` additionally persists that exact report to
-`stb_dos_report.txt` — off by default, so a plain run only ever writes the
-`.dat` files and `references.bib`, no text report file.
+That exact report is always saved to `stb_dos_report.txt` in the current folder;
+a plain run also writes the `.dat` files and `stb_dos_references.bib`.
 
 `--save-gnuplot` writes one `.gplot` script **per output category** — off
 by default. Every column is plotted as its **own curve, never summed**
@@ -158,7 +157,7 @@ output — `example_2.2.sh` proves this directly at the end. The menu
 additionally offers `--shift` as a **numbered menu** (`1` Fermi level,
 `2` VBM, `3` CBM, `4` custom value — re-prompting on an invalid choice)
 instead of typing the keyword, plus separate `y/N` prompts for
-`--save-report`/`--save-gnuplot`/`--view`, each mapped straight onto the
+`--save-gnuplot`/`--view`, each mapped straight onto the
 matching CLI flag.
 
 ## Files in this folder
@@ -199,7 +198,7 @@ by wiping its own `output/`. Five self-contained cases are generated:
 | `vbm-hierarchy/`       | `--shift vbm`'s `.bands` → `.EIG` → `--estimate-from-dos` hierarchy, live  |
 | `label-shorthand/`     | `--label` resolving both the `PDOS.xml` and its `.bands` in one go        |
 | `multi-atom-plots/`    | `--save-gnuplot`/`--view` overlaying every atom's/species' own orbitals as separate curves (never summed), rendered with a real `gnuplot` |
-| `full-report/`         | Default (no report/`.gplot` files) vs. `--save-report --save-gnuplot`     |
+| `full-report/`         | `--save-gnuplot`, the report     |
 
 ## Try it yourself
 
@@ -223,7 +222,6 @@ stb-dos --label my_calc --shift cbm --estimate-from-dos
 | `--dos-threshold-frac`  | Threshold (fraction of peak DOS) used only by `--estimate-from-dos` (default `0.01`). |
 | `--projection`          | Orbital detail: `l` (s/p/d/f, default) or `ml` (individual m sub-orbitals). |
 | `-o/--output-dir`       | Where to write the output files (default: current directory).            |
-| `--save-report`         | Persist the full numbered report to `stb_dos_report.txt`. Off by default. |
 | `--save-gnuplot`        | Write one `.gplot` script per output category (total/atom/species). Off by default. |
 | `--view`                | Show an interactive matplotlib preview, one figure per output category. Off by default. |
 

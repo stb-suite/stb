@@ -1,2 +1,3 @@
 output/
 phonon_runs/
+/stb_*_report*.txt

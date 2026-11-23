@@ -20,6 +20,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 export MPLBACKEND=Agg           # headless-safe; the PNG figures are written either way
 DEVICE="${DEVICE:-cpu}"
 MODEL="$DIR/../7.2-mlmd/model/mlff_model_compiled.model"
@@ -55,7 +60,7 @@ section() {   # $1 = file, $2 = start of the title
 mlph() {
     local case=$1 file=$2; shift 2
     mkdir -p "$OUT/$case"
-    (cd "$OUT/$case" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --save-report --no-intro "$@" \
+    (cd "$OUT/$case" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --no-intro "$@" \
         < /dev/null > log.txt 2>&1)
 }
 report() { echo "$OUT/$1/stb_mlphonons_report.txt"; }
@@ -89,7 +94,7 @@ Report section [3]: the diamond structure has so much symmetry that ONE displace
 force constant -- 1 calculation instead of 384. The forces on the undisplaced supercell are subtracted, and the
 acoustic sum rule (a rigid translation costs no energy) is imposed.
 EOF
-echo "\$ stb-mlphonons --file si8.fdf $FT --dim 2 2 2 --save-data --save-gnuplot --save-report"
+echo "\$ stb-mlphonons --file si8.fdf $FT --dim 2 2 2 --save-data --save-gnuplot"
 mlph case1_first "$DIR/si8.fdf" $FT --dim 2 2 2 --save-data --save-gnuplot
 R1=$(report case1_first)
 section "$R1" "DISPLACEMENTS"
@@ -114,7 +119,7 @@ pause
 banner "Case 2: the optional outputs -- data files and gnuplot"
 cat <<'EOF'
 PNG figures (bands, DOS, thermal) are always written. --save-data adds the numbers behind them; --save-gnuplot
-writes .dat + .gplot into plot/ and runs gnuplot there (one PDF per figure) when it is installed; --save-report
+writes .dat + .gplot into plot/ and runs gnuplot there (one PDF per figure) when it is installed;
 writes the report; --show opens the figures on screen.
 EOF
 ls -1 "$OUT/case1_first" "$OUT/case1_first/plot" | sed 's/^/  /'
@@ -257,10 +262,11 @@ display, no gnuplot, no data, save the report.
 EOF
 mkdir -p "$OUT/case11_menu"
 cd "$OUT/case11_menu"
-printf '7.3\n%s\n%s\n\n\n\nmenu_out\n1\nn\nn\ny\n\n\n\n\n\n\nn\nn\nn\ny\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
+rm -f stb_mlphonons_report*.txt    # the report goes to the folder the menu runs in
+printf '7.3\n%s\n%s\n\n\n\nmenu_out\n1\nn\nn\ny\n\n\n\n\n\n\nn\nn\nn\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
     stb-suite > menu_log.txt 2>&1 || true
 ls -1 menu_out 2>/dev/null | sed 's/^/  /'
-strip_colors < menu_out/stb_mlphonons_report.txt 2>/dev/null | grep -E "^Model  |^SHA-256|^Mode  |^Band index|^Status|^Results" | sed 's/^/  /'
+strip_colors < stb_mlphonons_report.txt 2>/dev/null | grep -E "^Model  |^SHA-256|^Mode  |^Band index|^Status|^Results" | sed 's/^/  /'
 cd "$DIR"
 pause
 

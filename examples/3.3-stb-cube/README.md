@@ -464,7 +464,7 @@ unpolarized Si (`guard_spin/`): the total is written instead, with a warning. Tw
 ### 6.7 Labels and folders (Case 7)
 
 `-l` may include a folder: `stb-cube -l si/si -t VT` reads `si/si.VT`, finds `si/calc.out`, and writes `si/si_VT.cube`
-(and with `--save-report`, `si/stb_cube_report.txt`) next to the input (`reference_results/label_path/`). Without `-l`,
+(and `stb_cube_report.txt` in the current folder) next to the input (`reference_results/label_path/`). Without `-l`,
 the only file of that type in the current folder is used:
 
 ```
@@ -556,7 +556,6 @@ It needs the `stb_suite` package only (no SIESTA). It starts by wiping its own `
 | `--spin CH` | `total` | `total`, `up`, `down`, `diff` (spin-polarized grids) |
 | `--potential-unit U` | `eV` | `eV`, `Ry` or `Ha`, for `VT`/`VH`/`VNA` |
 | `--dry-run` | off | report only; no cube |
-| `--save-report` | off | also write `stb_cube_report.txt` next to the input |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 
 ## 14. What's next

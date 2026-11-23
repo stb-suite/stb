@@ -61,7 +61,7 @@ done
 
 echo "== 6. Graphene"
 copy_run graphene "$WORK/graphene"
-mkdir -p "$REF/graphene"; cp "$WORK/graphene/raman_study/raman_stage2.txt" "$REF/graphene/stage2.txt"
+mkdir -p "$REF/graphene"; cp "$(ls "$WORK/graphene/raman_study"/stb_ramanModes_report.txt "$WORK/graphene"/stb_ramanModes_report.txt 2>/dev/null | head -1)" "$REF/graphene/stage2.txt"
 report graphene stage3.txt "$WORK/graphene" stb-ramanAnalysis --directory raman_study --save-gnuplot
 cp "$WORK/graphene/raman_study/plot/raman_spectrum.dat" "$REF/graphene/"
 

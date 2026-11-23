@@ -15,7 +15,7 @@ digraph clean {
     ask     [label="5. Confirm (one question for the folder; -n skips it)"];
     arch    [label="6. tar.gz next to the folder, read back:\nevery file present with its size -- else nothing is removed\n(--no-archive skips both)"];
     del     [label="7. Remove"];
-    out     [label="Summary (a table for a glob) + WARNINGS\n--save-report", fillcolor="#e6f4e6", color="#2e7d32"];
+    out     [label="Summary (a table for a glob) + WARNINGS\nstb_clean_report.txt, always", fillcolor="#e6f4e6", color="#2e7d32"];
 
     in -> sort -> prot -> run -> rep;
     rep -> dry [style=dashed];

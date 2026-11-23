@@ -4,6 +4,7 @@ velocity.dat
 effmass.gplot
 effmass.pdf
 stb_effmass_report.txt
-references.bib
+stb_*_references*.bib
 calc.HSX
 calc.out
+stb_*_report*.txt

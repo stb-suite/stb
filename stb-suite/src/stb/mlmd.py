@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -20,6 +20,7 @@ relative drift used before divided by the absolute total energy, which on SIESTA
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -86,6 +87,13 @@ def build_dynamics(atoms, ensemble, timestep_fs, temperature_k, friction_fs, pre
     rng = np.random.default_rng(seed) if seed is not None else None
     MaxwellBoltzmannDistribution(atoms, temperature_K=temperature_k, rng=rng)
     Stationary(atoms)
+    # A Maxwell-Boltzmann draw of N atoms has a temperature that scatters by
+    # ~sqrt(2/3N) around the target (72 atoms, seed 1: 263.5 K for 300 K), and
+    # removing the centre-of-mass motion lowers it further: rescaled so that the
+    # run starts at exactly the temperature asked for.
+    drawn = atoms.get_temperature()
+    if temperature_k > 0 and drawn > 0:
+        atoms.set_velocities(atoms.get_velocities() * np.sqrt(temperature_k / drawn))
 
     dt = timestep_fs * units.fs
     if ensemble == "nve":
@@ -492,7 +500,7 @@ def main():
                              "energies per atom, P, volume, cell, shortest distance, max force), "
                              "<stem>_md_rdf.dat and <stem>_md_msd.dat. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlmd {VERSION}")
 
@@ -511,13 +519,13 @@ def main():
             "Siesta ToolBox Suite - ML Molecular Dynamics",
             "MD driven by MACE-MP-0 or your own fine-tuned potential",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("ML MOLECULAR DYNAMICS:", 'bold'))
     print("-" * 60)
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("mlmd")
     f_out = open(report_path, "w") if report_path else None
     warns, library_noise, card_msgs = [], [], []
     t_start = time.monotonic()
@@ -628,10 +636,11 @@ def main():
                f"alpha {cp[3]:.2f}, beta {cp[4]:.2f}, gamma {cp[5]:.2f} deg", f_out)
     print_dual(f"Volume            : {v0:.3f} Ang^3 ({v0 / n_atoms:.4f} Ang^3/atom)"
                + (f", density {mass / v0 * AMU_A3_TO_G_CM3:.4f} g/cm^3" if condensed else " (includes vacuum)"), f_out)
-    if bulk and not condensed:
-        print_dual(f"Empty space       : gaps >= {model_card.VACUUM_GAP:g} Ang along {sum(gaps5)} axis/axes (below "
-                   f"--vacuum-gap {args.vacuum_gap:g}) -- treated as a molecule/slab in a box: no density, pressure, "
-                   "g(r), heat capacity or Lindemann ratio", f_out)
+    if not condensed:
+        below = f" (below --vacuum-gap {args.vacuum_gap:g})" if bulk else ""
+        print_dual(f"Empty space       : gaps >= {model_card.VACUUM_GAP:g} Ang along {sum(gaps5)} axis/axes{below} -- "
+                   "treated as a molecule/slab in a box: no density, pressure, g(r), heat capacity or Lindemann ratio",
+                   f_out)
         if args.ensemble == "npt":
             warn(f"NPT: the cell has empty gaps >= {model_card.VACUUM_GAP:g} Ang along {sum(gaps5)} axis/axes -- a "
                  "barostat on a molecule or slab in a box squeezes the vacuum, not the material.")
@@ -721,7 +730,9 @@ def main():
     # ---- [5]
     print_section("[5] PRODUCTION RUN", f_out)
     e0 = atoms.get_potential_energy()
-    print_dual(f"Initial state     : E = {e0:.4f} eV, T = {atoms.get_temperature():.1f} K", f_out)
+    k0 = atoms.get_kinetic_energy()
+    print_dual(f"Initial state     : E_pot = {e0:.4f} eV, E_kin = {k0:.4f} eV, E_tot = {e0 + k0:.4f} eV, "
+               f"T = {atoms.get_temperature():.1f} K", f_out)
 
     frames, t_fs, epots, ekins, temps, press, vols, abcs, fmaxs = [], [], [], [], [], [], [], [], []
     n_chunks = args.n_steps // args.stride
@@ -772,7 +783,10 @@ def main():
         print_table(["Step", "t (ps)", "T (K)", "E_pot/atom (eV)", "P (GPa)", "V/atom (Ang^3)", "Fmax (eV/Ang)"],
                     rows, f_out)
     ef = atoms.get_potential_energy()
-    print_dual(f"Final state       : E = {ef:.4f} eV, T = {atoms.get_temperature():.1f} K", f_out)
+    kf = atoms.get_kinetic_energy()
+    print_dual(f"Final state       : E_pot = {ef:.4f} eV, E_kin = {kf:.4f} eV, E_tot = {ef + kf:.4f} eV, "
+               f"T = {atoms.get_temperature():.1f} K", f_out)
+    print_dual("E_pot changes along any run; in NVE it is E_tot that must stay constant (section [7]).", f_out)
     print_dual(f"[OK] Collected {len(frames)} frame(s) (stride {args.stride}).", f_out)
     ms_step = 1000 * wall / max(args.n_steps, 1)
     ns_day = (86400 / (wall / max(args.n_steps, 1))) * args.timestep * 1e-6 if wall > 0 else None
@@ -846,6 +860,12 @@ def main():
         print_dual(f"E_tot start -> end: {etots[0]:.6f} -> {etots[-1]:.6f} eV ({EV_TO_MEV * (eta[-1] - eta[0]):+.4f} meV/atom)", f_out)
         print_dual(f"Temperature       : {temps.mean():.1f} K mean (started at {args.temperature:g} K; from a perfect "
                    "lattice NVE equipartition halves it)", f_out)
+        if args.temperature > 0 and temps.mean() < 0.75 * args.temperature:
+            warn(f"NVE: the trajectory ran at {temps.mean():.0f} K on average, not at the {args.temperature:g} K asked "
+                 "for: --temperature only sets the initial velocities, and from an equilibrium geometry half of "
+                 "that kinetic energy becomes potential energy (equipartition). For an NVE run AT "
+                 f"{args.temperature:g} K start it at --temperature {2 * args.temperature:g}, or equilibrate in NVT "
+                 "first and continue from that state.")
         if drift is not None and abs(drift) > NVE_DRIFT_WARN:
             warn(f"NVE: total energy drifts by {drift:+.3f} meV/atom/ps (> {NVE_DRIFT_WARN:g}) -- use a smaller --timestep, "
                  "or the model's forces are not smooth here.")
@@ -1068,8 +1088,7 @@ def main():
         print_dual(f"Report            : {report_path}", f_out)
     extras = [x for x, on in [("--png (dashboard)", not png_path), ("--show", not args.show),
                               ("--save-gnuplot (gnuplot panels)", not args.save_gnuplot),
-                              ("--save-data (.dat files)", not (args.save_data or args.save_gnuplot)),
-                              ("--save-report", not report_path)] if on]
+                              ("--save-data (.dat files)", not (args.save_data or args.save_gnuplot))] if on]
     if extras:
         print_dual("Also available    : " + ", ".join(extras), f_out)
 

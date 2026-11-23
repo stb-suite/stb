@@ -270,8 +270,8 @@ print(f'  E_ads(bridge, uncorrected) = {e_bridge - e_slab - e_ads:.6f} eV   <- m
 pause
 
 echo "--- Stage 2 (stb-adsorbBsse): BSSE ghost-fragment folders, at the RELAXED geometry ---"
-echo "\$ stb-adsorbBsse --dir . --save-report"
-(cd "$RUN" && stb-adsorbBsse --dir . --save-report --no-intro > "$OUT/workflow_stage2.log")
+echo "\$ stb-adsorbBsse --dir ."
+(cd "$RUN" && stb-adsorbBsse --dir . --no-intro > "$OUT/workflow_stage2.log")
 sed -n '/\[1\] SITE SCAN/,/\[2\]/p' "$OUT/workflow_stage2.log" | head -n -1
 echo
 echo "BSSE folders were written ONLY for the 2 finished sites:"
@@ -292,8 +292,8 @@ print(f'  E_ads_BSSE(bridge) = {e_bridge - e_bsse_slab_bridge - e_bsse_ads_bridg
 pause
 
 echo "--- Stage 3 (stb-adsorbAnalysis): does the correction change the answer? ---"
-echo "\$ stb-adsorbAnalysis --dir adsorption_run --save-report --apply best_production.fdf"
-(cd "$RUN" && stb-adsorbAnalysis --dir . --save-report --apply best_production.fdf --no-intro \
+echo "\$ stb-adsorbAnalysis --dir adsorption_run --apply best_production.fdf"
+(cd "$RUN" && stb-adsorbAnalysis --dir . --apply best_production.fdf --no-intro \
     > "$OUT/workflow_stage3.log")
 sed -n '/Site          | Adsorbate/,/\[3\]/p' "$OUT/workflow_stage3.log" | head -n -1
 sed -n '/\[3\] SUMMARY & PLOT/,/\[4\]/p' "$OUT/workflow_stage3.log" | head -n -1
@@ -349,8 +349,8 @@ echo "site_1_ontop has $NATOMS_SITE atoms total (substrate + the adsorbed O, alw
 pause
 
 echo "--- Stage 4 (stb-adsorbGibbs): DG(T) = E_ads + DZPE - T*DS ---"
-echo "\$ stb-adsorbGibbs --dir adsorption_run --save-report --tmin 200 --tmax 400 --tstep 100"
-(cd "$RUN" && stb-adsorbGibbs --dir . --save-report --tmin 200 --tmax 400 --tstep 100 --no-intro \
+echo "\$ stb-adsorbGibbs --dir adsorption_run --tmin 200 --tmax 400 --tstep 100"
+(cd "$RUN" && stb-adsorbGibbs --dir . --tmin 200 --tmax 400 --tstep 100 --no-intro \
     > "$OUT/workflow_stage4.log")
 sed -n '/\[2\] VIBRATIONAL\/THERMAL TERMS/,/\[3\] GIBBS FREE ENERGY/p' "$OUT/workflow_stage4.log" | head -n -1
 sed -n '/\[3\] GIBBS FREE ENERGY vs\. TEMPERATURE/,/\[Saved\]/p' "$OUT/workflow_stage4.log"
@@ -367,8 +367,8 @@ echo "direct-CLI case from output/stage1/ above."
 TMP="$(mktemp -d)"
 cp structure.fdf calc.fdf "$TMP/"
 echo
-echo "\$ printf '5.8.1\\nstructure.fdf\\ncalc.fdf\\n\\nO\\n\\n1\\n\\n\\nn\\n0\\nn\\n\\ny\\nn\\nn\\n' | stb-suite"
-(cd "$TMP" && printf '5.8.1\nstructure.fdf\ncalc.fdf\n\nO\n\n1\n\n\nn\n0\nn\n\ny\nn\nn\n\n0\n' \
+echo "\$ printf '5.8.1\\nstructure.fdf\\ncalc.fdf\\n\\nO\\n\\n1\\n\\n\\nn\\n0\\nn\\n\\n\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '5.8.1\nstructure.fdf\ncalc.fdf\n\nO\n\n1\n\n\nn\n0\nn\n\n\n\n\n\n\n\n\n0\n' \
     | stb-suite > menu1.log 2>&1)
 MENU_ONTOP="$TMP/adsorption_run/sites/site_1_ontop/structure.fdf"
 CLI_ONTOP="$OUT/stage1/sites/site_1_ontop/structure.fdf"
@@ -398,8 +398,8 @@ Folders generated under output/:
   stage1_bothsides/        workflow/
 
 output/workflow/adsorption_run/ has the full chain: clean_slab/, adsorbate/,
-sites/site_*/, bsse/site_*/, gibbs/, adsorption_report.txt,
-adsorption_bsse_report.txt, adsorption_gibbs_report.txt, adsorption_ranking.png,
+sites/site_*/, bsse/site_*/, gibbs/, stb_adsorbAnalysis_report.txt,
+stb_adsorbBsse_report.txt, stb_adsorbGibbs_report.txt, adsorption_ranking.png,
 adsorption_gibbs.png, adsorption_mode_spectrum.png, and best_production.fdf
 (the BSSE-corrected winner).
 
@@ -409,9 +409,9 @@ As a next step, on your OWN slab/2D structure:
   # run SIESTA in clean_slab/, every adsorbate*/, and every sites/site_*/, then:
   stb-adsorbBsse --dir adsorption_run
   # run SIESTA in every bsse/site_*/bsse_slab/ and bsse/site_*/bsse_adsorbate/, then:
-  stb-adsorbAnalysis --dir adsorption_run --save-report --apply production.fdf
+  stb-adsorbAnalysis --dir adsorption_run --apply production.fdf
   # optionally, for a Gibbs free energy of adsorption:
   stb-adsorbAnalysis --dir adsorption_run --compute-gibbs --zpe-mode local
   # run SIESTA in every adsorption_run/gibbs/*/disp_*/ folder, then:
-  stb-adsorbGibbs --dir adsorption_run --save-report
+  stb-adsorbGibbs --dir adsorption_run
 EOF

@@ -31,10 +31,14 @@ COOP_IJ(E) = sum_(n,k) w_k * [sum_(mu in I, nu in J) c_mu,n(k) c_nu,n(k) S_mu,nu
 ```
 
 COHP replaces the overlap matrix `S` with the Hamiltonian matrix `H` in
-the same formula — a Hamilton-weighted version of the same idea (some
-literature plots `-COHP` so that positive also means bonding; this suite
-keeps sisl's own raw sign, i.e. **COOP/COHP > 0 = bonding**, verified
-below rather than just asserted).
+the same formula — a Hamilton-weighted version of the same idea. The two
+quantities have **opposite** sign conventions, and this suite keeps sisl's
+raw values: **COOP > 0 = bonding** (Hughbanks-Hoffmann), **COHP < 0 =
+bonding** (Dronskowski-Blöchl; the literature often plots `-COHP` so that
+positive means bonding). On this fixture the Sn-O bond 0-6 gives ICOOP
++0.13 and ICOHP -1.44 eV, both labelled `bonding`. Before 2.1.0 the report
+applied the COOP rule to COHP too and called every COHP bond
+"antibonding".
 
 This suite reuses sisl's own `EigenstateElectron.COOP()`/`.COHP()`
 (explicitly marked "experimental" in sisl's own docs), which computes one
@@ -137,15 +141,42 @@ coefficients, not the density matrix) **agrees in sign** with the fixed
 bond order for both pairs (+0.133 vs +0.527 for the bond, -0.0008 vs
 -0.010 for the non-bond). Two independent methods agreeing is real
 evidence, not just an assertion, that this suite's COOP sign convention
-(positive = bonding) is correct.
+(positive = bonding) is correct. With `--quantity cohp` the same check
+compares `-ICOHP` with the bond order.
+
+### 1.5 Periodic images and normalization
+
+`--pair I J` sums the interaction of atom I (in the unit cell) with
+**every periodic image** of atom J within the orbital range, and the
+report lists them, one row per image (`N1 N2 N3`) with its distance.
+On this fixture Sn 0 and O 7 are bonded across the cell edge, image
+`+1 0 0` at 2.077 Å:
+
+| Image | Distance (Å) | Integrated COOP |
+|---|---|---|
+| +1 +0 +0 | 2.077 | +0.1331 |
+| +0 +0 +0 | 4.346 | -0.0003 |
+| +1 -1 +0 | 4.427 | -0.0002 |
+
+`--image N1 N2 N3` keeps one image, i.e. one bond. Before 2.1.0 only the
+image `0 0 0` was ever summed: a bond across the cell edge came out ~0
+while its bond order was ~0.5.
+
+The curve and `coop.dat`/`cohp.dat` are sisl's value **per spin channel
+and one direction** (i → j). The Mulliken bond order counts both
+directions and both spins, so for a spin-unpolarized run **bond order =
+4 × ICOOP** integrated from the bottom of the bands to E_F (on this
+fixture: 0.5304 vs 0.5271 for 0-7; the sum over every orbital pair is
+N/2 = 36). The report adds a `x4` column (`x2` for a spin-polarized run)
+and, with `--bond-order`, compares the magnitude, not only the sign.
 
 ## 2. Output and options
 
 - **Numbered `[0]`...`[7]` report** (`RUN METADATA`, `INPUT DATA`,
   `PAIR SELECTION`, `COOP/COHP CURVE`, `BOND ORDER`, `OUTPUT DATA & PLOTS`,
   `REFERENCES`, `SUMMARY & FILES`), matching `stb-wfdensity`/`stb-sts`.
-- **`--save-report`** persists the report to `stb_coop_report.txt` (off by
-  default).
+- **Report** — always saved to `stb_coop_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** writes `coop.dat`/`cohp.dat` and a real multi-pair
   gnuplot script (one curve per selected pair, via `columnheader()`),
   together behind one off-by-default flag.
@@ -196,7 +227,7 @@ Or try the tool directly:
 ```bash
 stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
     --erange -25 -3.204 --sigma 300 --bond-order \
-    --save-report --save-gnuplot --view
+    --save-gnuplot --view
 ```
 
 ## 6. What's next

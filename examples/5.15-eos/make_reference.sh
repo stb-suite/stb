@@ -36,7 +36,7 @@ echo "$VARIANTS" | while read name k mesh basis shift; do
         calc.fdf > "$WORK/$name/calc_template.fdf"
     cp structure.fdf "$WORK/$name/"
     (cd "$WORK/$name" && stb-eosInputs -f structure.fdf -c calc_template.fdf -p dojo --n-volumes 11 \
-         --strain-range 8.0 -o . --save-report --no-intro < /dev/null > stage1.log 2>&1)
+         --strain-range 8.0 -o . --no-intro < /dev/null > stage1.log 2>&1)
     for d in "$WORK/$name"/vol_*; do
         (cd "$d" && mpirun -np 2 siesta calc.fdf < /dev/null > calc.out 2> calc.err)
     done

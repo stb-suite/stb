@@ -3,9 +3,9 @@
 [0] RUN METADATA
 ------------------------------------------------------------
 Date/time         : 2026-10-28 15:02:37
-Input file        : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/si8.fdf
+Input file        : /path/to/stb/examples/7.3-mlphonons/si8.fdf
 Mode              : single fit
-Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model)
+Model             : custom (/path/to/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model)
 Strain range      : +/-1.0% (4 points/direction)
 Comparison        : also evaluating with foundation model (medium)
 Report file       : ./stb_mlelastic_report.txt

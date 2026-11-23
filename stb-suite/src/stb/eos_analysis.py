@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -37,6 +37,7 @@ the gnuplot .dat + .gplot pair (the convention of the workflow analysis stages);
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -63,20 +64,45 @@ RESID_RMS_MEV_ATOM = 0.5          # fit residual rms
 PRESSURE_DEV_GPA = 0.5            # |P_SIESTA - P_fit|
 PRESSURE_AT_V0_GPA = 0.2          # residual SIESTA pressure at the fitted V0
 FORCE_TOL = 0.05                  # eV/Ang, fixed-cell residual force
-BPRIME_RANGE = (4.5, 7.0)
+# Typical B0' of solids: 3.5-4.5 for covalent solids and many metals (Si 4.2-4.5, Cu ~5),
+# up to ~6-7 for soft/molecular ones. The old (4.5, 7.0) flagged an ordinary Si fit (4.30).
+BPRIME_RANGE = (3.0, 7.0)
 FORM_SPREAD_PCT = 1.0             # B0 spread between EOS forms
 JACKKNIFE_PCT = 1.0               # B0 jackknife sigma / B0
 WINDOW_PCT = 2.0                  # B0 change when refitting the central points only
 
 _THEORY_KEYS = ["xcfunctional", "xcauthors", "paobasistype", "paobasissize", "paoenergyshift",
-                "meshcutoff", "spin", "electronictemperature", "dmtolerance", "dftd3"]
+                "meshcutoff", "spin", "electronictemperature", "dmtolerance", "dftd3", "filtercutoff", "filtertol"]
 _THEORY_LABELS = {"xcfunctional": "XC functional", "xcauthors": "XC authors", "paobasistype": "Basis type",
                   "paobasissize": "Basis size", "paoenergyshift": "PAO energy shift", "meshcutoff": "Mesh cutoff",
                   "spin": "Spin", "electronictemperature": "Electronic temperature",
-                  "dmtolerance": "DM tolerance", "dftd3": "DFT-D3"}
+                  "dmtolerance": "DM tolerance", "dftd3": "DFT-D3", "filtercutoff": "FilterCutoff",
+                  "filtertol": "FilterTol"}
 
 
 # ---- reading --------------------------------------------------------------------
+
+def fdf_directives_true(value):
+    """An fdf logical as SIESTA reads it (.true./T/true/yes); None/absent -> False."""
+    return value is not None and str(value).strip().lower().strip(".") in ("true", "t", "yes", "y")
+
+
+def effective_pressure(stress, cell, periodic_axes):
+    """The pressure conjugate to the scanned quantity, in eV/Ang^3 per cell volume, so that it equals
+    -dE/dV of the fit: -trace/3 for a 3D solid; for a 2D material -(sigma_xx' + sigma_yy')/2 over the two
+    in-plane directions (the stress along the vacuum does no work: the vacuum vector is not scaled); for a
+    wire minus the stress along it."""
+    stress = np.asarray(stress, dtype=float)
+    if len(periodic_axes) == 3:
+        return float(-np.trace(stress) / 3.0)
+    if len(periodic_axes) == 2:
+        normal = np.cross(cell[periodic_axes[0]], cell[periodic_axes[1]])
+        normal = normal / np.linalg.norm(normal)
+        return float(-(np.trace(stress) - normal @ stress @ normal) / 2.0)
+    along = np.asarray(cell[periodic_axes[0]], dtype=float)
+    along = along / np.linalg.norm(along)
+    return float(-(along @ stress @ along))
+
 
 def folder_theory(folder_path):
     """{label: value} of the settings that shape the energy surface, as SIESTA reads them in this
@@ -354,7 +380,7 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Example usage:\n"
                "  stb-eosAnalysis --dir eos_runs --show\n"
-               "  stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-report\n"
+               "  stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot\n"
                "  stb-eosAnalysis --dir eos_runs --eos vinet --target-pressure 0 5 10\n",
     )
     parser.add_argument("--dir", default="eos_runs",
@@ -385,7 +411,7 @@ def main():
                         help="Also write <output>_table.csv (one row per volume) and <output>_results.json "
                              "(every fit, check and number of the report). Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-eosAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -400,7 +426,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("EQUATION-OF-STATE WORKFLOW -- STAGE 2: ANALYSIS", 'bold'))
@@ -415,8 +441,12 @@ def main():
 
     manifest = read_manifest(args.dir)
     plan = {p["folder"]: p for p in (manifest or {}).get("scan", {}).get("points", [])}
+    dims = (manifest or {}).get("dimensionality") or {"n_periodic": 3, "periodic_axes": [0, 1, 2],
+                                                      "measure": "volume", "measure_input": None,
+                                                      "fixed_extent": None}
+    n_periodic = dims["n_periodic"]
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("eosAnalysis")
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 
@@ -467,6 +497,14 @@ def main():
     print_table(["Setting", "Value", "Consistency"], rows, f_out)
     if pp:
         print_dual(f"Pseudopotentials: {', '.join(pp)} (md5, first 8)", f_out)
+    if "filtercutoff" in ref_theory or "filtertol" in ref_theory:
+        print_dual(warn(
+            "The orbital filter is ON in these runs ("
+            + ", ".join(f"{_THEORY_LABELS[k]} {ref_theory[k]}" for k in ("filtercutoff", "filtertol") if k in ref_theory)
+            + "): SIESTA filters the basis orbitals, which changes the basis and adds noise to E(V) (Cu, "
+            "FilterCutoff 150 Ry: fit residual 2.1 instead of 0.1 meV/atom, V0 -1.6 %, B0 -9 %; Al and Ag are "
+            "affected too, Si is not). A large residual below can come from it alone: remove the line and "
+            "converge Mesh.Cutoff instead."), f_out)
     for k, lst in differing.items():
         print_dual(warn(f"level of theory differs between folders for {k}: "
                         + ", ".join(f"{f} '{v}'" for f, v in lst[:5]) + (" ..." if len(lst) > 5 else "")
@@ -491,7 +529,8 @@ def main():
             continue
         converged, iterations = siesta_log.get_scf_convergence(out_path)
         stress = siesta_log.get_stress_tensor(out_path)
-        pressure = float(-np.trace(stress) / 3 * _EV_A3_TO_GPA) if stress is not None else np.nan
+        pressure = (effective_pressure(stress, cell, dims["periodic_axes"]) * _EV_A3_TO_GPA
+                    if stress is not None else np.nan)
         item = {"folder": folder, "volume": float(abs(np.linalg.det(cell))), "energy": float(energy),
                 "scf": bool(converged), "iterations": iterations, "force": siesta_log.get_max_force(out_path),
                 "pressure": pressure, "n_atoms": count_atoms(folder_path),
@@ -635,20 +674,61 @@ def main():
     kappa = 1000.0 / b0
     print_dual(f"Compressibility            : 1/B0 = {kappa:.3f} TPa^-1; B(V0) from the curve = {float(b_of_v(v0)):.2f} GPa", f_out)
 
+    lowdim = None
+    if n_periodic < 3 and dims.get("fixed_extent"):
+        extent = dims["fixed_extent"]          # vacuum height (2D, Ang) or cross-section (1D, Ang^2): constant in the scan
+        if n_periodic == 2:
+            stiff, unit, name = b0 * extent * 0.1, "N/m", "in-plane stiffness (2D bulk modulus) A d2E/dA2"
+            stiff_err = jack[1] * extent * 0.1 if jack else None
+            m0, m_unit = v0 / extent, "Ang^2"
+        else:
+            stiff, unit, name = b0 * extent * 0.01, "nN", "axial stiffness L d2E/dL2"
+            stiff_err = jack[1] * extent * 0.01 if jack else None
+            m0, m_unit = v0 / extent, "Ang"
+        lowdim = {"measure": dims["measure"], "value": m0, "unit": m_unit, "stiffness": stiff,
+                  "stiffness_unit": unit, "stiffness_err": stiff_err}
+        print_dual("", f_out)
+        print_dual(color_text(f"{'2D MATERIAL' if n_periodic == 2 else 'WIRE'}: only the periodic vector(s) were "
+                              f"scaled, so the fit above is E({dims['measure']}) written against the cell volume "
+                              f"(volume = {dims['measure']} x {extent:.4f} "
+                              f"{'Ang of cell height' if n_periodic == 2 else 'Ang^2 of cross-section'}, constant).",
+                              'cyan'), f_out)
+        print_dual(f"Equilibrium {dims['measure']:<6}        : {color_text(f'{m0:.4f}', 'bold')} {m_unit}"
+                   + (f" (input {dims['measure_input']:.4f}, {100 * (m0 / dims['measure_input'] - 1):+.2f} %)"
+                      if dims.get("measure_input") else ""), f_out)
+        print_dual(f"{name[0].upper() + name[1:]:<27}: {color_text(f'{stiff:.2f}', 'bold')} {unit}"
+                   + (f" +/- {stiff_err:.2f}" if stiff_err is not None else ""), f_out)
+        print_dual(f"V0 in Ang^3 and B0 in GPa above refer to the cell INCLUDING its vacuum: they change with the "
+                   f"vacuum thickness and are not material properties. Quote the {dims['measure']} and the stiffness "
+                   f"in {unit}." + (" For an isotropic sheet the stiffness is (C11 + C12)/2 of the 2D elastic tensor "
+                                    "(stb-elasticAnalysis)." if n_periodic == 2 else ""), f_out)
+
     # geometry suggestion
-    scale = (v0 / v_ref) ** (1.0 / 3.0) if v_ref else None
+    scale = (v0 / v_ref) ** (1.0 / n_periodic) if v_ref else None
     new_lc = None
     if scale is not None:
         lc = (manifest or {}).get("structure", {}).get("latticeconstant") if manifest else None
         print_dual(f"Versus the input structure : V0 / V_input = {v0 / v_ref:.5f} ({100 * (v0 / v_ref - 1):+.2f} % in volume, "
                    f"linear scale {scale:.5f})", f_out)
-        if lc:
+        if lc and n_periodic == 3:
             new_lc = lc * scale
             print_dual(f"Suggested LatticeConstant  : {lc:.5f} -> {new_lc:.5f} Ang (the equilibrium volume at the "
                        "input's shape)", f_out)
+        elif n_periodic < 3:
+            lengths0 = (manifest or {}).get("structure", {}).get("lengths")
+            if lengths0:
+                print_dual("Equilibrium lattice vectors: "
+                           + ", ".join(f"|{'abc'[i]}| = {lengths0[i] * scale:.5f} Ang" for i in dims["periodic_axes"])
+                           + f" (input x {scale:.5f}; scale ONLY these vectors -- changing LatticeConstant "
+                           "would stretch the vacuum too)", f_out)
 
     # ------------------------------------------------------------------ [5]
     print_section("[5] PRESSURE CROSS-CHECK (SIESTA stress vs -dE/dV)", f_out)
+    if n_periodic < 3:
+        print_dual("P_SIESTA here is the stress conjugate to the scan: minus the mean of the "
+                   + ("two in-plane normal stresses" if n_periodic == 2 else "stress along the wire")
+                   + " (the stress along the vacuum does no work), per cell volume, so it compares with -dE/dV.",
+                   f_out)
     p_fit = p_of_v(volumes)
     have_p = np.isfinite(pressures)
     b_stress, p_at_v0 = stress_bulk_modulus(volumes, pressures, v0)
@@ -663,6 +743,15 @@ def main():
         if b_stress is not None:
             print_dual(f"B0 from the stress alone   : {b_stress:.2f} GPa (B = -V dP/dV at V0, polynomial fit of P_SIESTA) "
                        f"vs {b0:.2f} GPa from the energies ({b_stress - b0:+.2f} GPa, {100 * (b_stress - b0) / b0:+.2f} %)", f_out)
+        d3_caution = None
+        if fdf_directives_true(ref_theory.get("dftd3")):
+            d3_caution = siesta_log.d3_stress_caution(
+                next((d["version"] for d in data if d.get("version")), None),
+                "Expect P_SIESTA to disagree with -dE/dV here and the B0 'from the stress' to be wrong; V0 and B0 "
+                "from the ENERGIES (the fit above) are not affected. The disagreement of this table is the "
+                "direct test: twice the D3 pressure when the defect is present.")
+            if d3_caution:
+                print_dual(warn(d3_caution), f_out)
         print_dual(color_text("An independent second route to B0 on the same runs: with SIESTA's fixed-shape orbitals the stress "
                               "and -dE/dV must agree, so a disagreement points to the real-space mesh (raise Mesh.Cutoff), "
                               "an unconverged SCF (tighten DM.Tolerance) or a too narrow/noisy scan.", 'cyan'), f_out)
@@ -736,8 +825,18 @@ def main():
         }.get(name)
         if name.startswith("Fit R^2") or name.startswith("Residual rms"):
             hint = "the scan may be too wide (anharmonic) or too narrow (noise): try another --strain-range, and check the SCF settings."
+            if "filtercutoff" in ref_theory or "filtertol" in ref_theory:
+                hint += (" These runs have the orbital filter on (FilterCutoff/FilterTol): it alone gives residuals of "
+                         "1-2 meV/atom in E(V) for some elements (Cu, Al, Ag) -- remove it and converge Mesh.Cutoff.")
         if name.startswith("P_SIESTA agrees") or name.startswith("Residual pressure") or name.startswith("B0 from stress"):
             hint = "energy and stress disagree: raise Mesh.Cutoff (egg-box effect of the real-space mesh), tighten DM.Tolerance, or widen the scan."
+            if fdf_directives_true(ref_theory.get("dftd3")):
+                hint += (" These runs have DFT-D3 on: SIESTA 5.4.2 gives the D3 stress the wrong sign, which alone "
+                         "produces this disagreement (see [5]); trust the energy route.")
+        if name.startswith("B0' within"):
+            hint = ("not an error by itself: B0' is the least constrained parameter of the fit, and a value outside "
+                    "this range usually means a scan that is too narrow or noisy to fix it (see the window "
+                    "sensitivity and the leave-one-out uncertainty); B0 inherits part of that uncertainty.")
         if name.startswith("Residual forces"):
             hint = "the ions are not at equilibrium at the scaled cells: use stb-eosInputs --relax-positions."
         if name.startswith("Same level"):
@@ -761,6 +860,11 @@ def main():
     print_dual(f"Result          : V0 = {v0:.4f} Ang^3, E0 = {e0:.6f} eV, B0 = {b0:.2f} GPa"
                + (f" +/- {jack[1]:.2f}" if jack else "") + (f", B0' = {bprime:.3f}" if bprime is not None else "")
                + f"  ({form}, R^2 {r2:.6f})", f_out)
+    if lowdim:
+        print_dual(f"                  {lowdim['measure']} = {lowdim['value']:.4f} {lowdim['unit']}, stiffness = "
+                   f"{lowdim['stiffness']:.2f} {lowdim['stiffness_unit']}"
+                   + (f" +/- {lowdim['stiffness_err']:.2f}" if lowdim['stiffness_err'] is not None else "")
+                   + "  <- the physical numbers for this system (V0/B0 include the vacuum)", f_out)
     print_dual(f"Checks          : {n_pass} ok, {n_warn} warning(s)", f_out)
 
     curve_p = p_of_v(fit["curve_v"])

@@ -36,6 +36,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -152,9 +162,9 @@ else
 fi
 
 echo "Testing: --save-report writes the report under <dir>/, not cwd"
-rm -f sf_run/stackingfault_report.txt
+rm -f stb_stackingfaultAnalysis_report*.txt stb_stackingfaultAnalysis_references*.bib
 stb-stackingfaultAnalysis --dir sf_run --save-report --no-intro > log_savereport.txt 2>&1
-check_success sf_run/stackingfault_report.txt
+check_success stb_stackingfaultAnalysis_report.txt
 
 echo "Testing: without --save-gnuplot, no plot/ files are (re)written but the animation still is"
 rm -rf sf_run/plot sf_run/stackingfault_animation.xyz
@@ -283,7 +293,7 @@ stb-stackingfaultAnalysis --help > log_help.txt 2>&1
 check_contains "dir" log_help.txt
 check_contains "file" log_help.txt
 check_contains "apply" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 check_contains "view-animation" log_help.txt
@@ -313,12 +323,12 @@ check_contains "GapFinal(A)" log_analysis_mode1.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.10.2) ---"
 
 echo "Testing: navigate 5.10.2 -> defaults (sf_run, everything off) -> quit"
-rm -rf sf_run/plot sf_run/stackingfault_animation.xyz sf_run/stackingfault_report.txt
+rm -rf sf_run/plot sf_run/stackingfault_animation.xyz stb_stackingfaultAnalysis_report*.txt stb_stackingfaultAnalysis_references*.bib
 # 5.10.2 (menu code) / "" (dir default -> sf_run) / "" (out_file default) /
 # "" (force-tolerance default) / "" (apply_target: skip) / "" (save_report:
 # N) / "" (save_gnuplot: N) / "" (view: N) / "" (view_animation: N) / ""
 # (Press Enter to continue) / 0 (quit)
-printf '5.10.2\n\n\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.10.2\n\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Equilibrium stacking (min)    : shift_01_02" log_menu.txt
 check_success sf_run/stackingfault_animation.xyz
 if [ -d sf_run/plot ]; then

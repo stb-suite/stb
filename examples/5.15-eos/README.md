@@ -382,7 +382,8 @@ points above gives `V0 = 40.666 Å³` against `40.659 Å³` of the fit. Three nu
 
 ### 3.1 What it does
 
-`stb-eosInputs` takes an **already relaxed** structure (`-f`, fractional coordinates, bulk only)
+`stb-eosInputs` takes an **already relaxed** structure (`-f`, fractional coordinates; a bulk solid, or a 2D
+material / wire, Section 3.5)
 and your `calc.fdf` template (`-c`, default `./calc.fdf`) and, for each of `--n-volumes` volumes
 between `−--strain-range` and `+--strain-range` percent, writes
 
@@ -498,22 +499,35 @@ Printed where they apply and repeated at the end of the report:
   (which would not scale), a `--strain-range` below 2 % (curvature lost in SCF noise) or above 15 %, and an even
   number of volumes (no point at the input volume).
 
-### 3.5 Bulk only, and the crystal system
+### 3.5 Bulk, 2D materials and wires; the crystal system
 
-A vacuum-padded structure (slab, wire, molecule) has no bounded cell volume: it is refused with an
-error. For a non-cubic crystal the report adds the *constrained-path* note of Section 1.9 and records the crystal
+Since 2.1.0 a structure with vacuum is scanned too, by scaling **only its periodic lattice vectors**:
+
+| Vacuum along | Scaled | `--strain-range` is | Stage 2 reports |
+|---|---|---|---|
+| no axis (bulk) | a, b, c by `(1+s)^(1/3)` | a volume strain | `V0`, `B0` (GPa) |
+| one axis (2D material, slab) | the two periodic vectors by `(1+s)^(1/2)` | an **area** strain | equilibrium area and in-plane lattice vectors, in-plane stiffness `A d2E/dA2` in **N/m** |
+| two axes (wire) | the periodic vector by `(1+s)` | a **length** strain | equilibrium length, axial stiffness `L d2E/dL2` in **nN** |
+
+The vacuum vector is not touched, so the cell volume is the area (length) times a constant and the same
+`E(V)` machinery fits it; Stage 2 converts the result back and says that `V0` (Ang^3) and `B0` (GPa)
+include the vacuum and are not material properties. The pressure cross-check uses the stress conjugate to
+the scan (the mean in-plane stress for a 2D material). For an isotropic sheet the in-plane stiffness equals
+`(C11 + C12)/2` of the 2D elastic tensor of `stb-elasticAnalysis`. The atoms keep their fractional
+coordinates: a buckled or multi-layer sheet whose thickness should respond needs `--relax-positions`.
+A molecule (vacuum along three axes) is refused. For a non-cubic crystal the report adds the *constrained-path* note of Section 1.9 and records the crystal
 system in `eos_scan.json`, from where Stage 2 repeats it.
 
 ### 3.6 Validation
 
 `--n-volumes` below 5 and a `--strain-range` outside (0, 40) % are rejected; a missing `--file`,
-an explicit `-c` that does not exist, an unknown `-p` source, and a vacuum-padded structure all exit
+an explicit `-c` that does not exist, an unknown `-p` source, and a molecule (no periodic axis) all exit
 with a clear `[ERROR]`.
 
 ### 3.7 Running it both ways
 
 ```bash
-stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0
 stb-suite            # then: 5 (Workflow) -> 15 (Equation of State) -> 1 (Stage 1)  (or type 5.15.1)
 ```
 
@@ -603,7 +617,6 @@ Nothing is written unless asked for:
 | `--png` | `<output>_summary.png`, the same dashboard |
 | `--save-gnuplot` | `<output>.dat` (data block and fitted curve) + `<output>.gplot` (E(V) and P(V), `gnuplot <output>.gplot` renders `<output>.pdf`) |
 | `--save-data` | `<output>_table.csv` (one row per volume) + `<output>_results.json` (every fit, check and number) |
-| `--save-report` | `stb_eosAnalysis_report.txt` |
 
 The dashboard has six panels: `E(V)` with the data and every fit, the fit residuals, the pressure from the stress and from
 the fit, the bulk modulus along the curve `B(P)` (its slope at `P = 0` is `B0'`) with the stress-derived `B0` marked, `B0` by
@@ -618,7 +631,7 @@ one are each reported where they apply, in `[7]`, and in `[10]`.
 ### 4.9 Running it both ways
 
 ```bash
-stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data
 stb-eosAnalysis --dir eos_runs --target-pressure 0 5 10 --show
 stb-suite            # then: 5 -> 15 -> 2  (or type 5.15.2): it asks for the options above
 ```
@@ -640,9 +653,9 @@ the primitive vectors (`a_conventional / √2`); the conventional lattice consta
 ### 5.2 The base scan
 
 ```bash
-stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0
 for d in eos_runs/vol_*; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
-stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data
 ```
 
 The 11 energies (Section 4's report `[3]`, shortened) follow a smooth curve with a minimum between the −1.6 % and +0
@@ -837,9 +850,9 @@ bash make_reference.sh                 # ~30 minutes on 2 cores; writes referenc
 The single commands of the base setup are those of Case 1 of the script:
 
 ```bash
-stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0
 for d in eos_runs/vol_*; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
-stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data
 ```
 
 Computed with SIESTA 5.4.2 (conda-forge build, GNU 14.3, MPI), `mpirun -np 2` on a 2-core machine: 5–25 seconds
@@ -851,8 +864,8 @@ per volume depending on the setup (the denser k-grid, finer mesh and TZP basis a
   room-temperature experiment includes that omission (small for Si, larger for light elements). Section 1.8.
 - **Isotropic scaling.** For non-cubic crystals the result is the modulus along the constrained path; the tool says so
   but does not relax the shape. Section 1.9.
-- **Bulk only.** A vacuum-padded cell is refused; layered materials with van der Waals gaps are bulk — use `--d3` in
-  the template and expect `B0'` and the c-axis to need care.
+- **Layered materials with van der Waals gaps are bulk** — use `--d3` in the template and expect `B0'` and the
+  c-axis to need care. A single layer with vacuum is a 2D scan (Section 3.5), not shown with real runs in this example.
 - **`B0'` is poorly determined** by a narrow scan (it describes the asymmetry of the curve); do not quote it
   to more than two figures and do not over-interpret differences between setups of 0.1–0.2.
 - **The reported uncertainty is the scan's**, not the setup's: leave-one-out says nothing about the basis, the
@@ -922,11 +935,11 @@ stb-eosAnalysis --dir reference_results/si/base --eos all --show --target-pressu
 given = scaled structures only; the same file as `-f` = self-contained input) · `-p PSEUDO` (bank or folder) ·
 `--n-volumes N` (default 9, ≥ 5) · `--strain-range %` (default 5.0) · `--relax-positions` · `--relax-steps N`
 (default 100) · `--kgrid NX NY NZ` · `--kgrid-density D` (1/Å) · `--vacuum-gap Å` (default 10) · `-o DIR`
-(default `eos_runs`) · `--save-report` · `--no-intro` · `-v`.
+(default `eos_runs`) · `--no-intro` · `-v`.
 
 **`stb-eosAnalysis`** — `--dir DIR` (default `eos_runs`) · `--file NAME` (default `calc.out`) ·
 `--eos {birchmurnaghan,vinet,murnaghan,sj,all}` · `--target-pressure GPA ...` · `-o NAME` (default `eos_curve`) ·
-`--show` · `--png` · `--save-gnuplot` · `--save-data` · `--save-report` · `--no-intro` · `-v`.
+`--show` · `--png` · `--save-gnuplot` · `--save-data` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

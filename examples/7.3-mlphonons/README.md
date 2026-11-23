@@ -1,5 +1,7 @@
 # 7.3 — ML Phonons (`stb-mlphonons`)
 
+> **Note.** The stored results and the numbers on this page were generated before 2.1.0 left modes below 0.01 THz out of the thermal properties and have not been regenerated yet. A new `--qha` run gives different thermal-expansion values (MACE-MP-0 medium Si: alpha_L(300 K) = 9.46e-6 1/K).
+
 `stb-mlphonons` computes the **phonons** of a crystal — its vibrational normal modes — with a MACE machine-learned
 potential: either the MACE-MP-0 foundation model, or a model you fine-tuned on your own SIESTA calculations with the
 MLFF workflow (`7.1`), which always comes with its **model card**. It uses the finite-displacement method through
@@ -526,7 +528,7 @@ points per supercell; the verdict), `[4] SUMMARY & FILES`, `[5] WARNINGS`.
 | `convergence.png` | `--check-convergence` |
 | `bands.dat`, `bands_foundation.dat`, `dos.dat`, `thermal.dat` / `qha_thermal_expansion.dat` / `convergence.dat` | `--save-data` |
 | `plot/*.dat`, `plot/*.gplot`, and `plot/*.pdf` when gnuplot is installed | `--save-gnuplot` |
-| `stb_mlphonons_report.txt` | `--save-report` |
+| `stb_mlphonons_report.txt` | always |
 | `mode_<band>.<xsf/pdb/xyz>` | `--animate-mode` |
 | `frozen_mode.fdf` | `--freeze-unstable-mode`, when there is an imaginary mode |
 | the figures on screen | `--show` (needs a display; without one it is a warning) |
@@ -559,7 +561,7 @@ Everything goes into `-o/--output-dir` (default `mlphonons_out`).
 ```bash
 stb-mlphonons --file si8.fdf --dim 2 2 2 \
               --custom-model model/mlff_model_compiled.model --custom-model-card model/mlff_model_card.json \
-              --animate-mode --save-data --save-gnuplot --save-report
+              --animate-mode --save-data --save-gnuplot
 stb-mlphonons --file si8.fdf --custom-model ... --custom-model-card ... --qha --n-volumes 7 --strain-range 4 --tmax 1500
 stb-mlphonons --file si8.fdf --custom-model ... --custom-model-card ... --check-convergence --convergence-dims 1 1 1 2 2 2 3 3 3
 ```
@@ -610,7 +612,7 @@ Experimental references: phonon frequencies from inelastic neutron scattering at
 ```bash
 stb-mlphonons --file si8.fdf --custom-model ../7.2-mlmd/model/mlff_model_compiled.model \
               --custom-model-card ../7.2-mlmd/model/mlff_model_card.json --animate-mode \
-              --save-data --save-gnuplot --save-report
+              --save-data --save-gnuplot
 ```
 
 Report section `[3]` (`reference_results/base/stb_mlphonons_report.txt`):
@@ -1062,7 +1064,7 @@ printed digits.
    symmetry, symmetrize it (`stb-unitcell`) afterwards.
 3. **Check the supercell**: `--check-convergence` with two or three sizes. Take the smallest within 0.1 THz; use a larger
    one for sound velocities.
-4. **Run the single-volume calculation** with `--save-report --save-data`, and read the report from the bottom:
+4. **Run the single-volume calculation** with `--save-data`, and read the report from the bottom:
    `WARNINGS` (the last section) first, then `[5]` (imaginary modes, and whether they could be any of the three causes
    of section 1.8), then `[4]`, `DENSITY OF STATES`, `THERMAL PROPERTIES`. With a custom model, `FINE-TUNED vs
    FOUNDATION` says how much the fine-tuning matters.
@@ -1110,7 +1112,7 @@ on first use. Case 12 needs no MACE: it only reads `reference_results/`.
 `--freeze-amplitude Å` (default 0.05) · `--animate-mode [BAND|optical]` (no value: the first optical mode) ·
 `--animate-qpoint QA QB QC` (default Γ) · `--animate-dim NA NB NC` (default `1 1 1`) · `--animate-amplitude Å`
 (default 0.5) · `--animate-frames N` (default 30) · `--animate-format {xsf,pdb,xyz}` · `--device {cpu,cuda}` ·
-`-o/--output-dir DIR` (default `mlphonons_out`) · `--show` · `--save-gnuplot` · `--save-data` · `--save-report` ·
+`-o/--output-dir DIR` (default `mlphonons_out`) · `--show` · `--save-gnuplot` · `--save-data` ·
 `--no-intro` · `-v`.
 
 ## 12. What's next

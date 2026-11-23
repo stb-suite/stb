@@ -92,9 +92,9 @@ template's level of theory and what config_extra.fdf forces) and [4] (real and g
 EOF
 mkdir -p "$OUT/case1-water"
 cp water_dimer.fdf calc.fdf "$OUT/case1-water/"
-echo "\$ stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 -p dojo --mesh-cutoff 320 --png --save-report --no-intro"
+echo "\$ stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 -p dojo --mesh-cutoff 320 --png --no-intro"
 (cd "$OUT/case1-water" && stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 -p dojo --mesh-cutoff 320 \
-    --png --save-report --no-intro > stage1.log 2>&1)
+    --png --no-intro > stage1.log 2>&1)
 section "$OUT/case1-water/stage1.log" 2 | cut -c1-150
 section "$OUT/case1-water/stage1.log" 3 | cut -c1-150
 section "$OUT/case1-water/stage1.log" 4 | cut -c1-150
@@ -185,8 +185,8 @@ counterpoise-corrected interaction energy -- three numbers from the same runs, n
 EOF
 mkdir -p "$OUT/case4-water"
 unpack water "$OUT/case4-water/water"
-echo "\$ stb-chargediffAnalysis --dir water --save-report --no-intro"
-(cd "$OUT/case4-water" && stb-chargediffAnalysis --dir water -o analysis --save-report --no-intro > stage2.log 2>&1)
+echo "\$ stb-chargediffAnalysis --dir water --no-intro"
+(cd "$OUT/case4-water" && stb-chargediffAnalysis --dir water -o analysis --no-intro > stage2.log 2>&1)
 section "$OUT/case4-water/stage2.log" 1 | cut -c1-150
 section "$OUT/case4-water/stage2.log" 2 | cut -c1-150
 section "$OUT/case4-water/stage2.log" 3 | cut -c1-200

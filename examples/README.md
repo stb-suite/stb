@@ -98,7 +98,7 @@ Every example follows the same shape:
   explaining what's deliberately unusual about them (a wrong lattice
   constant, a too-close pair of atoms, a specific symmetry, ...).
 - **`.gitignore`** — excludes `output/` and any files the tool itself
-  generates on every run (`references.bib`, a `stb_<tool>_report.txt`,
+  generates on every run (`stb_<tool>_report.txt`, `stb_<tool>_references.bib`,
   convergence plots, ...), so a fresh clone only ever has the tutorial
   itself, not its own regenerable output.
 
@@ -114,15 +114,14 @@ Several conventions recur across the newer input-generating tools (see
 re-discovering per example:
 
 - **A numbered, sectioned report** (`[0] RUN METADATA`, `[1] ...`, ...)
-  printed to the console and, with `--save-report`, also saved to
-  `stb_<tool>_report.txt` — the same report either way, `--save-report`
-  just also persists it to disk.
-- **`references.bib`** — written automatically, no flag needed, whenever a
-  tool's output depends on a citable method (SIESTA itself, a specific
-  correction/potential, a database it queried, ...). Merges with whatever
-  `references.bib` is already in the same folder instead of overwriting
-  it, so running several tools into one working directory accumulates one
-  combined bibliography.
+  printed to the console and always saved to `stb_<tool>_report.txt` in the
+  folder you run the command from (`_1`, `_2`, ... when that name is taken, so
+  no report is overwritten). It is only for reading: what a later stage needs
+  goes into a JSON file of the run folder.
+- **`stb_<tool>_references.bib`** — written by every run, next to its report and with
+  the same number, never overwritten: the methods the tool relies on (SIESTA itself, a
+  specific correction/potential, a database it queried, ...), what the run used, and
+  every library it loaded (numpy, SciPy, pymatgen, ASE, spglib, sisl, phonopy, MACE, ...).
 - **Structure validation with an explicit checklist** — atom proximity,
   lattice handedness, atomic density (and a couple of tool-specific extras)
   each get their own reported `[OK]`/`[WARNING]`/`[SKIPPED]` row, not just

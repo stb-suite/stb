@@ -127,8 +127,7 @@ output — `example_4.7.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[10] SUMMARY & FILES` —
-  `[5]` only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_unitcell_report.txt`. Earlier
+  `[5]` only appears with `--ml-relax`) printed to the console and saved to `stb_unitcell_report.txt`. Earlier
   versions of this tool always wrote a separate `unitcell_report.txt`;
   that file is gone — everything it used to contain is now part of this
   same numbered report.
@@ -138,7 +137,7 @@ output — `example_4.7.sh` proves this directly at the end.
 - **A before/after symmetry comparison table** — crystal system, 3D space
   group, layer group, point group, Hall symbol — expected (and verified)
   to match exactly, since cell reduction doesn't change the crystal.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_unitcell_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: the mode used,
   the detected space group, the reduction factor, and MACE
@@ -153,8 +152,8 @@ output — `example_4.7.sh` proves this directly at the end.
   table.
 - **`--ml-relax`** (+ `--ml-relax-cell`, `--model`/`--custom-model`) —
   pre-relax the reduced cell generically with MACE.
-- **`--save-report`** — also persist the full report to
-  `stb_unitcell_report.txt`.
+- **Report** — always saved to `stb_unitcell_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the input structure and the reduced cell in ASE's
   interactive 3D viewer (`ase-gui`), as pageable frames. Needs a local
   display. Never exercised by `example_4.7.sh` itself.
@@ -174,7 +173,7 @@ output — `example_4.7.sh` proves this directly at the end.
 - `graphene.fdf` — 2D monolayer graphene (vacuum along `c`), for the
   `vacuum-warning/` case.
 - `example_4.7.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_unitcell_references.bib`, and
   `stb_unitcell_report.txt`.
 
 ## Running the walkthrough
@@ -197,7 +196,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `symprec-sensitivity/`      | The same noisy structure at two tolerances: Fm-3m vs. P1           |
 | `vacuum-warning/`           | The vacuum-axis caveat and the origin/relabeling caveat on graphene |
 | `ml-relax/`                 | Generic MACE pre-relaxation of the reduced cell                    |
-| `full-report/`              | `--save-report` + the validation checklist + `references.bib`      |
+| `full-report/`              | the report + the validation checklist + `stb_unitcell_references.bib`      |
 
 ## Try it yourself
 
@@ -229,7 +228,6 @@ stb-unitcell -f your_relaxed_structure.fdf --mode refined
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `unitcell.fdf`)                       |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input and reduced-cell structure in ASE's interactive viewer  |
 
 ## What's next

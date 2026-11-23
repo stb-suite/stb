@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/cdd_ref/water_r3.00/fragment2_alone
+* Directory : /path/to/run/cdd_ref/water_r3.00/fragment2_alone
 * Running on 2 nodes in parallel.
 >> Start of run:  23-OCT-2026  13:32:03
 

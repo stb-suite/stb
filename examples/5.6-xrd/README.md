@@ -507,7 +507,7 @@ tool's output — never before the report banner, never interleaved with
 Both CLI and `stb-suite` -> `5.6.2` produce the identical report for
 identical answers — the interactive menu prompts for the same choices
 (input folder, defaulting to `xrd_search`; experimental file; auto-
-broadening; `--top`; save-gnuplot/view/save-report) in the same order as
+broadening; `--top`; save-gnuplot/view) in the same order as
 the CLI flags above.
 
 ## 5. Worked example: real production data, end-to-end

@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -92,9 +92,15 @@ coefficients rather than the density matrix) agrees in sign with the
 fixed bond order for both pairs (+0.133 vs +0.527 for the bonded pair,
 -0.0008 vs -0.010 for the non-bonded one) -- confirming COOP > 0 really
 does mean bonding here, not just by convention/assertion.
+
+COHP sign: sisl's COHP() uses the raw H(k), i.e. Dronskowski-Bloechl's convention, in
+which a bonding interaction is NEGATIVE (-ICOHP > 0). The report labels each quantity by
+its own convention (bonding_character); before 2.1.0 the COOP rule was applied to COHP too,
+and every Sn-O/X-C bond came out "antibonding".
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -110,14 +116,19 @@ from stb.core.siesta_wfsx import resolve_wfsx_path, load_parent, iter_wfsx_state
 from stb.core.broadening import sigma_ev_from_args
 
 REPORT_FILE = "stb_coop_report.txt"
-BIB_FILE = "references.bib"
 
 
-def build_atom_pairs(geometry, pair_indices, pair_species):
-    """Returns a list of (label, atoms_i, atoms_j) triples. --pair gives a
+def build_atom_pairs(geometry, pair_indices, pair_species, image=None):
+    """Returns a list of (label, atoms_i, atoms_j, image) tuples. --pair gives a
     single-index-vs-single-index pair; --pair-species aggregates ALL
     atom-index pairs between the two species sets into one combined
     curve.
+
+    `image` (n1, n2, n3) or None selects which periodic images of atoms_j are
+    summed: None = every image within the orbital range (atoms_j folded back to
+    the unit cell), a tuple = that one image only (one bond). --image applies to
+    --pair only. A --pair I I with no --image is the on-site term (image 0, as
+    documented); I I with --image is I and its own periodic copy.
 
     Note: a same-species --pair-species (e.g. --pair-species Sn Sn) sets
     atoms_i == atoms_j, so the aggregate curve includes each atom's
@@ -128,10 +139,22 @@ def build_atom_pairs(geometry, pair_indices, pair_species):
     curve that isn't a mix of the two."""
     pairs = []
     na = geometry.na
+    if image is not None:
+        image = tuple(int(n) for n in image)
+        nsc = geometry.lattice.nsc
+        if any(abs(n) > (m - 1) // 2 for n, m in zip(image, nsc)):
+            raise ValueError(f"--image {' '.join(map(str, image))} is outside the auxiliary supercell "
+                             f"of the Hamiltonian (nsc = {' '.join(map(str, nsc))}): no orbital of that "
+                             "image interacts with the unit cell.")
     for i, j in pair_indices or []:
         if not (0 <= i < na) or not (0 <= j < na):
             raise ValueError(f"--pair {i} {j} out of range (0-{na - 1}).")
-        pairs.append((f"{i}-{j}", [i], [j]))
+        if image is not None:
+            pairs.append((f"{i}-{j}[{','.join(map(str, image))}]", [i], [j], image))
+        elif i == j:
+            pairs.append((f"{i}-{j}", [i], [j], (0, 0, 0)))
+        else:
+            pairs.append((f"{i}-{j}", [i], [j], None))
     for sp_a, sp_b in pair_species or []:
         idx_a = [ia for ia in range(na) if geometry.atoms[ia].symbol == sp_a]
         idx_b = [ia for ia in range(na) if geometry.atoms[ia].symbol == sp_b]
@@ -139,28 +162,96 @@ def build_atom_pairs(geometry, pair_indices, pair_species):
             raise ValueError(f"--pair-species: no atoms of species '{sp_a}' found.")
         if not idx_b:
             raise ValueError(f"--pair-species: no atoms of species '{sp_b}' found.")
-        pairs.append((f"{sp_a}-{sp_b}", idx_a, idx_b))
+        pairs.append((f"{sp_a}-{sp_b}", idx_a, idx_b, None))
     return pairs
 
 
-def extract_pair_curve(total_oplist, geometry, atoms_i, atoms_j):
-    """Sums the accumulated orbital-pair-resolved sparse matrices' entries
-    whose row belongs to atoms_i and whose column (folded back to the unit
-    cell across the full auxiliary supercell) belongs to atoms_j.
+def pair_columns(geometry, atoms_j, image=None):
+    """Column indices (orbitals of the auxiliary supercell, no * n_s) of atoms_j: all of
+    their periodic images (image None) or the one image (n1, n2, n3). geometry.o2a gives
+    SUPERCELL atom indices (0 .. na*n_s - 1), so they are folded with asc2uc before the
+    comparison; before 2.1.0 they were not, and only image 0 of J was ever summed -- a bond
+    to a neighbouring cell (the C-C bridge of XC8, 1.5 Ang) came out ICOOP ~ 0 while its
+    bond order was 0.88."""
+    if image is not None:
+        isc = geometry.lattice.sc_index(image)
+        return np.asarray(geometry.a2o(atoms_j, all=True)) + isc * geometry.no
+    col_atoms = geometry.asc2uc(geometry.o2a(np.arange(geometry.no * geometry.n_s)))
+    return np.where(np.isin(col_atoms, atoms_j))[0]
 
-    A single mat[orb_i, :][:, col_idx_j] sum is already the COMPLETE
-    bilateral interaction between atoms_i and atoms_j -- the (no, no*n_s)
-    matrix's column range already spans every periodic image of atoms_j,
-    including the direct (image-0) unit-cell-to-unit-cell bond, and that
-    submatrix is itself Hermitian/symmetric. Verified empirically: for
-    atoms_i != atoms_j, mat[orb_i,:][:,col_idx_j].sum() and
-    mat[orb_j,:][:,col_idx_i].sum() are numerically identical (ratio
+
+def bond_order_columns(geometry, atoms_j, image=None):
+    """The same selection as pair_columns, in supercell ATOM indices (for the bond-order matrix)."""
+    if image is not None:
+        isc = geometry.lattice.sc_index(image)
+        return np.asarray(atoms_j) + isc * geometry.na
+    col_atoms = geometry.asc2uc(np.arange(geometry.na * geometry.n_s))
+    return np.where(np.isin(col_atoms, atoms_j))[0]
+
+
+def image_breakdown(total_oplist, geometry, E, i, j, tol=1e-4):
+    """[(image, distance Ang, integrated value)] of every periodic image of atom j that
+    interacts with atom i, sorted by distance -- what a folded --pair I J sums, one image
+    at a time. Images whose integral is below `tol` in magnitude are left out."""
+    rows = []
+    orb_i = geometry.a2o([i], all=True)
+    xyz_i = geometry.xyz[i]
+    # Energy integral of every column summed over the rows of atom i, in one pass over the
+    # energy points (trapezoid weights), then one block of columns per image.
+    weights = np.zeros(len(E))
+    if len(E) > 1:
+        dE = np.diff(E)
+        weights[:-1] += dE / 2
+        weights[1:] += dE / 2
+    integrated_cols = np.zeros(geometry.no * geometry.n_s)
+    for w, m in zip(weights, total_oplist):
+        integrated_cols += w * np.real(np.asarray(m[orb_i, :].sum(axis=0))).ravel()
+    orb_j = np.asarray(geometry.a2o([j], all=True))
+    for isc, off in enumerate(geometry.lattice.sc_off):
+        if i == j and isc == 0:
+            continue
+        value = float(integrated_cols[orb_j + isc * geometry.no].sum())
+        if abs(value) < tol:
+            continue
+        r = geometry.xyz[j] + off @ geometry.cell - xyz_i
+        rows.append((tuple(int(n) for n in off), float(np.linalg.norm(r)), value))
+    rows.sort(key=lambda row: row[1])
+    return rows
+
+
+def population_factor(H):
+    """sisl's COOP/COHP is per spin channel (occupation 1 per state) and one-sided (i -> j);
+    the Mulliken bond order counts both directions and, for a spin-unpolarized run, both
+    spins. Returns 4 (unpolarized) or 2 (polarized, non-collinear, spin-orbit): bond order =
+    factor x ICOOP for a window from the bottom of the bands to E_F (Sn3O4: 3.98; the sum
+    over every orbital pair is N_electrons / 2)."""
+    spin = H.spin
+    return 4 if spin.is_unpolarized else 2
+
+
+def bonding_character(quantity, integrated):
+    """'bonding'/'antibonding'/'non-bonding' of an energy-integrated curve. COOP > 0 is
+    bonding (Hughbanks-Hoffmann); sisl's COHP is built from the raw H(k), Dronskowski's
+    convention, so COHP < 0 is bonding (-ICOHP > 0). The old label applied the COOP rule
+    to both and called every COHP bond 'antibonding'."""
+    measure = integrated if quantity == "coop" else -integrated
+    return "bonding" if measure > 0 else "antibonding" if measure < 0 else "non-bonding"
+
+
+def extract_pair_curve(total_oplist, geometry, atoms_i, atoms_j, image=None):
+    """Sums the accumulated orbital-pair-resolved sparse matrices' entries
+    whose row belongs to atoms_i and whose column belongs to atoms_j: every
+    periodic image of atoms_j (image None; folded back to the unit cell with
+    asc2uc, see pair_columns) or the one image given.
+
+    A single mat[orb_i, :][:, col_idx_j] sum is the one-sided (i -> j) term of
+    the interaction; the j -> i term is numerically identical (ratio
     1.0000000007 on a real 8-k-point test), so adding both (an earlier,
-    incorrect version of this function did) doubles the true value rather
-    than adding a distinct contribution."""
+    incorrect version of this function did) doubled the value. The Mulliken
+    bond order counts both directions and both spins: for a spin-unpolarized
+    run, bond order = 4 x ICOOP integrated to E_F (checked on Sn3O4: 3.98)."""
     orb_i = geometry.a2o(atoms_i, all=True)
-    col_atoms = geometry.o2a(np.arange(geometry.no * geometry.n_s))
-    col_idx_j = np.where(np.isin(col_atoms, atoms_j))[0]
+    col_idx_j = pair_columns(geometry, atoms_j, image)
 
     curve = np.empty(len(total_oplist))
     for ie, mat in enumerate(total_oplist):
@@ -208,7 +299,7 @@ def main():
                "  stb-coop --label siesta --quantity coop --pair 0 1 --erange -10 5 --sigma 200\n"
                "  stb-coop --label siesta --quantity cohp --pair-species Sn O --erange -10 5 --fwhm 300\n"
                "  stb-coop --label siesta --quantity coop --pair 0 1 --erange -10 5 --sigma 200 \\\n"
-               "      --bond-order --save-report --save-gnuplot --view\n",
+               "      --bond-order --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -233,8 +324,15 @@ def main():
 
     parser.add_argument("--pair", type=int, nargs=2, action="append", default=None,
                         metavar=("I", "J"),
-                        help="0-based atom-index pair (repeatable). I == J is allowed "
-                             "(on-site term).")
+                        help="0-based atom-index pair (repeatable). Sums EVERY periodic image of "
+                             "J within the orbital range (the report lists each image with its "
+                             "distance); use --image for one bond. I == J is allowed (on-site "
+                             "term).")
+    parser.add_argument("--image", type=int, nargs=3, default=None, metavar=("N1", "N2", "N3"),
+                        help="With --pair: only the periodic image (N1, N2, N3) of J, i.e. the one "
+                             "bond between I in the unit cell and J in cell N1 a1 + N2 a2 + N3 a3 "
+                             "(e.g. --pair 4 5 --image 0 -1 0 for a bond across the cell edge). "
+                             "The report's image table gives the image of each neighbour.")
     parser.add_argument("--pair-species", type=str, nargs=2, action="append", default=None,
                         metavar=("A", "B"),
                         help="Species-pair (repeatable), e.g. --pair-species Sn O -- "
@@ -289,10 +387,10 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write coop.dat/cohp.dat (and, with --save-gnuplot/"
-                             "--save-report, the .gplot script/report/references.bib) into "
+                             "the .gplot script) into (the report and its references file go to the current folder) "
                              "(default: current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a real .gplot script alongside coop.dat/cohp.dat. Off by "
                              "default -- this tool used to write the .dat file unconditionally "
@@ -349,7 +447,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text(f"{args.quantity.upper()}: reading input data", 'bold'))
@@ -366,7 +464,9 @@ def main():
     geometry = H.geometry
 
     try:
-        pairs = build_atom_pairs(geometry, args.pair, args.pair_species)
+        if args.image is not None and not args.pair:
+            raise ValueError("--image needs --pair (it selects one periodic image of J).")
+        pairs = build_atom_pairs(geometry, args.pair, args.pair_species, args.image)
     except ValueError as e:
         parser.error(str(e))
     print(f"[INFO] Selected pairs: {[p[0] for p in pairs]}")
@@ -410,9 +510,11 @@ def main():
     print(f"[INFO] Accumulating {args.quantity.upper()}(E) over {nk} k-points x {args.npoints} "
           "energy points (this may take a moment) ...")
     total = None
+    lowest_eig = np.inf
     for k_index, block in iter_wfsx_states_by_k(args.wfsx, H):
         kw = k_weights[k_index]
         for spin, state in block.items():
+            lowest_eig = min(lowest_eig, float(np.min(state.eig)))
             if args.quantity == "coop":
                 result = state.COOP(E_query, distribution=dist, atol=args.atol)
             else:
@@ -424,16 +526,18 @@ def main():
 
     print("[INFO] Reducing to selected atom pairs ...")
     curves = {}
-    for label, atoms_i, atoms_j in pairs:
-        curves[label] = extract_pair_curve(total, geometry, atoms_i, atoms_j)
+    breakdowns = {}
+    for label, atoms_i, atoms_j, image in pairs:
+        curves[label] = extract_pair_curve(total, geometry, atoms_i, atoms_j, image)
+        if image is None and len(atoms_i) == 1 and len(atoms_j) == 1:
+            breakdowns[label] = image_breakdown(total, geometry, E, atoms_i[0], atoms_j[0])
     pair_labels = list(curves.keys())
 
     bond_orders = {}
     if DM is not None:
         bo = DM.bond_order(method="mulliken", projection="atom")
-        col_atoms = geometry.asc2uc(np.arange(geometry.na * geometry.n_s))
-        for label, atoms_i, atoms_j in pairs:
-            col_idx = np.where(np.isin(col_atoms, atoms_j))[0]
+        for label, atoms_i, atoms_j, image in pairs:
+            col_idx = bond_order_columns(geometry, atoms_j, image)
             bond_orders[label] = float(sum(bo[i, :][col_idx].sum() for i in atoms_i))
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -468,7 +572,7 @@ def main():
             f.writelines(lines)
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("coop")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text(f"\n===== STB-COOP REPORT ({args.quantity.upper()}) =====", 'magenta'), f_out)
@@ -499,18 +603,35 @@ def main():
     print_dual(f"Selected pairs: {pair_labels}", f_out)
 
     print_section(f"[3] {args.quantity.upper()} CURVE", f_out)
+    g_factor = population_factor(H)
     rows = []
     for lbl in pair_labels:
         curve = curves[lbl]
         peak_idx = int(np.argmax(np.abs(curve)))
         integrated = float(np.trapezoid(curve, E))
-        character = "bonding" if integrated > 0 else "antibonding" if integrated < 0 else "non-bonding"
+        character = bonding_character(args.quantity, integrated)
         rows.append(([lbl, f"{curve[peak_idx]:.6e} at E={E[peak_idx]:.4f} eV",
-                      f"{integrated:.6e} ({character})"], None))
-    print_table(["Pair", "Largest |value|", "Integrated over --erange"], rows, f_out)
-    print_dual("(Integrated over --erange, NOT necessarily just the occupied states -- a positive "
-               "integral means net bonding character over the requested window, by this suite's "
-               "sign convention: COOP/COHP > 0 = bonding.)", f_out)
+                      f"{integrated:.6e} ({character})", f"{g_factor * integrated:+.4f}"], None))
+    print_table(["Pair", "Largest |value|", "Integrated over --erange", f"x{g_factor:g} (both spins, i<->j)"],
+                rows, f_out)
+    print_dual(f"Normalization: the curve and {args.quantity}.dat are sisl's value per spin channel and one "
+               f"direction (i -> j). The last column multiplies by {g_factor:g} = "
+               f"{'2 spins x ' if g_factor == 4 else ''}2 directions (i -> j and j -> i): for COOP it is "
+               "on the scale of the Mulliken bond order (equal to it when the window runs from the bottom of "
+               "the bands to E_F), and it is the scale of tables that count both spins and both directions "
+               "(compare with care: codes differ in what they count).", f_out)
+    for lbl, rows_img in breakdowns.items():
+        if len(rows_img) < 1:
+            continue
+        print_dual(f"Pair {lbl}: every periodic image of atom {lbl.split('-')[1]} that interacts with "
+                   f"atom {lbl.split('-')[0]} (the curve above sums them all; --pair {lbl.replace('-', ' ')} "
+                   "--image N1 N2 N3 gives one):", f_out)
+        print_table(["Image (N1 N2 N3)", "Distance (Ang)", f"Integrated {args.quantity.upper()}"],
+                    [([" ".join(f"{n:+d}" for n in img), f"{dist:.3f}", f"{val:+.6e}"], None)
+                     for img, dist, val in rows_img], f_out)
+    print_dual("(Integrated over --erange, NOT necessarily just the occupied states. Sign convention: "
+               "COOP > 0 = bonding (Hughbanks-Hoffmann); COHP < 0 = bonding (Dronskowski-Bloechl), "
+               "i.e. -ICOHP > 0 for a bond.)", f_out)
 
     print_section("[4] BOND ORDER (Mulliken, energy-integrated cross-check)", f_out)
     if bond_orders:
@@ -518,15 +639,39 @@ def main():
             ([lbl, f"{bond_orders[lbl]:.4f}"], None) for lbl in pair_labels
         ], f_out)
         print_dual(f"Density matrix : {dm_source}", f_out)
+        name = "COOP" if args.quantity == "coop" else "-COHP"
+        print_dual(f"Cross-check against the integrated {name} above (same sign expected for a "
+                   "converged full-BZ mesh spanning the true occupied bandwidth):", f_out)
+        for lbl in pair_labels:
+            integrated = float(np.trapezoid(curves[lbl], E))
+            bonding_measure = integrated if args.quantity == "coop" else -integrated
+            agree = (bonding_measure > 0) == (bond_orders[lbl] > 0)
+            print_dual(f"  {lbl}: integrated {name} {'positive' if bonding_measure > 0 else 'negative'}, "
+                       f"bond order {'positive' if bond_orders[lbl] > 0 else 'negative'} "
+                       f"-> {'[OK] signs agree' if agree else '[WARNING] signs disagree'}", f_out)
         if args.quantity == "coop":
-            print_dual("Cross-check against the integrated COOP above (same sign expected for a "
-                       "converged full-BZ mesh spanning the true occupied bandwidth):", f_out)
+            # The sign alone missed a bond across the cell edge (ICOOP ~ 0, bond order 0.88): compare
+            # the magnitude too, x g_factor ICOOP / bond order, which is 1 for a window from the bottom
+            # of the bands to E_F.
+            e_top = E_query[-1]
+            full_window = (args.shift == "fermi" and abs(args.erange[1]) <= 0.05
+                           and E_query[0] < lowest_eig - 3 * sigma_eV)
+            print_dual(f"Magnitude: x{g_factor:g} ICOOP / bond order (1 for a window from the bottom of the "
+                       "bands to E_F" + ("):" if full_window else
+                                         f"; this window, {E_query[0]:.2f} to {e_top:.2f} eV absolute, is not "
+                                         "that one -- --shift fermi --erange <below the lowest band> 0 -- so "
+                                         "the ratio is shown, not judged):"), f_out)
             for lbl in pair_labels:
                 integrated = float(np.trapezoid(curves[lbl], E))
-                agree = (integrated > 0) == (bond_orders[lbl] > 0)
-                print_dual(f"  {lbl}: integrated COOP {'positive' if integrated > 0 else 'negative'}, "
-                           f"bond order {'positive' if bond_orders[lbl] > 0 else 'negative'} "
-                           f"-> {'[OK] signs agree' if agree else '[WARNING] signs disagree'}", f_out)
+                bo_val = bond_orders[lbl]
+                if abs(bo_val) < 0.02:
+                    print_dual(f"  {lbl}: bond order {bo_val:+.4f} -- too small for a ratio", f_out)
+                    continue
+                ratio = g_factor * integrated / bo_val
+                off = abs(ratio - 1) > 0.1
+                tag = ("[WARNING] differs from 1 by more than 10 %" if (off and full_window)
+                       else "[OK]" if full_window else "")
+                print_dual(f"  {lbl}: {g_factor * integrated:+.4f} / {bo_val:+.4f} = {ratio:.3f} {tag}", f_out)
     elif args.bond_order:
         print_dual("Not computed (no usable density matrix -- see the error above).", f_out)
     else:
@@ -543,17 +688,17 @@ def main():
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
     bib_entries.append(citations.COOP_HUGHBANKS if args.quantity == "coop" else citations.COHP_DRONSKOWSKI)
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[7] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Data           : {out_path}", f_out)
     if gplot_path:
         print_dual(f"Gnuplot script : {gplot_path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 
@@ -570,7 +715,8 @@ def main():
         plt.axhline(0, color="gray", linestyle="--", linewidth=1)
         plt.xlabel("Energy (eV)")
         plt.ylabel(f"{args.quantity.upper()} (arb. units)")
-        plt.title(f"{args.quantity.upper()} (positive = bonding, by convention)")
+        plt.title("COOP (positive = bonding)" if args.quantity == "coop"
+                  else "COHP (negative = bonding)")
         plt.legend()
         plt.grid(True)
         plt.tight_layout()

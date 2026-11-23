@@ -203,7 +203,8 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Missing Stage-2 output guard ---
 echo -e "\n--- Testing the missing-Stage-2-output guard ---"
 rm -rf raman_study
-stb-ramanAnalysis --directory raman_study --no-intro > log_no_stage2.txt 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --no-intro > log_no_stage2.txt 2>&1
 check_exit_code $? 1
 check_contains "run stb-ramanModes" log_no_stage2.txt
 
@@ -211,24 +212,25 @@ check_contains "run stb-ramanModes" log_no_stage2.txt
 # --- 3. Normal analysis ---
 echo -e "\n--- Testing default analysis ---"
 make_optical_disp
-stb-ramanAnalysis --directory raman_study --no-intro > log_basic.txt 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Modes in table    : 3" log_basic.txt
 check_contains "Modes analyzed      : 3/3" log_basic.txt
 check_contains "RAMAN-ACTIVE MODES SUMMARY" log_basic.txt
 check_contains "diagonal Raman tensor" log_basic.txt
-check_success raman_study/raman_stage3.txt
-check_success raman_study/raman_spectrum.dat
-check_success raman_study/raman_spectrum.gplot
-check_contains "\[0\] RUN METADATA" raman_study/raman_stage3.txt
-check_contains "\[1\] READING RUNS" raman_study/raman_stage3.txt
-check_contains "\[2\] RAMAN-ACTIVE MODES SUMMARY" raman_study/raman_stage3.txt
-check_contains "\[3\] SPECTRUM" raman_study/raman_stage3.txt
-check_contains "\[4\] SUMMARY & FILES" raman_study/raman_stage3.txt
+check_success stb_ramanAnalysis_report.txt
+check_success raman_study/plot/raman_spectrum.dat
+check_success raman_study/plot/raman_spectrum.gplot
+check_contains "\[0\] RUN METADATA" stb_ramanAnalysis_report.txt
+check_contains "\[1\] READING RUNS" stb_ramanAnalysis_report.txt
+check_contains "\[2\] RAMAN-ACTIVE MODES SUMMARY" stb_ramanAnalysis_report.txt
+check_contains "\[3\] SPECTRUM" stb_ramanAnalysis_report.txt
+check_contains "\[4\] SUMMARY & FILES" stb_ramanAnalysis_report.txt
 
 echo "Testing: Rxx/Ryy/Rzz differ per mode (finite-difference across genuinely different fabricated dielectric data)"
 python3 -c "
-with open('raman_study/raman_stage3.txt') as f:
+with open('stb_ramanAnalysis_report.txt') as f:
     text = f.read()
 assert 'Rxx=' in text
 print('OK')
@@ -236,13 +238,13 @@ print('OK')
 check_contains "OK" log_tensor_check.txt
 
 echo "Testing: spectrum .dat has the expected 2-column header"
-check_contains "frequency.cm" raman_study/raman_spectrum.dat
+check_contains "frequency.cm" raman_study/plot/raman_spectrum.dat
 
 echo "Testing: depolarization ratio (rho) reported with a polarized/depolarized tag"
-check_contains "rho~" raman_study/raman_stage3.txt
+check_contains "rho~" stb_ramanAnalysis_report.txt
 python3 -c "
 import re
-with open('raman_study/raman_stage3.txt') as f:
+with open('stb_ramanAnalysis_report.txt') as f:
     text = f.read()
 matches = re.findall(r'rho~([\d.]+) \((polarized|depolarized)\)', text)
 assert matches, 'no rho values found'
@@ -259,23 +261,25 @@ check_contains "OK" log_rho_check.txt
 # --- 3b. --temperature: Bose-Einstein weighting changes the spectrum ---
 # Modes "1 39": mode 1 is imaginary (must be left unweighted, see the
 # [WARNING] below), mode 39 is the one genuinely real/positive-frequency
-# vibration in this fixture (2.7882 THz) -- needed so the weighting
+# vibration in this fixture (3.4799 THz) -- needed so the weighting
 # actually has something real to change.
 echo -e "\n--- Testing --temperature (Bose-Einstein thermal weighting) ---"
 make_optical_disp "1 39"
-stb-ramanAnalysis --directory raman_study --temperature 300 -o raman_spectrum_300k --no-intro \
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --temperature 300 -o raman_spectrum_300k --no-intro \
     > log_temperature.txt 2>&1
 check_exit_code $? 0
 check_contains "Thermal weighting : Bose-Einstein Stokes factor (n+1) at 300.0 K" log_temperature.txt
 check_contains "imaginary-frequency mode(s) left unweighted" log_temperature.txt
-check_success raman_study/raman_spectrum_300k.dat
+check_success raman_study/plot/raman_spectrum_300k.dat
 
 echo "Testing: weighted spectrum differs from the unweighted default (T=300K changes intensities)"
-stb-ramanAnalysis --directory raman_study -o raman_spectrum_unweighted --no-intro > /dev/null 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study -o raman_spectrum_unweighted --no-intro > /dev/null 2>&1
 python3 -c "
 import numpy as np
-weighted = np.loadtxt('raman_study/raman_spectrum_300k.dat')
-unweighted = np.loadtxt('raman_study/raman_spectrum_unweighted.dat')
+weighted = np.loadtxt('raman_study/plot/raman_spectrum_300k.dat')
+unweighted = np.loadtxt('raman_study/plot/raman_spectrum_unweighted.dat')
 assert weighted.shape == unweighted.shape
 assert not np.allclose(weighted[:, 1], unweighted[:, 1]), 'thermal weighting had no effect'
 # Bose weight (n+1) is always >= 1, so every weighted intensity must be >= the unweighted one.
@@ -286,47 +290,50 @@ check_contains "OK" log_temperature_check.txt
 
 
 # --- 3c. --experimental: overlay + nearest-neighbor peak match ---
-# Mode 39 alone -> exactly one simulated peak, at 2.7882 THz * 33.35641 =
-# ~92.99 cm^-1 (known from this fixture, see make_optical_disp's comment).
-# Fabricates a synthetic experimental spectrum with ONE clean Gaussian
-# peak at a nearby, deliberately different position (95.0 cm^-1) so the
-# match has a known, checkable non-zero delta (~2.0 cm^-1).
+# Mode 39 alone -> exactly one simulated peak, at 3.4799 THz * 33.35641 =
+# ~116.08 cm^-1 (this fixture's mode 39 since the phonon symmetry tolerance is
+# converted to Bohr; it was 2.7882 THz before). Fabricates a synthetic
+# experimental spectrum with ONE clean Gaussian peak at a nearby, deliberately
+# different position (118.0 cm^-1) so the match has a known, checkable
+# non-zero delta (~-2.0 cm^-1).
 echo -e "\n--- Testing --experimental (peak overlay + matching) ---"
 make_optical_disp "39"
 python3 -c "
 import numpy as np
 freq = np.linspace(50, 140, 500)
-intensity = 100.0 * np.exp(-0.5 * ((freq - 95.0) / 3.0) ** 2)
+intensity = 100.0 * np.exp(-0.5 * ((freq - 118.0) / 3.0) ** 2)
 with open('fake_experimental.dat', 'w') as f:
     f.write('# fake experimental spectrum for testing\n')
     for fr, it in zip(freq, intensity):
         f.write(f'{fr:.4f} {it:.6f}\n')
 "
-stb-ramanAnalysis --directory raman_study --experimental fake_experimental.dat --no-intro \
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --experimental fake_experimental.dat --no-intro \
     > log_experimental.txt 2>&1
 check_exit_code $? 0
 check_contains "\[3b\] EXPERIMENTAL COMPARISON" log_experimental.txt
 check_contains "Peaks found       : 1 simulated, 1 experimental" log_experimental.txt
-check_success raman_study/raman_spectrum_experimental.dat
+check_success raman_study/plot/raman_spectrum_experimental.dat
 
-echo "Testing: matched peak delta is close to the known ~2.0 cm^-1 offset (95.0 exp vs ~92.99 sim)"
+echo "Testing: matched peak delta is close to the known ~-2.0 cm^-1 offset (118.0 exp vs ~116.08 sim)"
 python3 -c "
 import re
-with open('raman_study/raman_stage3.txt') as f:
+with open('stb_ramanAnalysis_report.txt') as f:
     text = f.read()
 section = text.split('EXPERIMENTAL COMPARISON')[1]
 m = re.search(r'(\d+\.\d+)\s+(\d+\.\d+)\s+([+-]\d+\.\d+)', section)
 assert m, 'could not find the peak-match row'
 exp_f, sim_f, delta = float(m.group(1)), float(m.group(2)), float(m.group(3))
-assert abs(exp_f - 95.0) < 0.5, f'expected exp peak near 95.0, got {exp_f}'
-assert abs(sim_f - 92.99) < 1.0, f'expected sim peak near 92.99, got {sim_f}'
+assert abs(exp_f - 118.0) < 0.5, f'expected exp peak near 118.0, got {exp_f}'
+assert abs(sim_f - 116.08) < 1.0, f'expected sim peak near 116.08, got {sim_f}'
 assert abs(delta - (sim_f - exp_f)) < 1e-6
 print('OK')
 " > log_experimental_check.txt 2>&1
 check_contains "OK" log_experimental_check.txt
 
 echo "Testing: missing --experimental file is a clear error, not a crash"
-stb-ramanAnalysis --directory raman_study --experimental does_not_exist.dat --no-intro \
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --experimental does_not_exist.dat --no-intro \
     > log_experimental_missing.txt 2>&1
 check_exit_code $? 1
 check_contains "not found" log_experimental_missing.txt
@@ -336,7 +343,8 @@ check_contains "not found" log_experimental_missing.txt
 echo -e "\n--- Testing graceful skip of an incomplete mode (missing .EPSIMG) ---"
 make_optical_disp
 rm -f raman_study/optical_disp/mode_02_plus_x/Sn3O4.EPSIMG
-stb-ramanAnalysis --directory raman_study --no-intro > log_partial.txt 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --no-intro > log_partial.txt 2>&1
 check_exit_code $? 0
 check_contains "SKIP (incomplete" log_partial.txt
 check_contains "Modes analyzed      : 2/3" log_partial.txt
@@ -345,7 +353,8 @@ check_contains "Modes analyzed      : 2/3" log_partial.txt
 # --- 4b. --full-tensor analysis: recovered tensor must match the known ground truth M ---
 echo -e "\n--- Testing full-tensor analysis against a known ground-truth matrix ---"
 make_optical_disp_full
-stb-ramanAnalysis --directory raman_study --no-intro > log_fulltensor.txt 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --no-intro > log_fulltensor.txt 2>&1
 check_exit_code $? 0
 check_contains "Rxy=" log_fulltensor.txt
 check_contains "FULL Raman tensor" log_fulltensor.txt
@@ -355,7 +364,7 @@ python3 -c "
 import re
 import numpy as np
 M = np.load('ground_truth_M.npy')
-with open('raman_study/raman_stage3.txt') as f:
+with open('stb_ramanAnalysis_report.txt') as f:
     text = f.read()
 m = re.search(
     r'Rxx=([\-\d.]+)\s+Ryy=([\-\d.]+)\s+Rzz=([\-\d.]+)\s+Rxy=([\-\d.]+)\s+Rxz=([\-\d.]+)\s+Ryz=([\-\d.]+)',
@@ -434,7 +443,8 @@ with open("raman_study/raman_stage2.txt", "w") as f:
     f.write(f"{'mode_05_minus_yz':<24}{5:<12}{7:<12}{10.0:<16.6f}{'minus':<8}{'yz':<6}raman_study/optical_disp/mode_05_minus_yz\n")
 print("fixture ready")
 PYEOF
-stb-ramanAnalysis --directory raman_study --no-intro > log_reconstruct.txt 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --no-intro > log_reconstruct.txt 2>&1
 check_exit_code $? 0
 check_contains "Component reduction" log_reconstruct.txt
 
@@ -444,7 +454,7 @@ import re
 import numpy as np
 T0 = np.load('reduced_ground_truth_T0.npy')
 expected = 3.0 * T0
-with open('raman_study/raman_stage3.txt') as f:
+with open('stb_ramanAnalysis_report.txt') as f:
     text = f.read()
 m = re.search(
     r'Rxx=([\-\d.]+)\s+Ryy=([\-\d.]+)\s+Rzz=([\-\d.]+)\s+Rxy=([\-\d.]+)\s+Rxz=([\-\d.]+)\s+Ryz=([\-\d.]+)',
@@ -520,14 +530,15 @@ with open("raman_study/raman_stage2.txt", "w") as f:
     f.write(f"{'mode_06_derived':<24}{6:<12}{8:<12}{10.0:<16.6f}{'DERIVED':<8}{'-':<6}-  5\n")
 print("fixture ready")
 PYEOF
-stb-ramanAnalysis --directory raman_study --no-intro > log_skipdeg_reuse.txt 2>&1
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
+stb-ramanAnalysis --save-gnuplot --directory raman_study --no-intro > log_skipdeg_reuse.txt 2>&1
 check_exit_code $? 0
 check_contains "\[Degenerate partner\]" log_skipdeg_reuse.txt
 
 echo "Testing: mode 6's activity/rho exactly match mode 5's (the representative)"
 python3 -c "
 import re
-with open('raman_study/raman_stage3.txt') as f:
+with open('stb_ramanAnalysis_report.txt') as f:
     text = f.read()
 
 def block(mode_num):
@@ -558,10 +569,12 @@ check_contains "Modes analyzed      : 2/2" log_skipdeg_reuse.txt
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: --version"
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
 stb-ramanAnalysis --version > log_version.txt 2>&1
 check_contains "stb-ramanAnalysis" log_version.txt
 
 echo "Testing: --help documents --linewidth/--file/--temperature/--experimental"
+rm -f stb_ramanAnalysis_report*.txt stb_ramanAnalysis_references*.bib
 stb-ramanAnalysis --help > log_help.txt 2>&1
 check_contains "linewidth" log_help.txt
 check_contains "file" log_help.txt
@@ -582,11 +595,13 @@ make_optical_disp
   echo ""               # linewidth (default 10.0)
   echo ""               # temperature (optional, skip)
   echo ""               # experimental_file (optional, skip)
+  echo "y"              # save the spectrum as .dat + .gplot (under <run_dir>/plot/)
+  echo ""               # view the spectrum with matplotlib (default N)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Modes analyzed      : 3/3" log_menu.txt
-check_success raman_study/raman_spectrum.dat
+check_success raman_study/plot/raman_spectrum.dat
 
 
 popd > /dev/null

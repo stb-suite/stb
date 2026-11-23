@@ -126,6 +126,7 @@ check_success relaxed_z.txt
 # site_1_ontop_N is deliberately left with NO siesta.XV -- simulates SIESTA
 # not having finished relaxing it yet.
 
+rm -f stb_adsorbBsse_report*.txt stb_adsorbBsse_references*.bib
 stb-adsorbBsse --dir . --save-report --no-intro > log_bsse.txt 2>&1
 check_exit_code $? 0
 
@@ -136,7 +137,7 @@ check_contains "\[1\] SITE SCAN" log_bsse.txt
 check_contains "\[2\] WRITING BSSE FOLDERS" log_bsse.txt
 check_contains "\[3\] SUMMARY & NEXT STEPS" log_bsse.txt
 check_contains "\[4\] LIBRARY WARNINGS" log_bsse.txt
-check_success adsorption_bsse_report.txt
+check_success stb_adsorbBsse_report.txt
 
 echo "Testing: site_1_ontop_O is ready, site_1_ontop_N is reported as not yet relaxed"
 check_contains "site_1_ontop_O.*ready" log_bsse.txt
@@ -321,7 +322,7 @@ echo "Testing: navigate 5.8.2 -> defaults -> quit"
 rm -rf bsse
 # 5.8.2 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
 # default) / "" (save_report: N) / "" (Press Enter to continue) / 0 (quit)
-printf '5.8.2\n.\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.8.2\n.\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "BSSE folder pair(s) written : 1 of 2 site(s)" log_menu.txt
 check_success bsse/site_1_ontop_O/bsse_slab/structure.fdf
 

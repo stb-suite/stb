@@ -21,6 +21,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 export MPLBACKEND=Agg           # headless-safe; the PNG figures are written either way
 DEVICE="${DEVICE:-cpu}"
 R3="$DIR/../7.5-mlneb/model_round3"
@@ -58,7 +63,7 @@ ads() {
     mkdir -p "$OUT/$case"
     local t0=$SECONDS
     (cd "$OUT/$case" && stb-mladsorb --slab "$DIR/si111_2x2.fdf" --adsorbate Si --device "$DEVICE" \
-        -o . --save-report --no-intro "$@" < /dev/null > log.txt 2>&1)
+        -o . --no-intro "$@" < /dev/null > log.txt 2>&1)
     echo "  (stb-mladsorb took $((SECONDS - t0)) s on $DEVICE)"
 }
 report() { echo "$OUT/$1/stb_mladsorb_report.txt"; }
@@ -107,7 +112,7 @@ banner "Case 2 -- The main screening: round-3 model, top 4 Ang relaxed, bulk ref
 cat <<'EOF'
   stb-mladsorb --slab si111_2x2.fdf --adsorbate Si --custom-model .../model_round3/mlff_model_compiled.model
                --custom-model-card .../mlff_model_card.json --relax-depth 4 --bulk-reference si_bulk.fdf
-               --skip-foundation-comparison --no-committee --save-data --save-gnuplot --save-xyz --save-report
+               --skip-foundation-comparison --no-committee --save-data --save-gnuplot --save-xyz
 (The committee members of the model are not shipped -- 11 MB each; their numbers are in the reference report, Case 6.)
 EOF
 ads case2 $ROUND3 --relax-depth 4 --bulk-reference "$DIR/si_bulk.fdf" --skip-foundation-comparison --no-committee \
@@ -217,13 +222,13 @@ banner "Case 9 -- The interactive menu (stb-suite, code 7.6)"
 cat <<'EOF'
 The menu builds the same command line from its questions; here they are answered through a pipe: the 2x2 slab, Si,
 the round-3 model and its card, no foundation comparison, the device, ontop sites only, default height, the top 4 Ang
-relaxed, the bulk reference, all minima, no orientations, output folder, then data and report.
+relaxed, the bulk reference, all minima, no orientations, output folder, then data (the report is always written).
 EOF
 mkdir -p "$OUT/case10"
-printf '7.6\n%s\nSi\n%s\n\nn\n%s\nontop\n\n4\n%s\n\n\nmenu_out\nn\ny\nn\nn\ny\n\n0\n' \
+printf '7.6\n%s\nSi\n%s\n\nn\n%s\nontop\n\n4\n%s\n\n\nmenu_out\nn\ny\nn\nn\n\n0\n' \
     "$DIR/si111_2x2.fdf" "$R3/mlff_model_compiled.model" "$DEVICE" "$DIR/si_bulk.fdf" \
     | (cd "$OUT/case10" && stb-suite > log.txt 2>&1) || true
-R="$OUT/case10/menu_out/stb_mladsorb_report.txt"
+R="$OUT/case10/stb_mladsorb_report.txt"
 if [ -f "$R" ]; then
     section "$R" "RUN METADATA"
     section "$R" "DISTINCT MINIMA" | head -6

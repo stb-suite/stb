@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -45,7 +46,7 @@ POSITIONS_SUBDIR = "positions"
 # of whether a narrative report was requested -- same split as stb-adsorb's
 # always-on site table vs. its own --save-report-gated narrative, and
 # stb-hubbardu's always-on run_manifest.json.
-REPORT_FILE = "stackingfault_setup.txt"
+REPORT_FILE = "stb_stackingfault_report.txt"
 MANIFEST_FILE = "sf_manifest.json"
 
 
@@ -145,6 +146,19 @@ def build_z_relax_block(n_atoms, md_steps):
         f"  position from 1 to {n_atoms} 0.0 1.0 0.0\n"
         "%endblock Geometry.Constraints\n"
     )
+
+
+def is_hexagonal_inplane(lattice_matrix, tol=0.02):
+    """True for a 2D lattice with |a| = |b| and 60 or 120 degrees between them
+    (graphene, hBN, TMDs). On such a lattice the high-symmetry registries
+    of a bilayer (AB, BA) sit at shifts (1/3, 2/3) and (2/3, 1/3), which a
+    grid only contains when its divisions are multiples of 3."""
+    a, b = np.asarray(lattice_matrix, dtype=float)[:2]
+    la, lb = np.linalg.norm(a), np.linalg.norm(b)
+    if abs(la - lb) > tol * max(la, lb):
+        return False
+    cos = float(np.dot(a, b) / (la * lb))
+    return abs(abs(cos) - 0.5) < tol
 
 
 def build_scan_points(scan, grid_nx, grid_ny, scan_n):
@@ -270,6 +284,8 @@ def write_grid_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
             f.write(adsorption_sites.SINGLE_POINT_BLOCK)
         if d3:
             f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DFT_D3)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, adsorption_sites.CONFIG_EXTRA_FILE))
     symbols = {site.specie.symbol for site in pmg_structure}
@@ -386,15 +402,17 @@ def main():
                          help="With --scan x/y/xy: number of points along the 1D sweep (default: "
                               "15). Ignored under --scan surface (see -nx/-ny instead).")
 
-    parser.add_argument("-nx", "--grid-nx", type=int, default=7,
+    parser.add_argument("-nx", "--grid-nx", type=int, default=None,
                          help="With --scan surface: grid resolution along shift_x, this many "
-                              "lateral shifts covering [0, 1) (default: 7). Independent of "
+                              "lateral shifts covering [0, 1) (default: 6 on a hexagonal lattice, "
+                              "so that the grid contains the AB/BA registries at shifts 1/3 and "
+                              "2/3 -- use a multiple of 3 there --, 7 otherwise). Independent of "
                               "--grid-ny -- an anisotropic lattice (a != b, e.g. a rectangular "
                               "or low-symmetry 2D cell) often warrants a different sampling "
                               "density per axis rather than forcing a square grid. Ignored under "
                               "--scan x/y/xy (see -n/--scan-points instead).")
-    parser.add_argument("-ny", "--grid-ny", type=int, default=7,
-                         help="With --scan surface: grid resolution along shift_y (default: 7). "
+    parser.add_argument("-ny", "--grid-ny", type=int, default=None,
+                         help="With --scan surface: grid resolution along shift_y (default: as -nx). "
                               "See --grid-nx. Ignored under --scan x/y/xy.")
 
     parser.add_argument("--ml-prerelax-layers", action="store_true",
@@ -423,16 +441,13 @@ def main():
 
     parser.add_argument("-O", "--output-dir", type=str, default=".",
                          help=f"Root directory (default: current directory) -- everything lives "
-                              f"under its '{RUN_SUBDIR}/' subfolder (see --save-report): every "
-                              f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/', "
-                              f"the manifest, and the optional report directly under "
-                              f"'{RUN_SUBDIR}/' -- same self-contained-run-folder convention as "
+                              f"under its '{RUN_SUBDIR}/' subfolder: every "
+                              f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/' "
+                              f"and the manifest directly under "
+                              f"'{RUN_SUBDIR}/' (the report and its references file go to the current folder) -- same self-contained-run-folder convention as "
                               "stb-adsorb's 'sites/' and stb-neb's 'neb_run/'.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the full run narrative to <output-dir>/{RUN_SUBDIR}/"
-                              f"{REPORT_FILE}. Off by default -- the machine-readable "
-                              f"{MANIFEST_FILE} that stb-stackingfaultAnalysis actually reads is "
-                              "always written regardless of this flag.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-stackingfault {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -444,13 +459,13 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if args.scan == "surface":
-        if args.grid_nx < 2:
+        if args.grid_nx is not None and args.grid_nx < 2:
             parser.error("-nx/--grid-nx must be >= 2 (need at least 2 points for a sweep).")
-        if args.grid_ny < 2:
+        if args.grid_ny is not None and args.grid_ny < 2:
             parser.error("-ny/--grid-ny must be >= 2 (need at least 2 points for a sweep).")
     elif args.scan_points < 2:
         parser.error("-n/--scan-points must be >= 2 (need at least 2 points for a sweep).")
@@ -481,6 +496,13 @@ def main():
     species_meta = structure_io.species_dict(layer1_structure)
     layer1_pmg = read_layer(args.layer1)
     layer2_pmg = read_layer(args.layer2)
+    hexagonal = is_hexagonal_inplane(layer1_pmg.lattice.matrix)
+    grid_default = 6 if hexagonal else 7
+    grid_chosen = args.grid_nx is None and args.grid_ny is None
+    if args.grid_nx is None:
+        args.grid_nx = args.grid_ny if args.grid_ny is not None else grid_default
+    if args.grid_ny is None:
+        args.grid_ny = args.grid_nx
 
     with open(args.calc) as f:
         calc_text = f.read()
@@ -490,7 +512,7 @@ def main():
     run_root = os.path.join(output_root, RUN_SUBDIR)
     positions_root = os.path.join(run_root, POSITIONS_SUBDIR)
     os.makedirs(positions_root, exist_ok=True)
-    report_path = os.path.join(run_root, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("stackingfault")
 
     f_out = open(report_path, 'w') if report_path else None
 
@@ -514,7 +536,17 @@ def main():
     print_dual(f"  Output dir      : {output_root} (run folder: {run_root})", f_out)
     if args.scan == "surface":
         print_dual(f"  Grid            : {args.grid_nx} x {args.grid_ny} (surface)"
-                    + (" (asymmetric)" if args.grid_nx != args.grid_ny else ""), f_out)
+                    + (" (asymmetric)" if args.grid_nx != args.grid_ny else "")
+                    + (f" -- default for a {'hexagonal' if hexagonal else 'non-hexagonal'} lattice"
+                       if grid_chosen else ""), f_out)
+        if hexagonal and (args.grid_nx % 3 or args.grid_ny % 3):
+            print_dual(color_text(
+                f"  [WARNING] Hexagonal lattice with a {args.grid_nx} x {args.grid_ny} grid: the "
+                "high-symmetry registries AB/BA are at shifts (1/3, 2/3) and (2/3, 1/3), which this "
+                "grid does not contain, so the reported minimum, maximum and corrugation are those of "
+                "the nearest grid points (graphene bilayer, 7 x 7: minimum 0.8 meV above the true AB, "
+                "corrugation 3.62 instead of 3.78 meV/Ang^2). Use divisions that are multiples of 3 "
+                "(6, 9, 12).", 'yellow'), f_out)
     else:
         scan_desc = {"x": "shift_x only", "y": "shift_y only", "xy": "diagonal shift_x=shift_y"}
         print_dual(f"  Grid            : {args.scan_points} points, 1D ({scan_desc[args.scan]})",
@@ -538,7 +570,6 @@ def main():
     print_dual(f"  max_area/max_strain/match_id: {args.max_area} / {args.max_strain} / {args.match_id}", f_out)
     print_dual(f"  ML pre-relax layers : {'yes' if args.ml_prerelax_layers else 'no'}", f_out)
     print_dual(f"  ML preview          : {'yes' if args.ml_preview else 'no'}", f_out)
-    print_dual(f"  Save report         : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
 
     library_warnings = []  # collected via capture_library_noise, reported in the last section
 

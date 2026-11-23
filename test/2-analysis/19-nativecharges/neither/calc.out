@@ -15,7 +15,7 @@ DFT-D3 support
 Wannier90 wrapper support
 
 Runtime information:
-* Directory : /STORAGE02/carlos/run/Sn3O4/triclinic_vdw/band_dos
+* Directory : /path/to/run/Sn3O4/triclinic_vdw/band_dos
 * Running on 16 nodes in parallel.
 * Running 1 OpenMP threads.
 * Running 16 processes.

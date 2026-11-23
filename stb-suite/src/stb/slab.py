@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import os
@@ -16,6 +17,7 @@ from datetime import datetime
 
 import numpy as np
 from pymatgen.core.periodic_table import Element
+from pymatgen.core.lattice import Lattice
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
@@ -29,9 +31,9 @@ from stb.core.ase_view import view_structure_interactive
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 from stb.core.deps import require_mace
 from stb.core.passivation import passivate_dangling_bonds
+from stb.core.layers import LAYER_TOL_ANG, atomic_layers, joined_frac_c, surface_normal
 
 REPORT_FILE = "stb_slab_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-fetch/stb-kgrid/stb-mlrelax
 # (core/kspace.py's other callers), used to detect vacuum-padded axes on the
@@ -42,15 +44,125 @@ BIB_FILE = "references.bib"
 VACUUM_GAP_ANG = 10.0
 
 
+def c_tilt_deg(lattice_matrix):
+    """Angle (degrees) between the c vector and the surface normal."""
+    c = np.asarray(lattice_matrix, dtype=float)[2]
+    cosine = np.dot(c, surface_normal(lattice_matrix)) / np.linalg.norm(c)
+    return float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
+
+
 def slab_metrics(slab):
-    """(thickness, vacuum) in Angstrom. reorient_lattice=True (SlabGenerator's
-    own default, kept here) puts the vacuum-normal on the c-axis, so this
-    matches what kspace.detect_vacuum_axes will later find on the written file.
-    """
-    cart_z = slab.cart_coords[:, 2]
-    thickness = float(cart_z.max() - cart_z.min())
-    vacuum = float(slab.lattice.c - thickness)
+    """(thickness, vacuum) in Angstrom, both measured along the surface normal
+    (not along c, and not along z: SlabGenerator's c is in general tilted with
+    respect to the surface, and with it tilted the atoms' z range is not the
+    thickness)."""
+    normal = surface_normal(slab.lattice.matrix)
+    heights = slab.cart_coords @ normal
+    thickness = float(heights.max() - heights.min())
+    vacuum = float(np.dot(slab.lattice.matrix[2], normal) - thickness)
     return thickness, vacuum
+
+
+def trim_to_layers(slab, n_layers, tol=LAYER_TOL_ANG, center=False):
+    """The bottom `n_layers` atomic layers of a slab whose c is the surface normal
+    (perpendicular_c_slab), with the same vacuum: c shrinks by the thickness
+    removed. The bottom face -- the termination that was chosen -- is kept; the
+    layers come off the top."""
+    layers = atomic_layers(slab, tol)
+    keep = np.sort(np.concatenate([indices for _, indices in layers[:n_layers]]))
+    matrix = np.array(slab.lattice.matrix, dtype=float)
+    _, vacuum = slab_metrics(slab)
+    heights = joined_frac_c(slab.frac_coords[:, 2]) * matrix[2, 2]
+    kept_heights = heights[keep]
+    thickness_new = float(kept_heights.max() - kept_heights.min())
+    new_c = thickness_new + vacuum
+
+    cart = np.array(slab.frac_coords, dtype=float)
+    cart[:, 2] = heights / matrix[2, 2]
+    cart = (cart @ matrix)[keep]
+    if center:
+        cart[:, 2] += 0.5 * new_c - 0.5 * (kept_heights.max() + kept_heights.min())
+    new_matrix = matrix.copy()
+    new_matrix[2] = [0.0, 0.0, new_c]
+    new_frac = cart @ np.linalg.inv(new_matrix)
+    new_frac[np.abs(new_frac) < 1e-12] = 0.0
+    new_frac -= np.floor(new_frac)
+    site_properties = {key: [values[i] for i in keep] for key, values in slab.site_properties.items()}
+    return type(slab)(
+        lattice=Lattice(new_matrix),
+        species=[slab.species_and_occu[i] for i in keep],
+        coords=new_frac,
+        miller_index=slab.miller_index,
+        oriented_unit_cell=slab.oriented_unit_cell,
+        shift=slab.shift,
+        scale_factor=slab.scale_factor,
+        energy=slab.energy,
+        reorient_lattice=False,
+        site_properties=site_properties,
+        reconstruction=slab.reconstruction,
+    )
+
+
+# Below this angle (degrees) between c and the surface normal a cell counts as
+# already perpendicular and is written exactly as generated.
+C_TILT_TOL_DEG = 1e-6
+
+
+def perpendicular_c_slab(slab):
+    """The same slab in a cell whose c is the surface normal, with a along x and
+    b in the xy plane. Returns (slab, tilt) -- the angle c made with the normal.
+
+    SlabGenerator takes for c a lattice vector of the bulk that leaves the
+    surface plane, in general not perpendicular to it (fcc primitive cell,
+    (111): 35.3 degrees), and its reorient_lattice puts THAT vector along z --
+    so the surface is tilted with respect to xy. Everything downstream takes z
+    as the normal: the adsorbate placed above a site, SIESTA's slab dipole
+    correction, the thickness and vacuum printed here.
+
+    c is replaced by its component along the normal. a and b do not change, and
+    neither does any position: the two cells differ only in how the periodic
+    copies along c are shifted sideways, and those are separated by the vacuum,
+    so it is the same slab with the same vacuum. The rotation that follows is a
+    proper one (no mirror image of a chiral crystal).
+    """
+    matrix = np.asarray(slab.lattice.matrix, dtype=float)
+    tilt = c_tilt_deg(matrix)
+    a, b, _ = matrix
+    in_plane = (abs(a[1]) < 1e-8 and abs(a[2]) < 1e-8 and abs(b[2]) < 1e-8)
+    if tilt < C_TILT_TOL_DEG and in_plane:
+        return slab, tilt
+
+    # One piece first. In the generated cell a slab that starts at the bottom of
+    # the cell can have atoms just below it, stored at the top (fractional c
+    # 0.9999...): the two parts are joined by the tilted c, and would come
+    # together shifted sideways once c changes. Every atom above the widest
+    # empty gap along c -- the vacuum -- is brought down by one c.
+    frac = np.array(slab.frac_coords, dtype=float)
+    frac[:, 2] = joined_frac_c(frac[:, 2])
+    cart = frac @ matrix
+
+    normal = surface_normal(matrix)
+    x_axis = a / np.linalg.norm(a)
+    frame = np.array([x_axis, np.cross(normal, x_axis), normal])   # rows: new x, y, z
+    new_matrix = np.array([a, b, np.dot(matrix[2], normal) * normal]) @ frame.T
+    new_matrix[np.abs(new_matrix) < 1e-12] = 0.0
+    new_frac = (cart @ frame.T) @ np.linalg.inv(new_matrix)
+    new_frac[np.abs(new_frac) < 1e-12] = 0.0
+    new_frac -= np.floor(new_frac)
+    new_slab = type(slab)(
+        lattice=Lattice(new_matrix),
+        species=slab.species_and_occu,
+        coords=new_frac,
+        miller_index=slab.miller_index,
+        oriented_unit_cell=slab.oriented_unit_cell,
+        shift=slab.shift,
+        scale_factor=slab.scale_factor,
+        energy=slab.energy,
+        reorient_lattice=False,
+        site_properties=slab.site_properties,
+        reconstruction=slab.reconstruction,
+    )
+    return new_slab, tilt
 
 
 def sort_key(slab, symprec):
@@ -100,6 +212,22 @@ def prompt_termination(slabs, hkl, symprec):
             pass
 
 
+def print_layers(slab, tol, f_out):
+    """Number of atomic layers, atoms in each and the spacing between them."""
+    layers = atomic_layers(slab, tol)
+    counts = [len(indices) for _, indices in layers]
+    spacings = np.diff([height for height, _ in layers])
+    per_layer = (f"{counts[0]} atom(s) each" if len(set(counts)) == 1
+                 else "atoms per layer, bottom to top: " + " ".join(str(c) for c in counts))
+    print_dual(f"Atomic layers    : {len(layers)} ({per_layer}; atoms within {tol:g} Ang in height "
+               "are one layer)", f_out)
+    if len(spacings):
+        print_dual(f"Layer spacing    : min {spacings.min():.4f}, mean {spacings.mean():.4f}, "
+                   f"max {spacings.max():.4f} Ang", f_out)
+        if len(set(np.round(spacings, 3))) > 1 and len(spacings) <= 24:
+            print_dual("                   bottom to top: " + " ".join(f"{d:.3f}" for d in spacings), f_out)
+
+
 def print_slab_summary(slab, hkl, polar, symmetric, f_out):
     """`polar`/`symmetric` are passed in rather than recomputed here, since
     they're Slab-only properties (Slab.is_polar()/is_symmetric()) -- after
@@ -114,6 +242,24 @@ def print_slab_summary(slab, hkl, polar, symmetric, f_out):
     print_dual(f"Vacuum thickness : {vacuum:.2f} Ang", f_out)
     print_dual(f"Polar            : {'Yes' if polar else 'No'}", f_out)
     print_dual(f"Symmetric        : {'Yes' if symmetric else 'No'}", f_out)
+
+
+def print_cell_orientation(slab, tilt_generated, f_out):
+    """Cell vectors of the slab as written, and how c sits on the surface."""
+    a, b, c = slab.lattice.matrix
+    for name, vec in (("a", a), ("b", b), ("c", c)):
+        print_dual(f"Cell vector {name}    : {vec[0]:10.5f} {vec[1]:10.5f} {vec[2]:10.5f} Ang", f_out)
+    tilt_now = c_tilt_deg(slab.lattice.matrix)
+    if tilt_generated >= C_TILT_TOL_DEG:
+        print_dual(f"Surface normal   : along z = c (the generated c was {tilt_generated:.2f} deg off the "
+                   "normal; replaced by its perpendicular component, same slab and vacuum)", f_out)
+    elif tilt_now < 1e-4:
+        print_dual("Surface normal   : along z = c", f_out)
+    if tilt_now >= 1e-4 or max(abs(a[2]), abs(b[2])) > 1e-6:
+        print_dual(color_text(
+            f"[WARNING] c is {tilt_now:.3f} deg off the surface normal in the written cell (a, b z-components "
+            f"{a[2]:.2e}, {b[2]:.2e} Ang): tools that take z as the normal (stb-adsorb, the slab dipole "
+            "correction) will be tilted with respect to this surface.", 'yellow'), f_out)
 
 
 def _validate_structure(pmg_structure, vacuum_axes, f_out):
@@ -142,7 +288,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 -i\n"
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 --all -o surface.fdf\n"
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 --passivate\n"
-               "  %(prog)s -f bulk.fdf --hkl 1 1 1 --ml-relax --save-report --view\n"
+               "  %(prog)s -f bulk.fdf --hkl 1 1 1 --ml-relax --view\n"
     )
 
     parser.add_argument("-f", "--file", dest="filename", type=str, required=True,
@@ -151,6 +297,16 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
                         help="Miller index of the surface to cut, e.g. --hkl 1 0 0")
     parser.add_argument("--min-slab-size", type=float, default=10.0,
                         help="Minimum slab thickness in Angstrom (default: 10.0).")
+    parser.add_argument("--layers", type=int, default=None, metavar="N",
+                        help="Number of atomic layers of the slab, instead of a thickness: the slab is "
+                             "cut thick enough and layers are removed from its top until N are left "
+                             "(the bottom face is the chosen termination), the vacuum unchanged. "
+                             "For a convergence series in the number of layers. --min-slab-size is "
+                             "then ignored. Not with --symmetrize.")
+    parser.add_argument("--layer-tol", type=float, default=LAYER_TOL_ANG, metavar="ANG",
+                        help="Atoms whose heights along the surface normal differ by less than this "
+                             f"belong to one atomic layer (default: {LAYER_TOL_ANG} Ang). A buckled "
+                             "plane counts as two layers unless this is raised above its buckling.")
     parser.add_argument("--min-vacuum-size", type=float, default=15.0,
                         help="Minimum vacuum thickness in Angstrom (default: 15.0).")
     parser.add_argument("--lll-reduce", action="store_true",
@@ -206,8 +362,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry analysis) "
-                             f"to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) of the bulk structure and "
                              "every written slab (page through frames in ase-gui) after writing "
@@ -237,6 +392,13 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
 
     if args.ml_relax_cell and not args.ml_relax:
         parser.error("--ml-relax-cell is only valid together with --ml-relax.")
+    if args.layers is not None and args.layers < 1:
+        parser.error("--layers must be 1 or more.")
+    if args.layers is not None and args.symmetrize:
+        parser.error("--layers removes layers from the top of the slab, which undoes --symmetrize; "
+                     "use one or the other.")
+    if args.layer_tol <= 0:
+        parser.error("--layer-tol must be positive.")
     if (args.custom_model or args.model is not None) and not args.ml_relax:
         parser.error("--model/--custom-model are only valid together with --ml-relax.")
     if args.model is None:
@@ -249,10 +411,10 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("slab")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -269,7 +431,10 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     print_dual(f"Date/time        : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
     print_dual(f"Input file       : {args.filename}", f_out)
     print_dual(f"Miller index     : {tuple(args.hkl)}", f_out)
-    print_dual(f"Min. slab size   : {args.min_slab_size} Ang", f_out)
+    if args.layers is not None:
+        print_dual(f"Atomic layers    : {args.layers} (--layers; layer tolerance {args.layer_tol:g} Ang)", f_out)
+    else:
+        print_dual(f"Min. slab size   : {args.min_slab_size} Ang", f_out)
     print_dual(f"Min. vacuum size : {args.min_vacuum_size} Ang", f_out)
     print_dual(f"Passivate        : {'yes (' + args.passivant + ')' if args.passivate else 'no'}", f_out)
     print_dual(f"Output file      : {args.output}", f_out)
@@ -312,19 +477,45 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     print_dual(f"Center slab      : {'yes' if args.center_slab else 'no'}", f_out)
     print_dual(f"Reduce to primitive first : {'yes' if args.primitive else 'no'}", f_out)
     print_dual(f"Symmetrize       : {'yes' if args.symmetrize else 'no'}", f_out)
-    try:
-        gen = SlabGenerator(
-            pmg_structure, hkl, args.min_slab_size, args.min_vacuum_size,
-            lll_reduce=args.lll_reduce, center_slab=args.center_slab, primitive=args.primitive,
-        )
-        slabs = gen.get_slabs(symmetrize=args.symmetrize)
-    except Exception as e:
-        fail(f"Could not generate slabs for hkl={hkl}: {e}")
+    # With --layers the slab is cut thicker and thicker until every termination
+    # has at least that many atomic layers; the extra ones are then removed.
+    min_slab_size = args.min_slab_size
+    for _ in range(12):
+        try:
+            gen = SlabGenerator(
+                pmg_structure, hkl, min_slab_size, args.min_vacuum_size,
+                lll_reduce=args.lll_reduce, center_slab=args.center_slab, primitive=args.primitive,
+            )
+            slabs = gen.get_slabs(symmetrize=args.symmetrize)
+        except Exception as e:
+            fail(f"Could not generate slabs for hkl={hkl}: {e}")
 
-    if not slabs:
-        fail(f"No slabs could be generated for Miller index {hkl}.")
+        if not slabs:
+            fail(f"No slabs could be generated for Miller index {hkl}.")
 
-    slabs.sort(key=lambda s: sort_key(s, args.symprec))
+        # Every slab in a cell with c along the surface normal (see perpendicular_c_slab).
+        oriented = [perpendicular_c_slab(slab) for slab in slabs]
+        if args.layers is None:
+            break
+        fewest = min(len(atomic_layers(slab, args.layer_tol)) for slab, _ in oriented)
+        if fewest >= args.layers:
+            break
+        min_slab_size *= max(1.3, 1.1 * args.layers / fewest)
+    else:
+        fail(f"Could not cut a slab with {args.layers} atomic layers (reached {min_slab_size:.0f} Ang "
+             f"with {fewest}); check --layer-tol ({args.layer_tol:g} Ang).")
+
+    if args.layers is not None:
+        generated = [len(atomic_layers(slab, args.layer_tol)) for slab, _ in oriented]
+        oriented = [(trim_to_layers(slab, args.layers, args.layer_tol, center=args.center_slab), tilt)
+                    for slab, tilt in oriented]
+        print_dual(f"Atomic layers    : {args.layers} kept, counted from the bottom face (cut with "
+                   f"{min(generated)}-{max(generated)} layers at {min_slab_size:.1f} Ang, the rest "
+                   "removed from the top; vacuum unchanged)", f_out)
+
+    oriented.sort(key=lambda pair: sort_key(pair[0], args.symprec))
+    slabs = [slab for slab, _ in oriented]
+    generated_tilts = [tilt for _, tilt in oriented]
     print_dual(f"Terminations found: {len(slabs)}", f_out)
 
     if args.interactive:
@@ -358,9 +549,11 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     # Structure (AseAtomsAdaptor.get_structure() doesn't reconstruct the
     # Slab subclass), which would otherwise raise AttributeError below.
     slab_flags = {}
+    c_tilts = {}
     for idx in chosen_indices:
         slab = slabs[idx]
         slab_flags[idx] = (slab.is_polar(), slab.is_symmetric(symprec=args.symprec))
+        c_tilts[idx] = generated_tilts[idx]
         species_meta = structure.species_meta
         if args.passivate:
             slab, report = passivate_dangling_bonds(
@@ -432,6 +625,10 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
         polar, symmetric = slab_flags[idx]
         print_dual(f"\n{color_text(f'--- [Termination {idx}] ---', 'bold')}", f_out)
         print_slab_summary(slab, hkl, polar, symmetric, f_out)
+        print_layers(slab, args.layer_tol, f_out)
+        if idx in passivation_reports and passivation_reports[idx]["passivated"]:
+            print_dual(f"                   (the {args.passivant} atoms added by --passivate are counted)", f_out)
+        print_cell_orientation(slab, c_tilts[idx], f_out)
 
         if idx in passivation_reports:
             report = passivation_reports[idx]
@@ -495,10 +692,10 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[7] SUMMARY & FILES", f_out)
     print_dual("Status                    : OK", f_out)
@@ -508,7 +705,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
         print_dual(f"Output file               : {of}", f_out)
     if len(output_files) > len(shown_files):
         print_dual(f"                            ... and {len(output_files) - len(shown_files)} more", f_out)
-    print_dual(f"References                : {BIB_FILE}", f_out)
+    print_dual(f"References                : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report                    : {report_path}", f_out)
 

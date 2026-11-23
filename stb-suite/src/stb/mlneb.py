@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -35,6 +35,7 @@ lattice and the report warns.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -109,6 +110,10 @@ def relax_endpoint(label, pmg, calc, args, noise=None):
             "pmg": AseAtomsAdaptor.get_structure(at)}
 
 
+# Endpoints whose atoms all coincide within this (Angstrom) are the same structure.
+IDENTICAL_ENDPOINTS_ANG = 1e-3
+
+
 def neb_band(initial_pmg, final_pmg, calc, args, noise=None, label="model"):
     """The whole pipeline on one (initial, final) pair, both wrapped into [0, 1) and on one
     lattice: endpoint relaxations, interpolation (+ IDPP), climbing-image NEB, spline fit. Prints
@@ -135,6 +140,17 @@ def neb_band(initial_pmg, final_pmg, calc, args, noise=None, label="model"):
         from pymatgen.core import Structure
         fin = ends[1]["pmg"]
         ends[1]["pmg"] = Structure(fin.lattice, fin.species, fin.frac_coords - shift)
+    span = ends[1]["pmg"].frac_coords - ends[0]["pmg"].frac_coords
+    endpoint_distance = float(np.linalg.norm(span @ ends[0]["pmg"].lattice.matrix, axis=1).max())
+    if endpoint_distance < IDENTICAL_ENDPOINTS_ANG:
+        relaxed = any(e.get("steps") for e in ends)
+        raise ValueError(
+            f"the initial and final states are nearly identical ({label}: no atom moves more than "
+            f"{endpoint_distance:.1e} Ang between them"
+            + (" after the endpoint relaxation -- the two inputs relax into the same minimum of this model"
+               if relaxed else "")
+            + "): there is no path, so no barrier along this band. Give two different minima as "
+            "--initial and --final.")
     with _quiet(noise, label):
         guess = linear_interpolate_images(ends[0]["pmg"], ends[1]["pmg"], args.n_images,
                                           autosort_tol=args.autosort_tol)
@@ -380,6 +396,9 @@ def report_guess(res, args, f_out, warn):
     if mean and any(s > 3 * mean for s in steps):
         warn(f"{res['label']}: one step of the starting path is more than 3x the mean step -- often a wrong atom "
              "correspondence between --initial and --final (see --autosort-tol) rather than a real feature.")
+    from stb.neb import intramolecular_outliers, report_intramolecular_outliers
+    report_intramolecular_outliers(intramolecular_outliers(res["guess"]), args.idpp,
+                          lambda text: warn(f"{res['label']}: {text}"))
     if res["frozen"]:
         print_dual(f"Frozen atoms      : {len(res['frozen'])}/{len(res['images'][0])} (move < {args.freeze_threshold} "
                    "Ang between the endpoints; --freeze-substrate)", f_out)
@@ -573,23 +592,69 @@ SINGLE_POINT_EXTRA = ("# stb-mlneb: single-point evaluation of a NEB image (no r
                       "MD.VariableCell       false\n")
 
 
+def theory_settings(*texts):
+    """{setting: value} of the level-of-theory settings stb-mlffAnalysis compares between training
+    folders (XC, basis, mesh, smearing, spin, D3, dipole correction, SCF tolerance), from fdf texts in
+    SIESTA's reading order; 'default' when absent."""
+    from stb.core.fdf_directives import parse_directives
+    from stb.mlff_analysis import _THEORY_KEYS
+    d = parse_directives(*texts)
+    out = {}
+    for label, keys in _THEORY_KEYS:
+        v = " ".join(next((d[k] for k in keys if k in d), "default").split())
+        out[label] = re.sub(r"(\d)[dD]([+-]?\d)", r"\1e\2", v).lower()
+    return out
+
+
+def template_settings(tpl):
+    """theory_settings of the folders write_siesta_folder writes from `tpl`."""
+    with open(tpl["calc"], errors="replace") as f:
+        return theory_settings(tpl["extra"] + SINGLE_POINT_EXTRA, f.read())
+
+
+def folder_settings(folder):
+    """theory_settings of a written SIESTA folder: config_extra.fdf (read first), then the other .fdf."""
+    import glob
+    files = sorted(glob.glob(os.path.join(folder, "*.fdf")))
+    files.sort(key=lambda p: os.path.basename(p) != "config_extra.fdf")
+    texts = []
+    for path in files:
+        with open(path, errors="replace") as f:
+            texts.append(f.read())
+    return theory_settings(*texts)
+
+
+def settings_differences(a, b):
+    """[(setting, value in a, value in b)] where two theory_settings dicts differ."""
+    return [(k, a.get(k, "default"), b.get(k, "default")) for k in a if a.get(k, "default") != b.get(k, "default")]
+
+
 def siesta_template(args, state, wf_base):
     """The SIESTA inputs every check/export folder starts from. With --mlff-workflow: the workflow's
     reference calc.fdf, pseudopotentials and dispersion, the k-grid scaled to keep the reference's
-    k x a; else --calc and --pseudo-dir, the calc's own k-grid (or --kgrid). Raises ValueError."""
+    k x a; else --calc and --pseudo-dir, the calc's own k-grid (or --kgrid). With both, --calc is used
+    for --siesta-check alone, but --to-mlff always takes the workflow's reference (its folders become
+    training labels, which must share round 1's level of theory); the returned 'notes' list the
+    settings in which --calc differs from the reference. The calc file is always written as the
+    reference's name (calc.fdf). Raises ValueError."""
     from stb.core.fdf_directives import parse_kgrid
-    from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+    from stb.core.pseudopotentials import is_bank, resolve_pseudo_source
     from stb.core import mlff_workflow
-    ref_cell, extra = None, ""
+    ref_cell, extra, notes = None, "", []
     if state is not None:
         rec = state.get("reference") or {}
         if not rec.get("calc"):
             raise ValueError("the workflow's reference is one self-contained .fdf (no separate calc.fdf): pass --calc")
         calc = mlff_workflow.resolve(rec["calc"], wf_base)
-        ref = structure_io.read_fdf(mlff_workflow.resolve(rec["file"], wf_base))
+        ref_path = mlff_workflow.resolve(rec.get("file") or "", wf_base)
+        if not os.path.isfile(ref_path):
+            raise ValueError(f"the workflow's reference structure '{ref_path}' does not exist (recorded in the "
+                             "workflow file as 'reference.file', relative to that file) -- restore it or pass "
+                             "a workflow file whose reference is still in place")
+        ref = structure_io.read_fdf(ref_path)
         ref_cell = np.linalg.norm(np.array(structure_io.lattice_only(ref)), axis=1)
         pseudo_dir = rec.get("pseudo_dir") or "."
-        if pseudo_dir not in BANKS:
+        if not is_bank(pseudo_dir):
             pseudo_dir = mlff_workflow.resolve(pseudo_dir, wf_base)
         extra = mlff_workflow.dftd3_block(state)
         source = f"the workflow's reference ({rec['calc']}, pseudopotentials {rec.get('pseudo_dir')})"
@@ -599,8 +664,26 @@ def siesta_template(args, state, wf_base):
         calc, pseudo_dir = args.calc, args.pseudo_dir
         source = f"--calc {args.calc}, pseudopotentials {args.pseudo_dir}"
     if args.calc and state is not None:
-        calc = args.calc
-        source = f"--calc {args.calc} (k-grid scaled from the workflow's reference cell)"
+        if not os.path.isfile(args.calc):
+            raise ValueError(f"calc template '{args.calc}' not found")
+        with open(calc, errors="replace") as f:
+            ref_settings = theory_settings(extra + SINGLE_POINT_EXTRA, f.read())
+        with open(args.calc, errors="replace") as f:
+            own_settings = theory_settings(extra + SINGLE_POINT_EXTRA, f.read())
+        diffs = settings_differences(ref_settings, own_settings)
+        listing = ", ".join(f"{k} '{b}' instead of '{a}'" for k, a, b in diffs)
+        if args.to_mlff:
+            if diffs:
+                notes.append(f"--calc {args.calc} differs from the workflow's reference calc.fdf ({listing}): "
+                             "--to-mlff (and --siesta-check, whose folders it reuses) uses the reference, so the new "
+                             "labels share the level of theory of the training set; --calc is ignored.")
+        else:
+            calc = args.calc
+            source = f"--calc {args.calc} (k-grid scaled from the workflow's reference cell)"
+            if diffs:
+                notes.append(f"--calc {args.calc} differs from the workflow's reference calc.fdf ({listing}): the "
+                             "SIESTA check is then not at the training set's level of theory, and its folders are "
+                             "not reused by a later --to-mlff.")
     if not os.path.isfile(calc):
         raise ValueError(f"calc template '{calc}' not found")
     with open(calc) as f:
@@ -610,7 +693,9 @@ def siesta_template(args, state, wf_base):
         raise ValueError(f"'{calc}' does not %include a structure file: the images need a calc.fdf without geometry "
                          "that %includes one (the suite's structure.fdf + calc.fdf pair)")
     return {"calc": calc, "struct": inc[0], "pseudo": resolve_pseudo_source(pseudo_dir), "pseudo_label": pseudo_dir,
-            "kgrid": parse_kgrid(text), "ref_cell": ref_cell, "extra": extra, "source": source}
+            "kgrid": parse_kgrid(text), "ref_cell": ref_cell, "extra": extra, "source": source, "notes": notes,
+            "calc_name": (os.path.basename(mlff_workflow.resolve(state["reference"]["calc"], wf_base))
+                          if state is not None else "calc.fdf")}
 
 
 def image_kgrid(tpl, atoms, override):
@@ -631,7 +716,7 @@ def write_siesta_folder(folder, atoms, tpl, species_meta, kgrid_override=None):
     pseudopotentials, and the image's coordinates as a stamp to recognise it later."""
     from pymatgen.io.ase import AseAtomsAdaptor
     from ase.io import write as ase_write
-    from stb.core.pseudopotentials import get_required_pseudos
+    from stb.core.pseudopotentials import get_required_pseudos, note_pseudo_folder
     os.makedirs(folder, exist_ok=True)
     st = structure_io.from_pymatgen(AseAtomsAdaptor.get_structure(atoms), species_meta=species_meta,
                                     coord_format="fractional")
@@ -645,13 +730,14 @@ def write_siesta_folder(folder, atoms, tpl, species_meta, kgrid_override=None):
         f.write(extra)
     with open(tpl["calc"]) as f:
         text = f.read()
-    with open(os.path.join(folder, os.path.basename(tpl["calc"])), "w") as f:
+    with open(os.path.join(folder, tpl.get("calc_name", "calc.fdf")), "w") as f:
         f.write(structure_io.prepend_include(text, "config_extra.fdf"))
     pseudos, missing = get_required_pseudos(sorted(set(atoms.get_chemical_symbols())), tpl["pseudo"])
     if missing:
         raise ValueError(f"no pseudopotential for {', '.join(missing)} in '{tpl['pseudo_label']}'")
     for p in pseudos:
         shutil.copy(p, folder)
+    note_pseudo_folder(folder)
     ase_write(os.path.join(folder, IMAGE_STAMP), atoms.copy(), format="extxyz")
     return folder
 
@@ -742,6 +828,8 @@ def export_to_mlff(args, state, wf_path, res, tpl, species_meta, results, warn, 
     root = os.path.join(mlff_workflow.configs_dir(base, latest + 1), tag if tag.startswith("neb") else f"neb_{tag}")
     known = {c["folder"] for c in state["configs"]}
     entries, pending, copied, skipped = [], [], 0, 0
+    wanted = template_settings(tpl)
+    not_reused = []
     rng = np.random.default_rng(args.to_mlff_seed)
     for i, image in enumerate(res["images"]):
         jobs = [(f"image_{i:02d}", image, "neb", f"NEB image {i} of {len(res['images']) - 1}, {res['label']} band")]
@@ -758,6 +846,11 @@ def export_to_mlff(args, state, wf_path, res, tpl, species_meta, results, warn, 
                 continue
             r = results.get(i) if kind == "neb" else None
             if isinstance(r, dict):
+                diffs = settings_differences(wanted, folder_settings(os.path.dirname(r["out"])))
+                if diffs:
+                    not_reused.append((os.path.dirname(r["out"]), diffs))
+                    r = None
+            if isinstance(r, dict):
                 shutil.copytree(os.path.dirname(r["out"]), dest, dirs_exist_ok=True)
                 copied += 1
             else:
@@ -768,6 +861,10 @@ def export_to_mlff(args, state, wf_path, res, tpl, species_meta, results, warn, 
                             "neb": {"image": i, "initial": args.initial, "final": args.final,
                                     "model": res["label"], "E_rel_model_eV": round(float(
                                         res["energies"][i] - res["energies"][0]), 5)}})
+    for folder, diffs in not_reused:
+        warn(f"--to-mlff: {folder} was run at another level of theory than the training set ("
+             + ", ".join(f"{k} '{b}' instead of '{a}'" for k, a, b in diffs)
+             + "): not copied as a label; the image gets a new folder with the workflow's settings.")
     if entries:
         mlff_workflow.backup(wf_path)
         mlff_workflow.add_configs(state, entries, base)
@@ -809,7 +906,7 @@ def build_parser():
                "  stb-mlneb --initial initial.fdf --final final.fdf\n"
                "  stb-mlneb --initial initial.fdf --final final.fdf --custom-model mlff_model.model "
                "--custom-model-card mlff_model_card.json --device cuda --n-images 9 --show --save-gnuplot\n"
-               "  stb-mlneb --initial initial.fdf --final final.fdf --freeze-substrate --save-images --save-report\n"
+               "  stb-mlneb --initial initial.fdf --final final.fdf --freeze-substrate --save-images\n"
                "  stb-mlneb --initial i.fdf --final f.fdf --custom-model best_model/mlff_model_compiled.model "
                "--custom-model-card best_model/mlff_model_card.json --mlff-workflow mlff_runs/mlff_workflow.json "
                "--siesta-check            # then run SIESTA, run it again, and add --to-mlff\n",
@@ -849,7 +946,10 @@ def build_parser():
     parser.add_argument("--calc", default=None,
                         help="calc.fdf template for --siesta-check/--to-mlff (no geometry; it must %%include the "
                              "structure file, which each folder gets). Default with --mlff-workflow: its reference "
-                             "calc.fdf.")
+                             "calc.fdf. With --mlff-workflow, --calc applies to --siesta-check alone: --to-mlff always "
+                             "uses the workflow's reference (training labels must share its level of theory), and "
+                             "any setting in which --calc differs from it is reported. The calc file is written as "
+                             "calc.fdf (or the reference's own name).")
     parser.add_argument("--pseudo-dir", default=".",
                         help="Pseudopotentials for --siesta-check with --calc: a folder or a bank name (default: .).")
     parser.add_argument("--kgrid", type=int, nargs=3, default=None, metavar=("KA", "KB", "KC"),
@@ -869,15 +969,18 @@ def build_parser():
                         help="Random seed of --to-mlff-rattle (default: 7).")
     parser.add_argument("--n-images", type=int, default=7,
                         help="Total images including both endpoints (default: 7, at least 3).")
-    parser.add_argument("--autosort-tol", type=float, default=0.5,
-                        help="Atom-correspondence tolerance between --initial/--final, Ang (default: 0.5, pymatgen's "
-                             "own documented value).")
+    parser.add_argument("--autosort-tol", type=float, default=None,
+                        help="Atom-correspondence tolerance between --initial/--final, Ang. Default: 0 (the files' "
+                             "own atom order, no matching) when both list the same species in the same order -- "
+                             "as two minima written by one tool do (stb-mladsorb, stb-adsorb): a hop longer than "
+                             "0.5 Ang cannot be matched by distance --, else 0.5 (pymatgen's own documented value).")
     parser.add_argument("--no-idpp", dest="idpp", action="store_false",
                         help="Skip the IDPP (Image Dependent Pair Potential) refinement of the interior images before "
                              "the NEB. On by default: a geometric smoothing that usually gives a much better start "
                              "than linear interpolation.")
-    parser.add_argument("--idpp-fmax", type=float, default=0.1, help="Force convergence for IDPP (default: 0.1).")
-    parser.add_argument("--idpp-steps", type=int, default=100, help="Max steps for IDPP (default: 100).")
+    parser.add_argument("--idpp-fmax", type=float, default=0.1,
+                        help="IDPP force convergence (default: 0.1, ASE's own). Loose for a molecular adsorbate: on H2O/Ag(111) it stopped after 7 steps with H-O-H at 169 deg in the middle image (DFT: +1.3 eV, 1.37 eV/Ang there); --idpp-fmax 0.01 --idpp-steps 2000 gave 112.7 deg. The report warns when an bond or angle inside a molecule leaves the endpoints' range.")
+    parser.add_argument("--idpp-steps", type=int, default=100, help="Max steps for IDPP (default: 100). See --idpp-fmax.")
     parser.add_argument("--no-pre-relax-endpoints", dest="pre_relax_endpoints", action="store_false",
                         help="Skip the relaxation (positions only) of both endpoints with the model. On by default, "
                              "so the barrier is measured from the model's own minima.")
@@ -910,7 +1013,7 @@ def build_parser():
                         help="Also write each relaxed image as image_NN.fdf (bare structure, no calc or "
                              "pseudopotentials) -- e.g. to start a SIESTA NEB (stb-neb) from this band. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlneb {VERSION}")
     return parser
@@ -935,10 +1038,10 @@ def main():
         show_intro(["Siesta ToolBox Suite - ML NEB",
                     "Climbing-image nudged elastic band, driven entirely by a MACE potential",
                     f"Version {VERSION} | University of Brasilia - 2026",
-                    "Developed by Dr. Carlos M. O. Bastos"])
+                    "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlneb")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()
@@ -986,7 +1089,7 @@ def main():
     print_dual(f"Device            : {dev_label}", f_out)
     print_dual(f"Endpoints         : {args.initial} -> {args.final}", f_out)
     print_dual(f"Band              : {args.n_images} images (endpoints included), linear interpolation"
-               f"{' + IDPP' if args.idpp else ''}, atoms matched within --autosort-tol {args.autosort_tol} Ang", f_out)
+               f"{' + IDPP' if args.idpp else ''}", f_out)
     print_dual(f"NEB               : improved tangent, spring k {args.k} eV/Ang^2, FIRE; shaping to "
                f"{max(2 * args.fmax, 0.1):g} then climbing image to --fmax {args.fmax} eV/Ang, --max-steps "
                f"{args.max_steps} in total" + ("; substrate frozen below "
@@ -1016,6 +1119,16 @@ def main():
     except SystemExit:
         fail("--initial and --final have a different composition: a NEB needs the same atoms at both ends.")
     species_meta = structure_io.species_dict(initial_structure)
+    same_order = [lab for lab, _ in initial_structure.atoms] == [lab for lab, _ in final_structure.atoms]
+    if args.autosort_tol is None:
+        args.autosort_tol = 0.0 if same_order else 0.5
+        print_dual("Atom matching     : " + (
+            "by index (--autosort-tol 0, default: both files list the same species in the same order)"
+            if same_order else
+            "by distance within 0.5 Ang (default: the files list their species in different orders)"), f_out)
+    else:
+        print_dual(f"Atom matching     : " + (f"by distance within --autosort-tol {args.autosort_tol} Ang"
+                                             if args.autosort_tol else "by index (--autosort-tol 0)"), f_out)
 
     # The workflow and the SIESTA template are checked here, before any model is run: a missing calc.fdf, a template
     # without a structure %include or a missing pseudopotential must not cost a whole band first.
@@ -1037,6 +1150,8 @@ def main():
         _, missing = get_required_pseudos(elements, tpl["pseudo"])
         if missing:
             fail(f"--siesta-check/--to-mlff: no pseudopotential for {', '.join(missing)} in '{tpl['pseudo_label']}'")
+        for note in tpl["notes"]:
+            warn(note)
     initial_pmg = wrap_into_cell(structure_io.to_pymatgen(initial_structure))
     final_pmg = resolve_lattice_mismatch(initial_pmg, wrap_into_cell(structure_io.to_pymatgen(final_structure)),
                                          warn=warn)
@@ -1085,7 +1200,18 @@ def main():
     label_main = "fine-tuned" if args.custom_model else f"MACE-MP-0 {args.model}"
 
     print(f"  ... {label_main}: endpoints, band and climbing-image NEB", flush=True)
-    series = [neb_band(initial_pmg, final_pmg, calc, args, noise, label_main)]
+    try:
+        series = [neb_band(initial_pmg, final_pmg, calc, args, noise, label_main)]
+    except ValueError as error:
+        message = str(error)[0].upper() + str(error)[1:]
+        if args.autosort_tol and "match" in message.lower():
+            message += (f". Atoms that move more than --autosort-tol ({args.autosort_tol} Ang) between the endpoints "
+                        "cannot be matched by distance (an adsorbate hop, a vacancy jump). "
+                        + ("Both files list the same species in the same order: rerun with --autosort-tol 0 to use "
+                           "that order." if same_order else
+                           "The files list their species in different orders: write both with the same atom order "
+                           "and use --autosort-tol 0, or raise --autosort-tol."))
+        fail(message)
     if compare:
         print(f"  ... MACE-MP-0 {args.model}: the same NEB", flush=True)
         with capture_library_noise(noise, "foundation model"):
@@ -1158,7 +1284,7 @@ def main():
             print_dual(f"Written           : {written} single-point folder(s) in {args.output_dir}/{SIESTA_DIR}/ -- run "
                        "SIESTA in them, then this command again:", f_out)
             print_dual(f"  for d in {args.output_dir}/{SIESTA_DIR}/image_*/; do (cd $d && mpirun -np 4 siesta < "
-                       f"{os.path.basename(tpl['calc'])} > siesta.out); done", f_out)
+                       f"{tpl['calc_name']} > siesta.out); done", f_out)
         report_siesta(main_res, results, f_out, warn, args)
     if args.to_mlff:
         sections("EXPORT TO THE MLFF WORKFLOW")
@@ -1222,7 +1348,7 @@ def main():
         print_dual(f"Report            : {report_path}", f_out)
     not_asked = [f for f, on in (("--show", args.show), ("--save-gnuplot", args.save_gnuplot),
                                  ("--save-data", args.save_data), ("--save-images", args.save_images),
-                                 ("--save-report", args.save_report), ("--siesta-check", args.siesta_check),
+                                 ("--siesta-check", args.siesta_check),
                                  ("--to-mlff", args.to_mlff)) if not on]
     if not_asked:
         print_dual(f"Also available    : {' '.join(not_asked)}", f_out)

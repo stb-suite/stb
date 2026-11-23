@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-wfdensity (Wavefunction Density, item 2.12)
@@ -28,6 +31,16 @@ check_success() {
     else
         echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -76,6 +89,7 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Basic run: --wfsx/--geometry-file explicit, --k-index 0 --band 1 ---
 echo -e "\n--- Testing a basic run (--k-index 0 --band 1) ---"
 
+rm -f stb_wfdensity_report*.txt stb_wfdensity_references*.bib
 timeout 60 stb-wfdensity --wfsx Sn3O4.bands.WFSX --geometry-file calc.fdf \
     --k-index 0 --band 1 --spacing 0.4 --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
@@ -99,22 +113,17 @@ else
 fi
 check_contains "Slice/profile data not written (off by default" log_basic.txt
 
-echo "Testing: no text report without --save-report"
-if [ -e stb_wfdensity_report.txt ]; then
-    echo -e " ... ${RED}FAIL${NC} (stb_wfdensity_report.txt should not have been written)"
-    FAIL=$((FAIL+1))
-else
-    echo -e " ... ${GREEN}OK${NC} (stb_wfdensity_report.txt correctly absent)"
-    PASS=$((PASS+1))
-fi
+echo "Testing: the report is always written"
+check_success stb_wfdensity_report.txt
 
-echo "Testing: references.bib is always written (SIESTA)"
-check_success references.bib
+echo "Testing: stb_wfdensity_references.bib is always written (SIESTA)"
+check_success stb_wfdensity_references.bib
 
 
 # --- 2b. --save-report / --save-gnuplot, and the gnuplot-path fix ---
 echo -e "\n--- Testing --save-report / --save-gnuplot (a real, verified path bug fixed here too) ---"
 
+rm -f stb_wfdensity_report*.txt stb_wfdensity_references*.bib
 timeout 60 stb-wfdensity --wfsx Sn3O4.bands.WFSX --geometry-file calc.fdf \
     --k-index 0 --band 1 --spacing 0.4 --save-report --save-gnuplot --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
@@ -320,7 +329,7 @@ check_contains "spacing" log_help.txt
 check_contains "\-\-pos" log_help.txt
 check_contains "fermi-file" log_help.txt
 check_contains "geometry-file" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 
@@ -330,19 +339,13 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.12) ---"
 
 echo "Testing: navigate 2.12 -> label Sn3O4 -> band selection 1 -> k-index 0 -> band 1 -> spacing 0.5"
 echo "-> axis/mode/pos defaults -> default output -> no save-report -> save-gnuplot=y -> no view"
-rm -f wfdensity_k0_b1.cube wfdensity_k0_b1_slice.dat wfdensity_k0_b1_slice.gplot stb_wfdensity_report.txt
-printf '2.12\nSn3O4\n\n1\n0\n1\n0.5\n\n\n\n\nn\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+rm -f wfdensity_k0_b1.cube wfdensity_k0_b1_slice.dat wfdensity_k0_b1_slice.gplot stb_wfdensity_report*.txt stb_wfdensity_references*.bib
+printf '2.12\nSn3O4\n\n1\n0\n1\n0.5\n\n\n\n\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success wfdensity_k0_b1.cube
 check_success wfdensity_k0_b1_slice.dat
 check_success wfdensity_k0_b1_slice.gplot
-if [ -e stb_wfdensity_report.txt ]; then
-    echo -e " ... ${RED}FAIL${NC} (stb_wfdensity_report.txt should not have been written -- save-report was 'n')"
-    FAIL=$((FAIL+1))
-else
-    echo -e " ... ${GREEN}OK${NC} (stb_wfdensity_report.txt correctly absent)"
-    PASS=$((PASS+1))
-fi
+check_success stb_wfdensity_report.txt
 
 echo "Testing: navigate 2.12 -> band selection 3 (CBM) -> Fermi source submenu"
 echo "(previously: no way in the interactive menu to point at a .out log at all)"
@@ -352,11 +355,11 @@ siesta:         Fermi = -3.203872
 noise
 EOF
 echo "  -> option 3 (explicit .out path)"
-printf '2.12\nSn3O4\n\n3\n3\nSn3O4.out\n\n\n\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_fermi3.txt 2>&1
+printf '2.12\nSn3O4\n\n3\n3\nSn3O4.out\n\n\n\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_fermi3.txt 2>&1
 check_exit_code $? 0
 check_contains "Fermi source: 'Sn3O4.out' (--fermi-file)" log_menu_fermi3.txt
 echo "  -> option 4 (auto-detect, default)"
-printf '2.12\nSn3O4\n\n3\n\n\n\n\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_fermi4.txt 2>&1
+printf '2.12\nSn3O4\n\n3\n\n\n\n\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_fermi4.txt 2>&1
 check_exit_code $? 0
 check_contains "auto-detected .out" log_menu_fermi4.txt
 rm -f Sn3O4.out

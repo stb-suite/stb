@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -23,10 +24,10 @@ from stb.core import structure_io
 from stb.core.siesta_log import get_free_energy, get_spin_moment, report_quality_diagnostics
 from stb.core.symmetry import point_group_details
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.phonon_workflow import load_phonon_with_force_constants
+from stb.core.phonon_workflow import load_phonon_with_force_constants, THERMAL_FREQ_MIN_THZ
 from stb.adsorb_analysis import read_site_table, read_bsse_energy, GIBBS_LOCAL_META_FILE
 
-REPORT_FILE = "adsorption_gibbs_report.txt"
+REPORT_FILE = "stb_adsorbGibbs_report.txt"
 PLOT_FILE = "adsorption_gibbs.png"
 MODE_SPECTRUM_PLOT_FILE = "adsorption_mode_spectrum.png"
 DESORPTION_PLOT_FILE = "adsorption_desorption_kinetics.png"
@@ -391,7 +392,8 @@ def compute_full_phonon_thermo(phonon_dir, system_label, temperature_k, f_out, l
         return None, None
     try:
         phonon.run_mesh([1, 1, 1])
-        phonon.run_thermal_properties(t_step=10, t_max=temperature_k + 10, t_min=temperature_k)
+        phonon.run_thermal_properties(t_step=10, t_max=temperature_k + 10, t_min=temperature_k,
+                                      cutoff_frequency=THERMAL_FREQ_MIN_THZ)
         tp_dict = phonon.get_thermal_properties_dict()
         temps = np.array(tp_dict['temperatures'])
         idx = int(np.abs(temps - temperature_k).argmin())
@@ -511,21 +513,21 @@ def main():
         description=f"""{color_text("Stage 4 of the Adsorption workflow: combines the vibrational "
         "Hessian/phonon folders stb-adsorbAnalysis --compute-gibbs (Stage 3) wrote into a Gibbs "
         "free energy of adsorption, DG = E_ads(BSSE if available) + DZPE - T*DS.", 'bold')}
-DZPE/DS = [ZPE/S(site) - ZPE/S(isolated adsorbate reference)], both computed with the SAME method
-(local partial-Hessian, or full Phonopy for the site side when Stage 3 used --zpe-mode full) --
-the isolated reference always uses the local, full-molecule Hessian (there's no periodic substrate
-phonon to subtract for a molecule in a vacuum box, so Phonopy's supercell machinery buys nothing
-there; for a single-atom adsorbate this correctly gives ZPE=S=0, since a free atom has no
-vibrational modes at all once its 3 translational modes are excluded).
+DZPE/DS = [ZPE/S(site) - ZPE/S(isolated adsorbate reference)].
 
-KNOWN LIMITATION, always printed in the report: the isolated-reference term above is
-VIBRATIONAL/HARMONIC ONLY -- it does NOT include the translational/rotational entropy a real gas
-molecule has from being free to move/rotate in 3D (an ideal-gas partition-function term this tool
-does not compute). For a single-atom adsorbate this is exact (no rotation/translation to begin
-with beyond the excluded trivial modes); for a polyatomic adsorbate it is an approximation, in the
-same spirit as (though computed differently from) stb-herRefs/stb-oerRefs' own use of a FIXED
-literature entropy for their H2/H2O gas-phase references -- generalized here since there is no
-literature table for an arbitrary adsorbate.""",
+Isolated reference: an IDEAL GAS molecule (ase.thermochemistry.IdealGasThermo, reference pressure
+1 bar) -- translational + rotational + vibrational ZPE/entropy. Its vibrations come from the local,
+full-molecule Hessian; exactly 3N-6 (nonlinear), 3N-5 (linear) or 0 (single atom) modes are kept,
+the highest ones, so finite-difference noise in the rigid-body modes is never counted as a
+vibration. Geometry class and rotational symmetry number come from the point group of the relaxed
+reference. A single atom gets its translational (Sackur-Tetrode) entropy.
+
+Adsorbed side: HARMONIC only -- every real mode of the local partial Hessian (imaginary ones are
+excluded and listed), or of the full Phonopy calculation, site minus clean slab, when Stage 3 used
+--zpe-mode full, is a vibration. Hindered
+translations and rotations of the adsorbate are treated as harmonic modes too; there is no
+free-translator/hindered-rotor model, so a weakly bound adsorbate with very soft modes gets an
+entropy that depends on those soft frequencies (see the mode list in the report).""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s --dir adsorption_run --tmin 100 --tmax 500\n"
@@ -543,7 +545,7 @@ literature table for an arbitrary adsorbate.""",
                          help="Residual atomic force in eV/Ang (default: 0.05) above which a "
                               "folder is flagged as possibly not converged/relaxed. Advisory only.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--view-plots", action="store_true",
                          help="Also show the DG-vs-T plot on screen, instead of only saving it "
                               "as a PNG. Off by default.")
@@ -557,10 +559,10 @@ literature table for an arbitrary adsorbate.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("adsorbGibbs")
     f_out = open(report_path, "w") if report_path else None
     print_dual(color_text("===== ADSORPTION GIBBS FREE ENERGY REPORT (STAGE 4) =====", 'magenta'), f_out)
 

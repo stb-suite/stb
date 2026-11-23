@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -24,76 +25,39 @@ from stb.core import structure_io
 from stb.core.siesta_log import check_scf_and_force
 from stb.core.cli import color_text, show_intro, print_dual, print_section, capture_library_noise
 from stb.core.ase_view import view_structure_interactive
-from stb.neb import MODE_DESCRIPTIONS, write_path_trajectory
+from stb.neb import (MODE_DESCRIPTIONS, write_path_trajectory, min_image_displacements, read_neb_setup,
+                     SETUP_FILE, LEGACY_SETUP_FILE)
 
-REPORT_FILE = "neb_report.txt"
-SETUP_REPORT_FILE = "neb_setup.txt"
+REPORT_FILE = "stb_nebAnalysis_report.txt"
 _CYCLE_DIR_RE = re.compile(r"^cycle_(\d+)$")
-_TOTAL_PATH_LENGTH_RE = re.compile(r"Total path length\s*:\s*([0-9.]+)\s*Ang")
 
 
 def read_image_table(root_dir):
-    """Parses the '# IMAGE_TABLE' section and the '# ML_NEB_USED: yes|no'
-    marker stb-neb writes in neb_setup.txt. Returns (rows, ml_neb_used)
-    where rows is a list of (label, index, reaction_coord) sorted by
-    index, or (None, False) if the report (or its table section) isn't
-    found -- the caller then falls back to a sorted glob of 'image_*'
-    folders. Mirrors adsorb_analysis.py::read_site_table -- the image
-    directory is recomputed by the caller as os.path.join(root_dir,
-    label), not trusted from the table's own 'dir' column (written
-    relative to stb-neb's --output-dir at prep time, which may not be the
-    same as --dir here).
-    """
-    report_path = os.path.join(root_dir, SETUP_REPORT_FILE)
-    if not os.path.isfile(report_path):
+    """(rows, ml_neb_used) from the band record stb-neb wrote in the run folder
+    (neb_setup.json, or the neb_setup.txt of older versions -- stb.neb.read_neb_setup): rows
+    is a list of (label, index, reaction_coord) sorted by index, or (None, False) when there is
+    no record -- the caller then falls back to a sorted glob of 'image_*' folders. The image
+    directory is recomputed by the caller as os.path.join(root_dir, label), not trusted from
+    the record's 'dir' (relative to stb-neb's --output-dir at prep time)."""
+    data = read_neb_setup(root_dir)
+    if not data or not data.get("images"):
         return None, False
-    rows = []
-    ml_neb_used = False
-    in_table = False
-    with open(report_path) as f:
-        for line in f:
-            if line.startswith("# ML_NEB_USED:"):
-                ml_neb_used = line.split(":", 1)[1].strip().lower() == "yes"
-                continue
-            if line.startswith("# IMAGE_TABLE"):
-                in_table = True
-                continue
-            if not in_table:
-                continue
-            if line.startswith("#") or not line.strip():
-                continue
-            parts = line.split()
-            if len(parts) < 4:
-                continue
-            label, index_str, coord_str = parts[0], parts[1], parts[2]
-            try:
-                index = int(index_str)
-                reaction_coord = float(coord_str)
-            except ValueError:
-                continue
-            rows.append((label, index, reaction_coord))
-    if not rows:
-        return None, False
-    rows.sort(key=lambda r: r[1])
-    return rows, ml_neb_used
+    rows = sorted(((e["label"], int(e["index"]), float(e["reaction_coord"])) for e in data["images"]),
+                  key=lambda r: r[1])
+    return rows, bool(data.get("ml_neb_used"))
 
 
 def read_mode(root_dir):
-    """Reads '# MODE: N' from SETUP_REPORT_FILE (stb-neb v2's mode marker,
-    see neb.py's own writer). Returns 1 (the original, pre-mode single-
-    point behavior) if no marker is found -- either an old neb_setup.txt
-    from before this workflow gained modes, or no report at all.
-    """
-    report_path = os.path.join(root_dir, SETUP_REPORT_FILE)
-    if os.path.isfile(report_path):
-        with open(report_path) as f:
-            for line in f:
-                if line.startswith("# MODE:"):
-                    try:
-                        return int(line.split(":", 1)[1].strip())
-                    except ValueError:
-                        break
-    return 1
+    """The band's mode from its record (1, the original single-point behaviour, when there is
+    none or an old record has no mode)."""
+    data = read_neb_setup(root_dir)
+    return int(data.get("mode") or 1) if data else 1
+
+
+def read_total_path_length(root_dir):
+    """Total path length (Ang) stb-neb recorded for the band, or None."""
+    data = read_neb_setup(root_dir)
+    return data.get("total_path_length_ang") if data else None
 
 
 def find_analysis_cycle(root_dir, out_filename):
@@ -130,10 +94,13 @@ def find_analysis_cycle(root_dir, out_filename):
             key=lambda m: int(m.group(1)), reverse=True)
         for m in candidates:
             cycle_dir = os.path.join(root_dir, m.group(0))
+            # The endpoints are copied into every new cycle WITH their results (the NEB
+            # never moves them), so a cycle counts only once an interior image has one.
+            images = sorted(d for d in os.listdir(cycle_dir)
+                            if os.path.isdir(os.path.join(cycle_dir, d)) and d.startswith("image_"))
             has_results = any(
                 os.path.isfile(os.path.join(cycle_dir, d, out_filename))
-                for d in os.listdir(cycle_dir)
-                if os.path.isdir(os.path.join(cycle_dir, d)) and d.startswith("image_"))
+                for d in (images[1:-1] if len(images) > 2 else images))
             if has_results:
                 return cycle_dir, converged
         # No cycle has any results at all (e.g. cycle_00 fresh out of
@@ -246,7 +213,7 @@ def read_band_structures(images_root, image_rows_sorted):
 
 
 def print_consistency_checks(f_out, image_rows, band_structures, use_reaction_coord,
-                              barrier_fit, setup_report_path, images_root, table_found,
+                              barrier_fit, run_dir, images_root, table_found,
                               is_refined_cycle):
     """Prints '[2] CONSISTENCY CHECKS': re-validates the band as it
     actually exists on disk right now (not just what stb-neb reported at
@@ -326,17 +293,12 @@ def print_consistency_checks(f_out, image_rows, band_structures, use_reaction_co
     if len(valid_structures) >= 2:
         total_length = 0.0
         for (_l0, s0), (_l1, s1) in zip(valid_structures[:-1], valid_structures[1:]):
-            total_length += float(np.linalg.norm(s1.cart_coords - s0.cart_coords))
-        declared_length = None
-        if setup_report_path and os.path.isfile(setup_report_path):
-            with open(setup_report_path) as f:
-                m = _TOTAL_PATH_LENGTH_RE.search(f.read())
-            if m:
-                declared_length = float(m.group(1))
+            total_length += float(np.linalg.norm(min_image_displacements(s0, s1)))
+        declared_length = read_total_path_length(run_dir) if run_dir else None
         if declared_length is None:
-            print_dual("  [NOTE] No 'Total path length' line found in neb_setup.txt (older "
-                        "report format, or the file is missing) -- path-length cross-check "
-                        "skipped.", f_out)
+            print_dual(f"  [NOTE] No total path length recorded by stb-neb ({SETUP_FILE} or the "
+                        f"{LEGACY_SETUP_FILE} of older versions is missing) -- path-length "
+                        "cross-check skipped.", f_out)
         elif is_refined_cycle:
             delta = total_length - declared_length
             print_dual(f"  [OK] Path length has evolved by {delta:+.4f} Ang under real-DFT "
@@ -348,7 +310,7 @@ def print_consistency_checks(f_out, image_rows, band_structures, use_reaction_co
             if abs(delta) <= tol:
                 print_dual(f"  [OK] Recomputed path length ({total_length:.4f} Ang) matches "
                             f"stb-neb's own record ({declared_length:.4f} Ang, from "
-                            "neb_setup.txt).", f_out)
+                            f"{SETUP_FILE}).", f_out)
             else:
                 print_dual(color_text(
                     f"  [WARNING] Recomputed path length ({total_length:.4f} Ang) differs from "
@@ -575,7 +537,7 @@ def _default_analysis_dir():
     """Smart default for --dir: prefers 'neb_run' (Stage 1's own
     self-contained run folder), but falls back to '.' when the CURRENT
     directory itself already looks like a run folder (has its own
-    neb_setup.txt) -- otherwise defaulting to 'neb_run' would try to
+    neb_setup.json, or the neb_setup.txt of older versions) -- otherwise defaulting to 'neb_run' would try to
     descend into a non-existent 'neb_run/neb_run' and fail with a
     misleading "no image folders found". This exact situation happens
     live: stb-neb's own printed cluster-submission snippet (--mode 2/3)
@@ -583,7 +545,7 @@ def _default_analysis_dir():
     user who runs stb-nebAnalysis right after that loop finishes,
     without cd'ing back out first, is standing INSIDE neb_run/ already.
     """
-    if os.path.isfile(SETUP_REPORT_FILE):
+    if os.path.isfile(SETUP_FILE) or os.path.isfile(LEGACY_SETUP_FILE):
         return "."
     return "neb_run"
 
@@ -607,7 +569,7 @@ def main():
                          help="Root directory containing every 'image_NN/' (default: 'neb_run', "
                               "the self-contained run folder stb-neb --Stage 1 always writes its "
                               "output into -- auto-detected as '.' instead when the current "
-                              "directory already has its own neb_setup.txt, e.g. right after "
+                              "directory already has its own neb_setup.json, e.g. right after "
                               "stb-neb's own printed cluster-submission snippet left you inside "
                               "neb_run/ already).")
     parser.add_argument("--file", type=str, default="calc.out",
@@ -624,7 +586,7 @@ def main():
                               "calc.out is flagged as possibly not relaxed. Advisory only, never "
                               "blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                          help="Also save the energy-profile curve as gnuplot .dat + .gplot "
                               "scripts, under '<dir>/plot/'. Off by default.")
@@ -658,7 +620,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("Analyze a NEB reaction-path study:", 'bold'))
@@ -710,7 +672,7 @@ def main():
     image_rows_sorted = sorted(image_rows, key=lambda r: r[1])
     band_structures = read_band_structures(images_root, image_rows_sorted)
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("nebAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== NEB ENERGY PROFILE REPORT =====', 'magenta')}", f_out)
@@ -720,6 +682,9 @@ def main():
     print_dual(f"Directory  : {args.dir}", f_out)
     print_dual(f"Output file: {args.file}", f_out)
     print_dual(f"Mode       : {mode} ({MODE_DESCRIPTIONS[mode]})", f_out)
+    print_dual("Energy     : SIESTA's FreeEng ('siesta: FreeEng'), the energy the NEB forces derive from "
+               "with electronic smearing (E_KS minus T*S of the smearing; the adsorption workflow's "
+               "E_ads use E_KS)", f_out)
     if band_structures and band_structures[0][1] is not None:
         counts = Counter(str(s.specie) for s in band_structures[0][1])
         formula = " ".join(f"{sym}{n}" for sym, n in sorted(counts.items()))
@@ -730,7 +695,7 @@ def main():
         print_dual(color_text(f"[NOTE] {cycle_note}", 'cyan'), f_out)
     if not table_found:
         print_dual(color_text(
-            "[NOTE] No 'neb_setup.txt' image table found -- falling back to a sorted glob of "
+            f"[NOTE] No band record ({SETUP_FILE}) found -- falling back to a sorted glob of "
             "'image_*' folders (index = sort position, no reaction-coordinate data available; "
             "the x-axis below uses plain image index instead).", 'yellow'), f_out)
 
@@ -787,9 +752,8 @@ def main():
         energy_spline = fit_energy_spline(rows) if use_reaction_coord else None
         barrier_fit = find_spline_barrier(energy_spline)
 
-    setup_report_path = os.path.join(args.dir, SETUP_REPORT_FILE)
     print_consistency_checks(f_out, image_rows, band_structures, use_reaction_coord,
-                              barrier_fit, setup_report_path, images_root, table_found,
+                              barrier_fit, args.dir, images_root, table_found,
                               is_refined_cycle)
 
     print_section('[3] BARRIER ANALYSIS', f_out)

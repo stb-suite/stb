@@ -41,7 +41,7 @@ pseudopotential, and the basis set (screening, hybridization with
 neighboring ligands all shift it). `stb-dftu` bundles one literature table
 — **Wang, Maxisch & Ceder, Phys. Rev. B 73, 195107 (2006)**, the Materials
 Project's own GGA+U oxide calibration, and the exact reference this tool
-writes to `references.bib` — purely as a starting-point *sanity check*,
+writes to `stb_dftu_references.bib` — purely as a starting-point *sanity check*,
 never a validated value. You always have to pass `--u` explicitly, or opt
 in with `--use-reference`.
 
@@ -74,7 +74,7 @@ stb-suite
 
 `1.5` itself offers two sub-modes: **[1]** read species off a structure
 file and auto-fill `U` from the reference table, or **[2]** enter species
-one at a time by hand. Both end with the same save-block/save-report
+one at a time by hand. Both end with the same save-block
 prompts. `example_1.5.sh` proves the CLI and the menu agree.
 
 ## Files in this folder
@@ -93,8 +93,8 @@ prompts. `example_1.5.sh` proves the CLI and the menu agree.
 ./example_1.5.sh
 ```
 
-Every case is generated with `--save-report`, each into its own folder
-under `output/` — `stb_dftu_report.txt` + `references.bib`:
+Every case is generated each into its own folder
+under `output/` — `stb_dftu_report.txt` + `stb_dftu_references.bib`:
 
 | Folder                    | Command (conceptually)                                          |
 |----------------------------|-------------------------------------------------------------------|
@@ -119,7 +119,7 @@ reference), **Fe** (a metal *with* one), and **O** (a non-metal).
 
 ### `list-reference/`/`suggest/` — lookups only
 
-Neither generates a block, so neither's `references.bib` gets a SIESTA
+Neither generates a block, so neither's `stb_dftu_references.bib` gets a SIESTA
 citation (nothing SIESTA-bound was produced) — just the Wang/Maxisch/Ceder
 reference-table citation.
 
@@ -141,7 +141,7 @@ stb-dftu --species Cr --u 3.7 --shell 3d
 ```
 stb-dftu (--species <label>... --u <eV>... | --fdf <path> [--use-reference])
          [--j <eV>...] [--shell <3d|4d|5d|4f|5f>...] [-o/--output <file>]
-         [--list-reference] [--suggest <element>] [--save-report]
+         [--list-reference] [--suggest <element>]
 ```
 
 - `--species`/`--fdf` — one is required (unless `--list-reference`/
@@ -154,10 +154,10 @@ stb-dftu (--species <label>... --u <eV>... | --fdf <path> [--use-reference])
 - `-o/--output` — also save the block to a file.
 - `--list-reference`/`--suggest <element>` — print the reference table (or
   one value) and exit; no block generated.
-- `--save-report` (optional): also persist the report to
-  `stb_dftu_report.txt`. Off by default.
+- **Report** — always saved to `stb_dftu_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
-`references.bib` is always written — there's no flag for it.
+`stb_dftu_references.bib` is always written — there's no flag for it.
 
 Run `stb-dftu --help` for the full list of options.
 

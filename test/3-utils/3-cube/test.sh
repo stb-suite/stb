@@ -55,7 +55,7 @@ check_exit_code() {
 
 # --- 1. Preparation ---
 # Sn3O4.RHO/.XV: real, non-spin-polarized SIESTA output (shared with other
-# 5-utils fixtures). o2.RHO/.XV/.HSX: a real spin-polarized SIESTA run
+# 3-utils fixtures). o2.RHO/.XV/.HSX: a real spin-polarized SIESTA run
 # generated specifically for the --spin option and .HSX-based auto-detection
 # (isolated O2 molecule, triplet ground state -- see o2.fdf here for the
 # exact input; SIESTA itself reports spin moment |S| = 2.0, which is what
@@ -79,8 +79,13 @@ echo -e "\n--- Testing RHO -> cube (default output name) ---"
 stb-cube --no-intro --label Sn3O4 --type RHO > log_rho.txt 2>&1
 check_success Sn3O4_RHO.cube
 check_contains "Integral" log_rho.txt
-check_contains "unit=Bohr" Sn3O4_RHO.cube
-check_not_contains "\[WARNING\] Lattice mismatch" log_rho.txt
+echo "Testing: the cube is written by the tool (Gaussian-style header ASE parses, Bohr, e/Bohr^3)"
+check_contains "lengths in Bohr, values in e/Bohr^3" Sn3O4_RHO.cube
+check_contains "OUTER LOOP: X, MIDDLE LOOP: Y, INNER LOOP: Z" Sn3O4_RHO.cube
+check_contains "Integral (cube)   : 71.99" log_rho.txt
+check_not_contains "lattice mismatch" log_rho.txt
+check_success stb_cube_report.txt
+check_success stb_cube_references.bib
 
 
 # --- 3. Custom -o output filename ---
@@ -102,7 +107,7 @@ echo -e "\n--- Testing missing .XV (atoms will be absent, no crash) ---"
 mv Sn3O4.XV Sn3O4.XV.bak
 rm -f Sn3O4_RHO.cube
 stb-cube --no-intro --label Sn3O4 --type RHO > log_noxv.txt 2>&1
-check_contains "No .XV file found" log_noxv.txt
+check_contains "no Sn3O4.XV: the cube has no atoms" log_noxv.txt
 check_success Sn3O4_RHO.cube
 mv Sn3O4.XV.bak Sn3O4.XV
 
@@ -117,7 +122,7 @@ cat > Sn3O4.XV << 'EOF'
 1 14   0.0 0.0 0.0   0.0 0.0 0.0
 EOF
 stb-cube --no-intro --label Sn3O4 --type RHO > log_mismatch.txt 2>&1
-check_contains "\[WARNING\] Lattice mismatch" log_mismatch.txt
+check_contains "lattice mismatch between the RHO grid and 'Sn3O4.XV'" log_mismatch.txt
 cp "$FIXTURE_DIR/Sn3O4.XV" .
 
 
@@ -134,46 +139,52 @@ check_contains "12.0000 e" log_spin_total.txt
 check_success o2_RHO.cube
 
 stb-cube --no-intro --label o2 --type RHO --spin up > log_spin_up.txt 2>&1
-check_contains "7.0000 e (up-spin channel only)" log_spin_up.txt
+check_contains "up                | 7.0000       |        | <- written" log_spin_up.txt
+check_contains "Integral          : 6.99999" log_spin_up.txt
 check_success o2_RHO_up.cube
 
 stb-cube --no-intro --label o2 --type RHO --spin down > log_spin_down.txt 2>&1
-check_contains "5.0000 e (down-spin channel only)" log_spin_down.txt
+check_contains "down              | 5.0000       |        | <- written" log_spin_down.txt
 check_success o2_RHO_down.cube
 
 stb-cube --no-intro --label o2 --type RHO --spin diff > log_spin_diff.txt 2>&1
-check_contains "2.0000 e (net spin moment" log_spin_diff.txt
+check_contains "Converting        : the 'diff' channel" log_spin_diff.txt
+check_contains "Integral          : 2.000000 e" log_spin_diff.txt
 check_success o2_RHO_diff.cube
 
 echo "Testing: --spin on a non-spin-polarized file falls back to total, with a warning"
 stb-cube --no-intro --label Sn3O4 --type RHO --spin up -o fallback_check.cube > log_spin_fallback.txt 2>&1
 check_contains "not spin-polarized (1 component) -- ignoring --spin up" log_spin_fallback.txt
-check_contains "72.0000 e (Check if close to total electrons)" log_spin_fallback.txt
+check_contains "Integral          : 71.99" log_spin_fallback.txt
 check_success fallback_check.cube
 
 echo "Testing: .HSX/grid component-count mismatch warning (o2.HSX says polarized, paired with Sn3O4's 1-component RHO)"
 cp o2.HSX Sn3O4.HSX
 stb-cube --no-intro --label Sn3O4 --type RHO > log_hsx_mismatch.txt 2>&1
-check_contains "reports polarized (2 expected component(s)) but 'Sn3O4.RHO' has 1" log_hsx_mismatch.txt
+check_contains "Sn3O4.HSX reports polarized (2 component(s) expected) but 'Sn3O4.RHO' has 1" log_hsx_mismatch.txt
 rm -f Sn3O4.HSX
 
 
-# --- 8. --save-report ---
-echo -e "\n--- Testing --save-report ---"
-rm -f stb_cube_report.txt
+# --- 8. Reports: always written, never overwritten; --save-report is a hidden, ignored option ---
+echo -e "\n--- Testing the report files (and the old --save-report flag) ---"
+rm -f stb_cube_report*.txt stb_cube_references*.bib
 stb-cube --no-intro --label o2 --type RHO --save-report > log_savereport.txt 2>&1
+check_exit_code $? 0
 check_success stb_cube_report.txt
 check_contains "STB-CUBE REPORT" stb_cube_report.txt
-rm -f stb_cube_report.txt
+stb-cube --no-intro --label o2 --type RHO > log_savereport2.txt 2>&1
+check_success stb_cube_report_1.txt
+check_success stb_cube_references_1.bib
 
 
 # --- 9. Interactive path (stb-suite, shortcut 3.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.3) ---"
 rm -f Sn3O4_RHO.cube interactive_out.cube
-# Prompts in order: label, type choice, spin choice, output filename
-printf '3.3\nSn3O4\n1\n1\ninteractive_out.cube\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+# Prompts in order: type choice, label, spin choice, output filename, dry run
+printf '3.3\n1\nSn3O4\n1\ninteractive_out.cube\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_success interactive_out.cube
-check_contains "Converting to Cube format" log_interactive.txt
+check_contains "Conversion complete" log_interactive.txt
+check_not_contains "Traceback" log_interactive.txt
 
 
 popd > /dev/null

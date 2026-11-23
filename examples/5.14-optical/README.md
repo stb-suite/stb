@@ -363,7 +363,7 @@ folder per requested direction:
 
 ```
 optical_study/
-├── optical_stage1.txt        <- the Stage 1 report (with --save-report)
+├── (the Stage 1 report is stb_optical_report.txt in the folder you ran it from)
 ├── dir_xx/ dir_yy/ dir_zz/   <- diagonal components (Optical.Vector = x, y, z)
 └── dir_xy/ dir_xz/ dir_yz/   <- biaxial bisectors (for eps_ij, Section 1.6)
         structure.fdf  calc.fdf  config_extra.fdf  <pseudopotentials>
@@ -899,9 +899,11 @@ using the numbers:
   them. In this example silicon uses the PseudoDojo set, whose relaxed lattice constant
   (5.49 Å, +1.1 %) is in line with PBE, while for graphene the `virtual_vault` PSF
   carbon gives a₀ = 2.48 Å (PBE ≈ 2.47 Å) where the PseudoDojo carbon put the minimum
-  near 2.50 Å with the same basis; in a separate test on another layered material a
-  PseudoDojo pseudopotential gave a clearly wrong bond length in this SIESTA set-up
-  (not investigated further). Bank quality is not guaranteed — verify.
+  near 2.50 Å with the same basis; in a separate test on another layered material
+  (MoS2) the PseudoDojo sulfur gave a clearly wrong bond length. That file was the
+  nc-sr-05 S, one of 11 files with `ekb="0"` projectors that SIESTA 5.4.2 handles
+  wrongly; since 2.1.0 `-p dojo` is nc-sr-04 and such files are refused (see 1.2).
+  The carbon is the same file in both versions. Bank quality is not guaranteed — verify.
 - **`R` is normal-incidence reflectivity of a perfect flat surface**; `α` assumes a
   homogeneous bulk absorber.
 - **2D thickness is yours to choose** and the corrected values scale with it; **1D
@@ -975,14 +977,14 @@ stb-opticalAnalysis --directory reference_results/si/optical_study --show --scis
 `-p PSEUDO` (bank or folder) · `--directions {xx,yy,zz,xy,xz,yz} ...` (default `xx yy zz`) ·
 `--kgrid NX NY NZ` · `--kgrid-density D` (1/Å) · `--optical-mesh NX NY NZ` (default 10 10 10) ·
 `--optical-broaden EV` (default 0.2) · `--optical-nbands N` · `--vacuum-gap Å` (default 10) ·
-`-O DIR` (default `optical_study`) · `--save-report` · `--no-intro` · `-v`.
+`-O DIR` (default `optical_study`) · `--no-intro` · `-v`.
 
 **`stb-opticalAnalysis`** — `--directory DIR` (default `optical_study`) · `--file NAME`
 (default `calc.out`) · `-l LABEL` · `--energy-min/--energy-max EV` (trim the data) ·
 `--plot-quantity {eps,n_k,alpha,R,L,sigma1,all}` · `--experimental PATH` (+
 `--peak-prominence F`) · `--dimensionality-correction` (+ `--thickness Å` for 2D) ·
 `--energies EV ...` · `--n-peaks N` · `--smoothing EV` · `--scissor EV` · `--show` ·
-`--png` · `--plot-emax EV` · `-o NAME` · `--save-report` · `--no-intro` · `-v`.
+`--png` · `--plot-emax EV` · `-o NAME` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

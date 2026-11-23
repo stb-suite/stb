@@ -153,8 +153,8 @@ plateau by cranking `--height` up.
 - **Numbered `[0]`...`[6]` report** (`RUN METADATA`, `INPUT DATA`,
   `TIP POSITION`, `STS CURVE`, `OUTPUT DATA & PLOTS`, `REFERENCES`,
   `SUMMARY & FILES`), matching `stb-bands`/`stb-dos`/`stb-wfdensity`.
-- **`--save-report`** persists the full report to `stb_sts_report.txt`
-  (off by default).
+- **Report** — always saved to `stb_sts_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** writes `sts.dat` and a working `.gplot` script
   together, both behind this one off-by-default flag.
 - **`--view`** shows the matplotlib preview (off by default).
@@ -226,7 +226,7 @@ Or try the tool directly:
 stb-sts --label Graphene --geometry-file calc.fdf \
     --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 \
     --shift fermi --fermi-file calc.out \
-    --save-report --save-gnuplot --view
+    --save-gnuplot --view
 ```
 
 ## 6. What's next

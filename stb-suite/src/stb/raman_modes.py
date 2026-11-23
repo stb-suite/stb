@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -20,7 +21,7 @@ import yaml
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import build_optical_block
-from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
 from stb.core import fdf_directives
 from stb.core.phonon_workflow import (
@@ -50,7 +51,8 @@ from stb.core.ase_view import view_structure_interactive
 # pure numerical-noise constant.
 _DEFAULT_ROTATIONAL_MODE_TOL_THZ = 2.0
 
-REPORT_FILE = "raman_stage2.txt"
+REPORT_FILE = "stb_ramanModes_report.txt"
+MODES_FILE = "raman_modes.json"     # <directory>/: what stb-ramanAnalysis reads
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 # 1 THz = 1e12 Hz -> wavenumber (cm^-1) = freq_Hz / c(cm/s) = freq_THz * 1e12 / 2.99792458e10
@@ -90,6 +92,7 @@ def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text
         f.write(extra_fdf_text)
     for pseudo_path in pseudos:
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
+    note_pseudo_folder(out_dir)
 
 
 def main():
@@ -246,7 +249,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("RAMAN SPECTRUM WORKFLOW -- STAGE 2: MODES & OPTICAL DISPLACEMENTS", 'bold'))
@@ -294,7 +297,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
 
     output_root = args.directory
     optical_root = os.path.join(output_root, "optical_disp")
-    report_path = os.path.join(output_root, REPORT_FILE)
+    report_path = new_report_path("ramanModes")
 
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== RAMAN STAGE 2 REPORT (MODES & OPTICAL DISPLACEMENTS) =====', 'magenta')}", f_out)
@@ -570,8 +573,8 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 seen_groups = {}  # id(ModeSymmetry) -> representative k
                 for k, freq, band_idx in selected:
                     ms = band_to_symmetry.get(band_idx)
-                    if ms is None or len(ms.band_indices) <= 1:
-                        continue
+                    if ms is None or len(ms.band_indices) <= 1 or not ms.is_real_irrep:
+                        continue     # an accidental degeneracy has no common activity: every band runs
                     group_key = id(ms)
                     if group_key not in seen_groups:
                         seen_groups[group_key] = k
@@ -703,14 +706,16 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 "being Raman-active (see [1b]/[3] above). Nothing further to do for this "
                 "structure's Raman spectrum.", 'yellow'), f_out)
 
-        f_out.write("\n# MODE_TABLE -- parsed by stb-ramanAnalysis, do not reorder the "
-                     "first 6 columns\n")
-        f_out.write(f"# {'label':<22}{'mode_index':<12}{'band_index':<12}{'frequency_thz':<16}"
-                     f"{'sign':<8}{'axis':<6}{'dir':<24}{'derived_from'}\n")
-        for label, k, band_idx, freq, sign_name, axis_name, mode_dir, derived_from in report_rows:
-            derived_str = "-" if derived_from is None else str(derived_from)
-            f_out.write(f"{label:<24}{k:<12}{band_idx:<12}{freq:<16.6f}{sign_name:<8}{axis_name:<6}"
-                         f"{mode_dir}  {derived_str}\n")
+        with open(os.path.join(output_root, MODES_FILE), "w") as f_json:
+            json.dump({
+                "schema": "stb_raman_modes_v1",
+                "displacement_ang": float(args.displacement),
+                "modes": [{"label": label, "mode_index": int(k), "band_index": int(band_idx),
+                           "frequency_thz": float(freq), "sign": sign_name, "axis": axis_name,
+                           "dir": mode_dir, "derived_from": derived_from}
+                          for label, k, band_idx, freq, sign_name, axis_name, mode_dir, derived_from
+                          in report_rows]}, f_json, indent=2)
+        print_dual(f"Stage-3 record       : {os.path.join(output_root, MODES_FILE)}", f_out)
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

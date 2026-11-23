@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -22,7 +23,7 @@ from stb.core.calc_directives import build_optical_block, OPTICAL_DIRECTION_VECT
 from stb.core.adsorption_sites import SINGLE_POINT_BLOCK
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo, pseudo_valence
 
-REPORT_FILE = "optical_stage1.txt"
+REPORT_FILE = "stb_optical_report.txt"
 DEFAULT_KGRID_DENSITY = 0.2     # 1/Ang, same convention as stb-kgrid and the other workflows
 CONFIG_EXTRA_FILE = "config_extra.fdf"
 
@@ -180,7 +181,7 @@ with this in mind.""",
                          help="Root directory for the whole optical-properties workflow "
                               "(default: optical_study).")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-optical {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -191,7 +192,7 @@ with this in mind.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("OPTICAL PROPERTIES WORKFLOW -- STAGE 1: DIRECTION FOLDERS", 'bold'))
@@ -221,7 +222,7 @@ with this in mind.""",
 
     output_root = args.output_dir
     os.makedirs(output_root, exist_ok=True)
-    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("optical")
 
     f_out = open(report_path, "w") if report_path else None
 

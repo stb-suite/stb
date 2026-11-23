@@ -5,7 +5,7 @@
 Date/time         : 2026-10-28 18:02:31
 Software          : stb 1.9.300, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Input file        : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/graphene.fdf
+Input file        : /path/to/stb/examples/7.4-mlelastic/graphene.fdf
 Mode              : single fit
 Strains           : 7 points in +-0.5 % per direction (-0.5, -0.333, -0.167, +0, +0.167, +0.333, +0.5 %)
 Relaxation        : reference cell + atoms; strained cells atoms relaxed (relaxed-ion constants); --fmax 0.001 eV/Ang, --max-steps 200

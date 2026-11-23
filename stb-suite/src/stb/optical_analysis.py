@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -28,7 +29,7 @@ from stb.core.optical_setup import reciprocal_spacings, spacing_band, symmetry_a
 from stb.core.siesta_log import get_scf_convergence, get_optical_info, read_eig_gap
 from stb.core.spectrum import read_experimental_spectrum, find_spectrum_peaks, match_peaks
 
-REPORT_FILE = "optical_stage2.txt"
+REPORT_FILE = "stb_opticalAnalysis_report.txt"
 RY_TO_EV = 13.605693122994
 HC_EV_NM = 1239.841984  # photon energy (eV) * wavelength (nm)
 
@@ -792,7 +793,7 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
                          help="Base filename (no extension) for the .csv/.dat/.gplot outputs "
                               "(default: optical_results).")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-opticalAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -833,7 +834,7 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("OPTICAL PROPERTIES WORKFLOW -- STAGE 2: ANALYSIS", 'bold'))
@@ -850,7 +851,7 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
             f"'{args.directory}' -- run stb-optical first.", 'red'))
         sys.exit(1)
 
-    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("opticalAnalysis")
     f_out = open(report_path, 'w') if report_path else None
 
     warnings = []                       # collected, repeated together at the end
@@ -1104,6 +1105,30 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
             "smallest transition energy the optical k-mesh samples and by the broadening (a Dirac point, for instance, "
             "needs a very dense mesh), and SIESTA's optical module has no intraband (Drude) term, so the low-energy "
             "response is incomplete.", 'cyan'), f_out)
+    # An edge this low cannot be told from a zero gap: it sits inside the broadening, and a finite
+    # k-mesh opens a spurious gap at a band touching it does not sample (graphene's Dirac point).
+    broadens = [i["broaden_ry"] * RY_TO_EV for i in siesta_infos if "broaden_ry" in i]
+    broaden_ref = max(broadens) if broadens else 0.1
+    edge_floor = max(3.0 * broaden_ref, 0.3)
+    unresolved_gap = bool(not metallic and np.isfinite(ref_stats["onset"]) and (
+        ref_stats["onset"] < edge_floor or (gap_info and gap_info["direct_min"] < broaden_ref)))
+    if unresolved_gap:
+        why = (f"the smallest direct Kohn-Sham gap on the SCF k-mesh is {gap_info['direct_min']:.3f} eV"
+               if gap_info else "no <label>.EIG was found, so the Kohn-Sham gap could not be read")
+        print_dual(warn(
+            f"The eps2 onset of '{ref['axis']}' is at {ref_stats['onset']:.2f} eV, below {edge_floor:.2f} eV (3 x the "
+            f"broadening of {broaden_ref:.2f} eV, at least 0.3 eV); {why}. An edge this low is not evidence of a gap: "
+            "it is what a semimetal or a metal gives on a finite k-mesh (the mesh misses the band touching and the "
+            "broadening smears the rest). The response is NOT classified as dielectric, the onset/Tauc values are "
+            f"not a gap, and the spectrum below ~{2 * broaden_ref:.2f} eV is not reliable. Check the bands "
+            "(stb-bands) and converge Optical.Mesh before reading anything from this region."), f_out)
+    elif not metallic and not gap_info:
+        print_dual(color_text("[NOTE] No <label>.EIG found next to the spectra: the Kohn-Sham gap could not be "
+                              "checked against the absorption edge.", 'cyan'), f_out)
+    if metallic:
+        pass
+    elif unresolved_gap:
+        ref_stats = dict(ref_stats, tauc=float('nan'), tauc_fit=None, tauc_window=None)
     elif np.isfinite(ref_stats["onset"]):
         print_dual(f"Reference spectrum '{ref['axis']}': the absorption edge starts at {ref_stats['onset']:.2f} eV "
                     f"(wavelength {HC_EV_NM / ref_stats['onset']:.0f} nm)."
@@ -1408,6 +1433,11 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
         bullets.append("Metallic/semimetallic response (zero Kohn-Sham gap): interband absorption starts at the lowest "
                        "transition energy the k-mesh samples, not at a gap; the free-carrier (Drude) response is absent "
                        f"from SIESTA's optical module. eps1(0) = {st['eps1_0']:.2f} is the interband contribution only.")
+    elif unresolved_gap:
+        bullets.append(f"Gap not resolved: absorption starts at {st['onset']:.2f} eV, inside the broadening / k-mesh "
+                       "resolution -- a semimetal or metal cannot be excluded (see the warning in the static "
+                       "section). No Drude term in SIESTA's optical module; eps1(0) = "
+                       f"{st['eps1_0']:.2f} is the interband part and depends on the optical mesh here.")
     elif np.isfinite(st["onset"]) and st["onset"] > 0.05:
         bullets.append(f"Dielectric (gapped) response: no absorption below {st['onset']:.2f} eV "
                        f"({HC_EV_NM / st['onset']:.0f} nm); static dielectric constant eps1(0) = {st['eps1_0']:.2f}, "

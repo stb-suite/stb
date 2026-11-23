@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/4.20/reference_run/h2o_box14/ions/H/anion
+* Directory : /path/to/run/stb/4.20/reference_run/h2o_box14/ions/H/anion
 * Running on 4 nodes in parallel.
 >> Start of run:  23-OCT-2026  19:03:43
 

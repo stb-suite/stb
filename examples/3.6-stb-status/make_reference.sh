@@ -55,6 +55,6 @@ cp "$WORK/project_status.csv" "$REF/project/"
 echo "== 9. The interactive menu (stb-suite, code 3.6)"
 mkdir -p "$REF/menu"
 # path, recursive y, no label, no csv, no report, Enter, 0 = exit
-(cd "$WORK" && printf '3.6\nproject\ny\n\n\nn\n\n0\n' | stb-suite 2>&1) | clean \
+(cd "$WORK" && printf '3.6\nproject\ny\n\n\n\n0\n' | stb-suite 2>&1) | clean \
     | sed -n '/STB-STATUS REPORT/,/Status check complete/p' > "$REF/menu/report.txt"
 echo "done -- reference_results/<case>/"

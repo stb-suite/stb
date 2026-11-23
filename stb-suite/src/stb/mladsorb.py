@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -45,6 +45,7 @@ cutoff (an isolated atom), fails on every later call ("Global alloc not supporte
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -1378,7 +1379,7 @@ def build_parser():
                         "(mladsorb_minima.xyz), the clean slab and the binding curves -- energy, forces, fixed atoms, "
                         "per-atom 'adsorbate' and 'layer', and the run's data in each frame's comment line. Off by "
                         "default.")
-    p.add_argument("--save-report", action="store_true", help=f"Also write the report to {REPORT_FILE}.")
+    p.add_argument("--save-report", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     p.add_argument("-v", "--version", action="version", version=f"stb-mladsorb {VERSION}")
     return p
@@ -1401,10 +1402,10 @@ def main():
         show_intro(["Siesta ToolBox Suite - ML Adsorption Screening",
                     "Adsorption sites and minima with a MACE potential",
                     f"Version {VERSION} | University of Brasilia - 2026",
-                    "Developed by Dr. Carlos M. O. Bastos"])
+                    "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mladsorb")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, files = [], [], []
     t_start = time.monotonic()
@@ -1668,7 +1669,6 @@ def main():
         print_dual(f"Report            : {report_path}", f_out)
     not_asked = [f for f, on in (("--show", args.show), ("--save-data", args.save_data),
                                  ("--save-gnuplot", args.save_gnuplot), ("--save-xyz", args.save_xyz),
-                                 ("--save-report", args.save_report),
                                  ("--relax-depth", args.relax_depth > 0),
                                  ("--bulk-reference", bool(args.bulk_reference))) if not on]
     if not_asked:

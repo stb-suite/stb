@@ -499,11 +499,19 @@ def print_model_card(card, card_path, model_path, f_out, warn):
     sub("Model card -- level of theory (what the model reproduces)")
     s = lt.get("settings") or {}
     print_dual(f"Code              : {lt.get('code', 'SIESTA')} {lt.get('siesta_version') or ''}".rstrip(), f_out)
+    d3 = lt.get("dftd3") or {}
+
+    def setting(k):
+        # 'DFTD3 default' read as 'D3 on' (it means the label was not set: SIESTA's default, off); the card's own
+        # dftd3.on says what the labels contain
+        if k.replace(".", "").replace("_", "").upper() == "DFTD3":
+            on = d3.get("on") if "on" in d3 else str(s[k]).strip().lower().strip(".") in ("true", "t", "yes")
+            return f"DFT-D3 {'on' if on else 'off'}"
+        return f"{k} {s[k]}"
     keys = list(s)
     for i in range(0, len(keys), 3):
         print_dual(("Settings          : " if i == 0 else "                    ")
-                   + "; ".join(f"{k} {s[k]}" for k in keys[i:i + 3]), f_out)
-    d3 = lt.get("dftd3") or {}
+                   + "; ".join(setting(k) for k in keys[i:i + 3]), f_out)
     print_dual(f"DFT-D3            : {'included in the labels' if d3.get('on') else 'not in the labels'}"
                f" (source: {d3.get('source', '?')})", f_out)
     pp = lt.get("pseudopotentials_md5") or {}

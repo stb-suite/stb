@@ -152,7 +152,7 @@ collects them.*
 | Library | Used for |
 |---|---|
 | Python standard library (`os`, `glob`, `tarfile`, `re`) | walking the folders, the archive and its check, reading the fdf files |
-| `stb.core.cli` | the numbered report, tables, `--save-report` |
+| `stb.core.cli` | the numbered report, tables |
 
 Nothing else: no SIESTA, no scientific libraries. `stb-clean` works on any machine where the folders are, including a
 cluster's login node.
@@ -284,7 +284,7 @@ pseudopotential among the kept files.
 ### 6.3 The real clean: archive, check, remove; then restore (Case 3)
 
 ```bash
-stb-clean --path si_run -n --save-report
+stb-clean --path si_run -n
 ```
 
 ```
@@ -541,7 +541,6 @@ touches `siesta_run/`, and takes a few seconds.
 | `--dry-run` | off | report only; nothing archived or removed |
 | `--no-archive` | off | no backup; the removed files cannot be recovered |
 | `-n`, `--no-confirm` | off | do not ask before removing (for scripts) |
-| `--save-report` | off | also write `stb_clean_report.txt` (in the folder; in the current folder for a glob) |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 
 ## 14. What's next

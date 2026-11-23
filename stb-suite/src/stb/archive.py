@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import io
@@ -67,10 +68,26 @@ def suffix(name):
     return os.path.splitext(name)[1] or os.path.basename(name)
 
 
+def is_earlier_archive(f):
+    """True for stb-clean/stb-archive archives: their default names, or (any name, e.g. one given with -o) a .tar.gz
+    whose top folder holds MANIFEST.txt and SHA256SUMS, as every archive this tool writes does."""
+    name = os.path.basename(f)
+    if ARCHIVE_RE.search(name):
+        return True
+    if not (name.endswith(".tar.gz") or name.endswith(".tgz")):
+        return False
+    try:
+        with tarfile.open(f, "r:gz") as tar:
+            members = {m.name.split("/", 1)[1] for m in tar.getmembers() if m.name.count("/") == 1}
+    except (OSError, tarfile.TarError, EOFError):
+        return False
+    return {"MANIFEST.txt", "SHA256SUMS"} <= members
+
+
 def plan_archive(path, mode, recursive, include, exclude):
     """Every file of the folder: (relpath, kind, size, why) for what goes in and for what is left out."""
     files = [f for f in collect_files(path, recursive) if not os.path.basename(f).startswith(".")
-             and not ARCHIVE_RE.search(os.path.basename(f))]
+             and not is_earlier_archive(f)]
     # inputs: the .fdf files, everything they read (followed through included files), pseudopotentials, scripts
     fdfs = [f for f in files if f.endswith(".fdf")]
     refs, labels, species = read_fdf_settings(fdfs)
@@ -395,7 +412,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="Overwrite an existing archive of the same name.")
     parser.add_argument("--dry-run", action="store_true", help="Report what would go in; write nothing.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (current folder). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-archive {VERSION}")
     args = parser.parse_args()
@@ -410,7 +427,7 @@ def main():
             "Siesta ToolBox Suite - Archive Packager",
             "Bundles a finished calculation for sharing, not deleting",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     is_glob = any(c in args.path for c in "*?[")
@@ -424,7 +441,8 @@ def main():
         parser.error(f"--output can't be used when --path matches {len(matches)} directories; each gets its own "
                      "auto-named archive.")
 
-    buf = io.StringIO() if args.save_report else None
+    buf = io.StringIO()
+
     sec = Sections(buf)
     warnings = []
 
@@ -464,8 +482,10 @@ def main():
     out(f"Archived          : {len(done)} of {len(results)} folder(s)" + (" (dry run)" if args.dry_run else ""))
     for r in done:
         out(f"  - {r['archive']}")
-    if args.save_report:
-        out(f"Report            : {REPORT_FILE}")
+    # Reserved only now, after the archives are written: an empty report file in a folder being
+    # archived would end up in its own archive.
+    report_file = new_report_path("archive")
+    out(f"Report            : {report_file}")
 
     sec("WARNINGS")
     if warnings:
@@ -474,7 +494,7 @@ def main():
     else:
         out("  none")
     if buf is not None:
-        with open(REPORT_FILE, "w") as fh:
+        with open(report_file, "w") as fh:
             fh.write(buf.getvalue())
 
     print("\n" + "-" * 60)

@@ -132,9 +132,9 @@ B -- interactive stb-suite menu:
 
 Every run always writes a numbered report ([0] RUN METADATA ... [8]
 SUMMARY & FILES), structure validation, a symmetry table, and
-references.bib (SIESTA + PyXtal always; + MACE/MACE-MP with --ml-rank). A
-full text report (--save-report) and an interactive 3D view (--view) are
-off by default.
+stb_crystalcast_references.bib (SIESTA + PyXtal always; + MACE/MACE-MP with --ml-rank). The
+full text report is always written (stb_crystalcast_report.txt); an
+interactive 3D view (--view) is off by default.
 EOF
 pause
 
@@ -144,22 +144,22 @@ echo "=================================================================="
 cat <<'EOF'
 --group 225 (Fm-3m, rock salt) + 4 Ni + 8 O -- pyxtal finds a Wyckoff
 combination compatible with that group and composition, and draws the
-free coordinates randomly. --save-report also proves the standardized
-report/provenance-header/references.bib conventions from here on:
+free coordinates randomly. The report also proves the standardized
+report/provenance-header/stb_crystalcast_references.bib conventions from here on:
 EOF
 mkdir -p "$OUT/generate"
 echo
-echo "\$ stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --save-report \\"
+echo "\$ stb-crystalcast --group 225 --species Ni O --num-ions 4 8 \\"
 echo "      -o nio.fdf --no-intro"
 (cd "$OUT/generate" && stb-crystalcast --group 225 --species Ni O --num-ions 4 8 \
-    --save-report -o nio.fdf --no-intro > console.log 2>&1)
+    -o nio.fdf --no-intro > console.log 2>&1)
 grep -E "as-built space group|Requested space group:" "$OUT/generate/console.log"
 echo
 echo "Provenance header written into nio.fdf:"
 head -3 "$OUT/generate/nio.fdf"
 echo
-echo "references.bib (SIESTA + PyXtal, no MACE -- --ml-rank wasn't used):"
-grep "^@" "$OUT/generate/references.bib"
+echo "stb_crystalcast_references.bib (SIESTA + PyXtal, no MACE -- --ml-rank wasn't used):"
+grep "^@" "$OUT/generate/stb_crystalcast_references.bib"
 pause
 
 echo "=================================================================="
@@ -300,8 +300,8 @@ echo "Driving the same generate case through the interactive menu's manual"
 echo "entry mode and checking it reaches the same detected space group."
 TMP="$(mktemp -d)"
 echo
-echo "\$ printf '4.12\\n\\n\\nn\\n225\\nNi 4\\nO 8\\n\\n\\n\\n\\n\\n\\nn\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.12\n\n\nn\n225\nNi 4\nO 8\n\n\n\n\n\n\nn\n\n\n\n0\n' | \
+echo "\$ printf '4.12\\n\\n\\nn\\n225\\nNi 4\\nO 8\\n\\n\\n\\n\\n\\n\\nn\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.12\n\n\nn\n225\nNi 4\nO 8\n\n\n\n\n\n\nn\n\n\n0\n' | \
     stb-suite > session.log 2>&1) || true
 if grep -q "space group Fm-3m (No. 225)" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
@@ -324,7 +324,7 @@ Seven or eight self-contained folders were generated under output/
   substitute/               subgroup-supergroup/
   ml-rank/
 
-Each has references.bib; generate/ additionally has stb_crystalcast_report.txt.
+Each has stb_crystalcast_references.bib; generate/ additionally has stb_crystalcast_report.txt.
 
 Recap of what this walkthrough covered:
   - generate mode vs. stb-crystalbuilder, built live: the exact same real
@@ -336,8 +336,8 @@ Recap of what this walkthrough covered:
   - --subgroup/--supergroup: the only symmetry-breaking/-restoring search
     in the suite, verified as genuine inverses on the same structure
   - --ml-rank + --model/--custom-model: MACE-based relaxed-energy screening
-  - the provenance header, references.bib (SIESTA + PyXtal, + MACE with
-    --ml-rank), and --save-report
+  - the provenance header, stb_crystalcast_references.bib (SIESTA + PyXtal, + MACE with
+    --ml-rank), and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens every written

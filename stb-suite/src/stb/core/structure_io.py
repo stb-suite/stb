@@ -370,11 +370,21 @@ def atom_counts(structure: FdfStructure) -> dict[str, int]:
 
 
 def to_pymatgen(structure: FdfStructure) -> Structure:
-    """Builds a pymatgen Structure using the file's own coordinate format and physical lattice."""
-    species = [symbol for symbol, _ in structure.atoms]
+    """Builds a pymatgen Structure using the file's own coordinate format and physical lattice.
+
+    Each site's element comes from the Z its species label declares in ChemicalSpeciesLabel
+    (a ghost's Z < 0 gives its real element), so labels that are not element symbols
+    ('Ag_slab', 'O_ads', 'C_ghost') work; the label itself is kept as the site's `label`,
+    which from_pymatgen reads back."""
+    labels = [symbol for symbol, _ in structure.atoms]
+    species = []
+    for label in labels:
+        info = structure.species_meta.get(label)
+        species.append(real_element(label, structure.species_meta) if info and info.get("Z") else label)
     coords = [pos for _, pos in structure.atoms]
     is_cartesian = structure.coord_format == "cartesian"
-    return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian)
+    return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian,
+                     labels=labels)
 
 
 def min_pairwise_distance(structure) -> float | None:
@@ -488,7 +498,8 @@ def strip_fragment_labels(structure: FdfStructure) -> FdfStructure:
 
 
 def from_pymatgen(
-    structure: Structure, species_meta: dict[str, dict] | None = None, coord_format: str = "fractional"
+    structure: Structure, species_meta: dict[str, dict] | None = None, coord_format: str = "fractional",
+    labels: list[str] | None = None,
 ) -> FdfStructure:
     """Builds an FdfStructure from a pymatgen Structure (e.g. after make_supercell()).
 
@@ -505,8 +516,22 @@ def from_pymatgen(
     species elsewhere -- e.g. after a supercell/filter/defect operation --
     would otherwise carry that gap forward as a stale, non-sequential id
     even before reaching write_fdf).
+
+    Species labels: a site whose pymatgen `label` (set by to_pymatgen) is a species of
+    `species_meta` with the site's own element keeps that label ('Ag_slab'); `labels`
+    (one per site) gives them explicitly, for a structure that went through ASE, which
+    drops pymatgen's labels. Any other site gets its element symbol, as before.
     """
-    symbols = [site.specie.symbol for site in structure]
+    def _label(i, site):
+        element = site.specie.symbol
+        candidate = labels[i] if labels is not None else getattr(site, "label", None)
+        if candidate and candidate != element and species_meta and candidate in species_meta \
+                and species_meta[candidate].get("Z") \
+                and real_element(candidate, species_meta) == element:
+            return candidate
+        return element
+
+    symbols = [_label(i, site) for i, site in enumerate(structure)]
     species = list(dict.fromkeys(symbols))
 
     meta: dict[str, dict] = {}
@@ -536,8 +561,8 @@ def from_pymatgen(
 
     is_cartesian = coord_format == "cartesian"
     atoms = [
-        (site.specie.symbol, np.array(site.coords if is_cartesian else site.frac_coords))
-        for site in structure
+        (symbol, np.array(site.coords if is_cartesian else site.frac_coords))
+        for symbol, site in zip(symbols, structure)
     ]
 
     return FdfStructure(
@@ -1052,7 +1077,19 @@ def prepend_include(calc_text: str, include_name: str) -> str:
     sit. Shared by elastic_inputs.py and phonons_create.py, both of which
     need to force single-point SCF over a user-supplied relaxation calc.fdf
     template.
+
+    A template that already has '%include <include_name>' (a calc.fdf copied from an earlier generated folder)
+    keeps ONE such line, at the top: the old ones are removed rather than repeated (two identical includes did no
+    harm but read as a mistake).
     """
+    import re as _re
+    pattern = _re.compile(r"^\s*%include\s+" + _re.escape(include_name) + r"\s*(#.*)?$", _re.IGNORECASE)
+    lines = calc_text.splitlines(keepends=True)
+    if any(pattern.match(l) for l in lines):
+        kept = [l for l in lines if not pattern.match(l)]
+        while kept and not kept[0].strip():
+            kept.pop(0)
+        calc_text = "".join(kept)
     return f"%include {include_name}\n\n" + calc_text
 
 

@@ -12,7 +12,7 @@ RAMAN SPECTRUM WORKFLOW -- STAGE 1: PHONON DISPLACEMENTS
 Date/time         : <date>
 Structure file    : structure.fdf
 Calc file         : calc.fdf
-Pseudo source     : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo
+Pseudo source     : /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo
 Supercell dim     : 1 x 1 x 1
 Displacement dist.: 0.02 Ang
 Output root       : raman_study
@@ -52,7 +52,7 @@ config_extra.fdf (written into every generated folder):
 
 [3] PSEUDOPOTENTIALS
 ------------------------------------------------------------
-Source            : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo
+Source            : /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo
 Species | Status
 ----------------
 Si      | found 

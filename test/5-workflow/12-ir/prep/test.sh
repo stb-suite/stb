@@ -66,6 +66,7 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Default run (dim 1 1 1, small enough to be fast) ---
 echo -e "\n--- Testing default generation (-dim 1 1 1) ---"
+rm -f stb_ir_report*.txt stb_ir_references*.bib
 stb-ir -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --save-report --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_success ir_study/phonon_disp/disp-001/structure.fdf
@@ -77,16 +78,16 @@ check_success ir_study/phonon_disp/disp-001/calc.fdf
 check_success ir_study/phonon_disp/disp-001/O.psf
 check_success ir_study/phonon_disp/disp-001/Sn.psf
 check_success ir_study/phonon_disp/phonopy_disp.yaml
-check_success ir_study/ir_stage1.txt
-check_contains "\[0\] RUN METADATA" ir_study/ir_stage1.txt
-check_contains "\[3\] PSEUDOPOTENTIALS" ir_study/ir_stage1.txt
-check_contains "\[4\] PHONON DISPLACEMENTS" ir_study/ir_stage1.txt
-check_contains "\[5\] SUMMARY & NEXT STEPS" ir_study/ir_stage1.txt
+check_success stb_ir_report.txt
+check_contains "\[0\] RUN METADATA" stb_ir_report.txt
+check_contains "\[3\] PSEUDOPOTENTIALS" stb_ir_report.txt
+check_contains "\[4\] PHONON DISPLACEMENTS" stb_ir_report.txt
+check_contains "\[5\] SUMMARY & NEXT STEPS" stb_ir_report.txt
 check_contains "Displacement folders : 42" log_basic.txt
-check_contains "stb-irModes --directory ir_study" ir_study/ir_stage1.txt
+check_contains "stb-irModes --directory ir_study" stb_ir_report.txt
 
 echo "Testing: bulk (3D) structure gets the Born-effective-charge path preview"
-check_contains "Bulk (3D) structure detected -- Stage 2" ir_study/ir_stage1.txt
+check_contains "Bulk (3D) structure detected -- Stage 2" stb_ir_report.txt
 
 
 # --- 3. Refuses to overwrite an existing phonon_disp/ ---

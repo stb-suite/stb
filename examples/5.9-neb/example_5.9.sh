@@ -28,6 +28,17 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 OUT="$DIR/output"
+
+# run_neb <stb-neb args>: stb-neb writes its report (stb_neb_report.txt) in the folder it runs
+# from; this moves it into the case folder (-O) so each case keeps its own report.
+run_neb() {
+    local out="." prev="" a rc
+    for a in "$@"; do [ "$prev" = "-O" ] && out="$a"; prev="$a"; done
+    rm -f stb_neb_report*.txt
+    stb-neb "$@"; rc=$?
+    mkdir -p "$out"; [ -f stb_neb_report.txt ] && mv stb_neb_report.txt "$out/"
+    return $rc
+}
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
@@ -79,12 +90,16 @@ cat > "$1/fabricate.py" << 'PYEOF'
 import sys, os
 import numpy as np
 from stb.core import structure_io
+from ase.geometry import find_mic
 
 ROOT, CYCLE = sys.argv[1], sys.argv[2]
 K = 2.0
 
 def positions(path):
     return structure_io.to_pymatgen(structure_io.read_fdf(path)).cart_coords
+
+def cell(path):
+    return structure_io.to_pymatgen(structure_io.read_fdf(path)).lattice.matrix
 
 def write_fa(path, forces):
     n = len(forces)
@@ -111,7 +126,8 @@ targets = np.load(targets_path, allow_pickle=True).item()
 for label in labels:
     d = f'{ROOT}/cycle_{CYCLE}/{label}'
     pos = positions(f'{d}/structure.fdf')
-    disp = pos - targets[label]
+    # minimum image: stb-nebCycle wraps positions into the cell, so an atom near a face may sit one lattice vector away
+    disp = find_mic(pos - targets[label], cell(f'{d}/structure.fdf'), True)[0]
     write_fa(os.path.join(d, 'siesta.FA'), -K * disp)
     write_out(os.path.join(d, 'calc.out'), 0.5 * K * float(np.sum(disp**2)) - 300.0)
 PYEOF
@@ -161,7 +177,7 @@ mkdir -p "$OUT/endpoints_unrelaxed/init_dir" "$OUT/endpoints_unrelaxed/final_dir
 cp initial.fdf "$OUT/endpoints_unrelaxed/init_dir/structure.fdf"
 cp final.fdf "$OUT/endpoints_unrelaxed/final_dir/structure.fdf"
 echo "\$ stb-neb -i init_dir -f final_dir -c calc.fdf --mode 3"
-stb-neb -i "$OUT/endpoints_unrelaxed/init_dir" -f "$OUT/endpoints_unrelaxed/final_dir" \
+run_neb -i "$OUT/endpoints_unrelaxed/init_dir" -f "$OUT/endpoints_unrelaxed/final_dir" \
     -c calc.fdf --mode 3 -O "$OUT/endpoints_unrelaxed" --no-intro \
     > "$OUT/endpoints_unrelaxed.log"
 grep "WARNING.*no finished 'siesta.XV'" "$OUT/endpoints_unrelaxed.log"
@@ -172,7 +188,7 @@ echo "(writing siesta.XV at the SAME geometry -- no real SIESTA available"
 echo "here -- purely to demonstrate the file stb-neb looks for):"
 fabricate_relaxed_xv "$OUT/endpoints_unrelaxed/init_dir"
 fabricate_relaxed_xv "$OUT/endpoints_unrelaxed/final_dir"
-stb-neb -i "$OUT/endpoints_unrelaxed/init_dir" -f "$OUT/endpoints_unrelaxed/final_dir" \
+run_neb -i "$OUT/endpoints_unrelaxed/init_dir" -f "$OUT/endpoints_unrelaxed/final_dir" \
     -c calc.fdf --mode 3 -O "$OUT/endpoints_relaxed" --no-intro \
     > "$OUT/endpoints_relaxed.log"
 if grep -q "WARNING.*no finished 'siesta.XV'" "$OUT/endpoints_relaxed.log"; then
@@ -190,7 +206,7 @@ echo "--- Composition mismatch (final.fdf missing the H atom) ---"
 sed '/0.111111111   0.222222222   0.600000000   2/d; s/NumberofAtoms      19/NumberofAtoms      18/' \
     final.fdf > "$OUT/final_bad_composition.fdf"
 mkdir -p "$OUT/composition_mismatch"
-if stb-neb -i initial.fdf -f "$OUT/final_bad_composition.fdf" -c calc.fdf --mode 3 \
+if run_neb -i initial.fdf -f "$OUT/final_bad_composition.fdf" -c calc.fdf --mode 3 \
     -O "$OUT/composition_mismatch" --no-intro > "$OUT/composition_mismatch.log" 2>&1; then
     echo "Unexpected: stb-neb should have refused this."
     exit 1
@@ -208,7 +224,7 @@ with open('$OUT/final_bad_lattice.fdf', 'w') as f:
     f.write(text)
 "
 mkdir -p "$OUT/lattice_mismatch"
-if stb-neb -i initial.fdf -f "$OUT/final_bad_lattice.fdf" -c calc.fdf --mode 3 \
+if run_neb -i initial.fdf -f "$OUT/final_bad_lattice.fdf" -c calc.fdf --mode 3 \
     -O "$OUT/lattice_mismatch" --no-intro > "$OUT/lattice_mismatch.log" 2>&1; then
     echo "Unexpected: stb-neb should have refused this."
     exit 1
@@ -225,7 +241,7 @@ echo "=================================================================="
 echo " output/mode3/  --  Stage 1 mode 3 (100% real-DFT, no MACE) + worked barrier"
 echo "=================================================================="
 echo "\$ stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 3"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 3 -O "$OUT/mode3" --no-intro \
+run_neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 3 -O "$OUT/mode3" --no-intro \
     > "$OUT/mode3_prep.log"
 echo
 echo "5 images, real-DFT single-point folders directly (no MACE stage):"
@@ -248,8 +264,8 @@ write_freeeng "$OUT/mode3/neb_run/cycle_00/image_01/calc.out" "-299.700000" "0.0
 write_freeeng "$OUT/mode3/neb_run/cycle_00/image_02/calc.out" "-299.500000" "0.400000"
 write_freeeng "$OUT/mode3/neb_run/cycle_00/image_03/calc.out" "-299.700000" "0.015000"
 write_freeeng "$OUT/mode3/neb_run/cycle_00/image_04/calc.out" "-300.000000" "0.010000"
-echo "\$ stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz"
-(cd "$OUT/mode3" && stb-nebAnalysis --dir neb_run --save-report --save-gnuplot \
+echo "\$ stb-nebAnalysis --dir neb_run --save-gnuplot --save-path-xyz"
+(cd "$OUT/mode3" && stb-nebAnalysis --dir neb_run --save-gnuplot \
     --save-path-xyz --no-intro > "$OUT/mode3_analysis.log")
 sed -n '/\[1\] IMAGE ENERGIES/,/\[2\] CONSISTENCY/p' "$OUT/mode3_analysis.log" | head -n -1
 sed -n '/\[3\] BARRIER ANALYSIS/,/\[3b\]/p' "$OUT/mode3_analysis.log" | head -n -1
@@ -277,7 +293,7 @@ single highest-energy image climb uphill onto the true saddle point
 run should raise it until [4] reports converged, not "hit step cap").
 EOF
 echo "\$ stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --ml-max-steps 30"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --ml-max-steps 30 \
+run_neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --ml-max-steps 30 \
     -O "$OUT/mode1" --no-intro > "$OUT/mode1.log"
 sed -n '/\[4\] MACE-MP-0 PATH SHAPING/,/\[5\] PATH QUALITY/p' "$OUT/mode1.log" | head -n -1
 echo
@@ -306,7 +322,7 @@ geometry to run SIESTA on) or, once the max residual force drops below
 --fmax, writes a NEB_CONVERGED sentinel and stops.
 EOF
 echo "\$ stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 2"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 2 -O "$OUT/mode2_cycle" --no-intro \
+run_neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 2 -O "$OUT/mode2_cycle" --no-intro \
     > "$OUT/mode2_prep.log"
 echo
 echo "The printed cluster-submission snippet (run this yourself in a real"
@@ -386,8 +402,8 @@ Folders generated under output/:
   lattice_mismatch/      mode3/               mode1/ (needs the 'ml' extra)
   mode2_cycle/
 
-output/mode3/neb_run/ has the full Stage 1+2 report pair (neb_setup.txt,
-neb_report.txt), the energy-profile plot/gnuplot data, and
+output/mode3/ has the Stage 1+2 reports (stb_neb_report.txt, stb_nebAnalysis_report.txt);
+output/mode3/neb_run/ has the band record (neb_setup.json), the energy-profile plot/gnuplot data, and
 neb_path_current.xyz (viewable in VESTA/OVITO/ASE-GUI).
 
 As a next step, on your OWN already-relaxed endpoints:
@@ -395,5 +411,5 @@ As a next step, on your OWN already-relaxed endpoints:
   # run SIESTA in every neb_run/cycle_00/image_NN/ folder, then loop:
   stb-nebCycle --dir neb_run --fmax 0.05 --climb-after 0
   # run SIESTA in the newly-written cycle_NN/, repeat until NEB_CONVERGED
-  stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz
+  stb-nebAnalysis --dir neb_run --save-gnuplot --save-path-xyz
 EOF

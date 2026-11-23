@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -34,22 +34,36 @@ Endpoints (images[0]/images[-1], the already-relaxed --initial/--final
 endpoints stb-neb built the band from) are never moved --
 ase.mep.neb.BaseNEB.get_positions/set_positions only ever touch the
 interior images, same guarantee core/mace_relax.py::relax_neb already
-documents and relies on.
+documents and relies on. So their folders are copied into the next cycle
+with their SIESTA results, and the loop stb-neb prints skips finished
+folders: the endpoints are computed once, in cycle_00.
+
+Constraints: the atoms of the image's own `%block Geometry.Constraints`
+(written by stb-neb into config_extra.fdf) are held fixed with FixAtoms,
+and the forces come from `<label>.FAC` when SIESTA wrote one (SIESTA 5's
+.FA holds the unconstrained forces). Each new folder gets the previous
+cycle's config_extra.fdf verbatim, so the forced Spin/dipole/D3 directives
+and the constraints carry over to every cycle.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
 import sys
 import glob
+import shutil
 import argparse
 import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
-from stb.core import structure_io, siesta_log
+from stb.core import structure_io, siesta_log, fdf_directives
+from stb.core.adsorption_sites import CONFIG_EXTRA_FILE
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.neb import write_image_folder
 
+# Neighbouring images closer than this (largest atomic displacement, Ang) are the same geometry.
+DEGENERATE_STEP_ANG = 1e-3
 CONVERGED_SENTINEL = "NEB_CONVERGED"
 _CYCLE_RE = re.compile(r"^cycle_(\d+)$")
 
@@ -88,6 +102,7 @@ def read_image_results(cycle_dir, out_filename):
         raise ValueError(f"No 'image_*' folders found in '{cycle_dir}'.")
 
     labels, structures, energies, forces_list = [], [], [], []
+    fixed_list, force_files, unsupported_list = [], [], []
     for label in image_dirs:
         image_dir = os.path.join(cycle_dir, label)
         fdf_path = os.path.join(image_dir, "structure.fdf")
@@ -103,16 +118,40 @@ def read_image_results(cycle_dir, out_filename):
         energies.append(energy)
 
         system_label = structure_io.find_fdf_system_label(image_dir)
-        fa_path = os.path.join(image_dir, f"{system_label}.FA") if system_label else None
-        forces = siesta_log.read_fa_forces(fa_path) if fa_path and os.path.isfile(fa_path) else None
+        forces, force_file = None, f"{system_label}.FA"
+        if system_label:
+            # SIESTA 5 writes the forces without constraints to .FA and the constrained ones
+            # (fixed atoms zeroed) to .FAC: the NEB must step with the latter.
+            for name in (f"{system_label}.FAC", f"{system_label}.FA"):
+                path = os.path.join(image_dir, name)
+                if os.path.isfile(path):
+                    forces, force_file = siesta_log.read_fa_forces(path), name
+                    break
         if forces is None:
             raise ValueError(f"'{image_dir}': could not read forces from "
-                              f"'{system_label}.FA' -- has SIESTA finished here yet?")
+                              f"'{force_file}' -- has SIESTA finished here yet?")
         forces_list.append(forces)
+        force_files.append(force_file)
+
+        fixed, unsupported = fdf_directives.constrained_atoms(
+            *image_fdf_texts(image_dir), n_atoms=len(structures[-1]))
+        fixed_list.append(fixed or [])
+        unsupported_list.append(unsupported)
 
         labels.append(label)
 
-    return labels, structures, energies, forces_list
+    return labels, structures, energies, forces_list, fixed_list, force_files, unsupported_list
+
+
+def image_fdf_texts(image_dir):
+    """config_extra.fdf then calc.fdf of an image folder (SIESTA's reading order)."""
+    texts = []
+    for name in (CONFIG_EXTRA_FILE, "calc.fdf"):
+        path = os.path.join(image_dir, name)
+        if os.path.isfile(path):
+            with open(path, errors="ignore") as f:
+                texts.append(f.read())
+    return texts
 
 
 def main():
@@ -145,8 +184,7 @@ def main():
                               "stb-neb --mode 2; a larger value is recommended for --mode 3, "
                               "which starts from a raw interpolated path).")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also persist this cycle's report to <dir>/neb_cycle_report.txt. "
-                              "Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-nebCycle {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -157,7 +195,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if not os.path.isdir(args.dir):
@@ -171,8 +209,8 @@ def main():
             "to do. Delete it if you want to force another step.", 'yellow'))
         sys.exit(0)
 
-    report_path = os.path.join(args.dir, "neb_cycle_report.txt") if args.save_report else None
-    f_out = open(report_path, 'a') if report_path else None
+    report_path = new_report_path("nebCycle")
+    f_out = open(report_path, 'w') if report_path else None
 
     print_dual(color_text("===== STB-NEBCYCLE =====", 'magenta'), f_out)
 
@@ -197,23 +235,78 @@ def main():
 
     print_section("[1] READING SIESTA RESULTS", f_out)
     try:
-        labels, structures, energies, forces_list = read_image_results(cycle_dir, args.file)
+        (labels, structures, energies, forces_list, fixed_list, force_files,
+         unsupported_list) = read_image_results(cycle_dir, args.file)
     except ValueError as e:
         print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
         if f_out:
             f_out.close()
         sys.exit(1)
-    for label, energy in zip(labels, energies):
+    for label, energy, force_file in zip(labels, energies, force_files):
         print_dual(f"  {color_text('[OK]', 'green')} {os.path.basename(cycle_dir)}/{label} : "
-                    f"E = {energy:.6f} eV", f_out)
+                    f"E = {energy:.6f} eV (FreeEng), forces from {force_file}", f_out)
+    print_dual("  Energy: SIESTA's FreeEng ('siesta: FreeEng'), the one the forces derive from with "
+               "electronic smearing; it differs from E_KS by -T*S of the smearing.", f_out)
+
+    fixed_sets = {tuple(f) for f in fixed_list}
+    fixed_atoms = sorted(set().union(*[set(f) for f in fixed_list]))
+    if fixed_atoms:
+        print_dual(f"  Fixed atoms (Geometry.Constraints of the image folders): {len(fixed_atoms)}, "
+                    "held fixed with FixAtoms.", f_out)
+    else:
+        print_dual("  Fixed atoms: none (no Geometry.Constraints atom lines in the image folders) -- "
+                    "every atom moves.", f_out)
+    if len(fixed_sets) > 1:
+        print_dual(color_text(
+            "  [WARNING] The image folders hold different atoms fixed; the union is used.", 'yellow'), f_out)
+    for label, unsupported in zip(labels, unsupported_list):
+        if unsupported:
+            print_dual(color_text(
+                f"  [WARNING] {label}: Geometry.Constraints line(s) not applied as FixAtoms: "
+                f"{'; '.join(unsupported)} (their effect on the forces is in the .FAC SIESTA wrote, "
+                "if any; the step itself does not enforce them).", 'yellow'), f_out)
+            break
+    if fixed_atoms and any(f.endswith(".FA") for f in force_files):
+        print_dual(color_text(
+            "  [NOTE] No .FAC found for some images: their .FA forces are used, with the fixed "
+            "atoms' components removed by FixAtoms.", 'cyan'), f_out)
+
+    # A band whose neighbouring images coincide has no tangent and no barrier.
+    # ASE does not always return NaN for it (identical endpoints: every image
+    # the same, zero forces along a zero tangent), so it is checked here, on
+    # the geometries, before any step is taken.
+    step_lengths = []
+    for previous, current in zip(structures[:-1], structures[1:]):
+        delta = current.frac_coords - previous.frac_coords
+        delta -= np.round(delta)
+        step_lengths.append(float(np.linalg.norm(delta @ current.lattice.matrix, axis=1).max()))
+    collapsed = [f"{labels[i]}-{labels[i + 1]}" for i, length in enumerate(step_lengths)
+                 if length < DEGENERATE_STEP_ANG]
+    if collapsed:
+        whole = len(collapsed) == len(step_lengths)
+        print_dual(color_text(
+            "[ERROR] Degenerate band: "
+            + ("every image has the same geometry (largest atomic displacement between neighbours < "
+               f"{DEGENERATE_STEP_ANG} Ang) -- the initial and final states are the same structure, so "
+               "there is no path and no barrier along this band." if whole else
+               f"neighbouring images coincide ({', '.join(collapsed)}: largest atomic displacement < "
+               f"{DEGENERATE_STEP_ANG} Ang) -- the path has collapsed there and has no tangent.")
+            + " No cycle folder is written. Check the endpoints given to stb-neb (--initial/--final must "
+            "be two different minima) or the last cycles' geometries.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
     from ase.calculators.singlepoint import SinglePointCalculator
+    from ase.constraints import FixAtoms
     from ase.mep.neb import NEB
     from ase.optimize import FIRE
 
     images = []
     for pmg, energy, forces in zip(structures, energies, forces_list):
         atoms = AseAtomsAdaptor.get_atoms(pmg)
+        if fixed_atoms:
+            atoms.set_constraint(FixAtoms(indices=fixed_atoms))
         atoms.calc = SinglePointCalculator(atoms, energy=energy, forces=forces)
         images.append(atoms)
 
@@ -286,18 +379,40 @@ def main():
             'green'), f_out)
     else:
         next_dir = os.path.join(args.dir, f"cycle_{cycle_num + 1:02d}")
-        calc_fdf_path = os.path.join(cycle_dir, labels[0], "calc.fdf")
-        with open(calc_fdf_path) as f:
-            calc_text = f.read()
+        endpoint_labels = {labels[0], labels[-1]}
         for label, atoms in zip(labels, images):
+            src_dir = os.path.join(cycle_dir, label)
+            dst_dir = os.path.join(next_dir, label)
+            if label in endpoint_labels:
+                # The NEB never moves the endpoints: the folder goes on with its results,
+                # and the printed loop skips it (it is already finished).
+                if os.path.isdir(dst_dir):
+                    shutil.rmtree(dst_dir)
+                shutil.copytree(src_dir, dst_dir)
+                print_dual(f"  {color_text('[OK]', 'green')} {next_dir}/{label} (endpoint: copied "
+                            "with its SIESTA results, not recomputed)", f_out)
+                continue
+            with open(os.path.join(src_dir, "calc.fdf")) as f:
+                calc_text = f.read()
+            extra_path = os.path.join(src_dir, CONFIG_EXTRA_FILE)
+            config_extra_text = None
+            if os.path.isfile(extra_path):
+                with open(extra_path) as f:
+                    config_extra_text = f.read()
             pmg_new = AseAtomsAdaptor.get_structure(atoms)
-            species_meta = structure_io.species_dict(structure_io.read_fdf(
-                os.path.join(cycle_dir, label, "structure.fdf")))
-            write_image_folder(os.path.join(next_dir, label), pmg_new, calc_text, species_meta,
-                                pp_path=os.path.join(cycle_dir, label))
+            previous = structure_io.read_fdf(os.path.join(src_dir, "structure.fdf"))
+            write_image_folder(dst_dir, pmg_new, calc_text, structure_io.species_dict(previous),
+                                pp_path=None, config_extra_text=config_extra_text,
+                                atom_labels=[label for label, _ in previous.atoms])
+            for pseudo in sorted(glob.glob(os.path.join(src_dir, "*.psml"))
+                                 + glob.glob(os.path.join(src_dir, "*.psf"))):
+                target = os.path.join(dst_dir, os.path.basename(pseudo))
+                if not os.path.exists(target):
+                    shutil.copy2(pseudo, target)
             print_dual(f"  {color_text('[OK]', 'green')} {next_dir}/{label}", f_out)
-        print_dual(f"[OK] {len(labels)} image folder(s) written under '{next_dir}' -- run SIESTA "
-                    "there next, then call stb-nebCycle again.", f_out)
+        print_dual(f"[OK] {len(labels)} image folder(s) under '{next_dir}' ({len(labels) - 2} to run, "
+                    "the 2 endpoints copied with their results) -- run SIESTA in the interior images "
+                    "next, then call stb-nebCycle again.", f_out)
 
     if f_out:
         f_out.close()

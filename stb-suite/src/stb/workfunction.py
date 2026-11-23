@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -25,7 +26,6 @@ sisl = require_sisl()
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_workfunction_report.txt"
-BIB_FILE = "references.bib"
 
 VACUUM_GAP_ANG = 10.0  # min empty span (wrapped) along an axis to treat it as vacuum-padded --
                         # matches the same constant used by stb-kgrid/stb-mlrelax/etc.
@@ -538,7 +538,7 @@ missing dipole correction) rather than being genuinely flat.""",
         epilog="Example usage:\n"
                "  stb-workfunction -l graphene\n"
                "  stb-workfunction -l slab --axis 2\n"
-               "  stb-workfunction -l slab --fermi -4.5 --save-report --save-gnuplot",
+               "  stb-workfunction -l slab --fermi -4.5 --save-gnuplot",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -556,11 +556,11 @@ missing dipole correction) rather than being genuinely flat.""",
                               f"(default: {MERGE_LEVEL_TOL})")
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                         help="Directory to write references.bib into (and the report/data+gnuplot "
-                              "files, with --save-report/--save-gnuplot) (default: current "
+                         help="Directory to write into (and the data+gnuplot "
+                              "files, with --save-gnuplot; the report and its references file go to the current folder) (default: current "
                               "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                          help="Also write workfunction_data.dat and workfunction.gplot (the planar"
                               "-averaged potential profile, annotated with the detected vacuum "
@@ -587,7 +587,7 @@ missing dipole correction) rather than being genuinely flat.""",
             "Siesta ToolBox Suite - Work Function",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("WORK FUNCTION CALCULATOR:", 'bold'))
@@ -697,7 +697,7 @@ missing dipole correction) rather than being genuinely flat.""",
         data_path, gplot_path = write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, args.label, args.output_dir)
 
     # --- 7. Report ---
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("workfunction")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-WORKFUNCTION REPORT =====", 'magenta'), f_out)
@@ -770,14 +770,14 @@ missing dipole correction) rather than being genuinely flat.""",
 
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[7] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if data_path:
         print_dual(f"Data           : {data_path}", f_out)
         print_dual(f"Gnuplot script : {gplot_path}", f_out)

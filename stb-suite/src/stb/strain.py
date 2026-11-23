@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -85,6 +85,7 @@ same shape as her.py/gqca.py's own Stage 1 reports.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -93,12 +94,12 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core.structure_io import (
     strip_fdf_comments, read_effective_md_steps, read_md_state, is_siesta_true,
     insert_include_after_structure)
 
-REPORT_FILE = "strain_stage1.txt"
+REPORT_FILE = "stb_strain_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 _VOIGT_LABELS = {1: 'XX', 2: 'YY', 3: 'ZZ', 4: 'YZ', 5: 'XZ', 6: 'XY'}
@@ -370,7 +371,7 @@ def main():
                    "then use stb-strainAnalysis.",
         epilog="Example usage:\n"
                "  stb-strain -s structure.fdf -c calc.fdf -p dojo --relax-mode cell-fixed --stdir x --stmin -2 --stmax 2 --step 1\n"
-               "  stb-strain -s structure.fdf -c calc.fdf --relax-mode stress-constrained --stdir xy --stmax 5 --save-report\n",
+               "  stb-strain -s structure.fdf -c calc.fdf --relax-mode stress-constrained --stdir xy --stmax 5\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("-s", "--structure", required=True,
@@ -399,7 +400,7 @@ def main():
                             "[4] of the report.")
     parser.add_argument("-p", "--pseudo-dir", default="",
                        help="Pseudopotentials source (optional): a bundled bank "
-                            f"({', '.join(BANKS)}) or a folder path. If given, the required "
+                            f"({BANK_HELP}) or a folder path. If given, the required "
                             "pseudopotential for every species in the structure is copied into "
                             "every generated folder, so it's immediately ready for SIESTA.")
     parser.add_argument("--stdir", required=True,
@@ -433,7 +434,7 @@ def main():
                        help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                             "default), same use as --symprec.")
     parser.add_argument("--save-report", action="store_true",
-                       help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                       help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-strain {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -463,7 +464,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("STRAIN WORKFLOW -- STAGE 1: STRESS-STRAIN PREP", 'bold'))
@@ -478,7 +479,7 @@ def main():
     # --save-report file.
     direction_dir = os.path.join(args.output_dir, norm_dir)
     os.makedirs(direction_dir, exist_ok=True)
-    report_path = os.path.join(direction_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("strain")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -499,7 +500,6 @@ def main():
     print_dual(f"Output dir        : {args.output_dir}", f_out)
     print_dual(f"Vacuum-gap        : {args.vacuum_gap} Ang", f_out)
     print_dual(f"Symmetry tol      : symprec={args.symprec}, angle-tolerance={args.angle_tolerance} deg", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

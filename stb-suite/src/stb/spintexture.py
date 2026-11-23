@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -74,6 +74,7 @@ Also fixes two real issues found while reviewing the physics/function:
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -88,7 +89,6 @@ from stb.core.siesta_wfsx import resolve_wfsx_path, load_parent, read_wfsx_state
 from stb.core.band_scatter import write_scalar_data, write_scalar_gplot, plot_scalar_on_bands
 
 REPORT_FILE = "stb_spintexture_report.txt"
-BIB_FILE = "references.bib"
 
 COMPONENT_NAMES = ("Sx", "Sy", "Sz")
 
@@ -100,7 +100,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-spintexture --label siesta --shift fermi --fermi -4.2\n"
                "  stb-spintexture --label siesta --shift fermi --fermi-file calc.out \\\n"
-               "      --save-report --save-gnuplot --view\n",
+               "--save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -144,10 +144,10 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write spintexture_S{x,y,z}.dat/.gplot (with "
-                             "--save-gnuplot) and stb_spintexture_report.txt/references.bib "
+                             "--save-gnuplot) (the report and its references file go to the current folder) "
                              "into (default: current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write spintexture_S{x,y,z}.dat + spintexture.gplot. Off by "
                              "default -- this tool used to write both unconditionally on every "
@@ -197,7 +197,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("SPINTEXTURE: reading input data", 'bold'))
@@ -259,7 +259,7 @@ def main():
 
     # --- From here on: the numbered, save-able report --------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("spintexture")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-SPINTEXTURE REPORT =====", 'magenta'), f_out)
@@ -339,10 +339,10 @@ def main():
 
     print_section("[5] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -350,7 +350,7 @@ def main():
         print_dual(f"Data           : {path}", f_out)
     if gplot_path:
         print_dual(f"Gnuplot script : {gplot_path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

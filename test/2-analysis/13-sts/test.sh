@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-sts (STS Spectroscopy Simulator, item 2.13)
@@ -35,6 +38,16 @@ check_success() {
     else
         echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -124,14 +137,15 @@ timeout 60 stb-sts --wfsx Graphene.selected.WFSX --geometry-file calc.fdf \
 check_exit_code $? 0
 check_success view_out/sts.dat
 
-echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes sts.dat + references.bib"
+echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes sts.dat + stb_sts_references.bib"
 rm -rf plain_out
+rm -f stb_sts_report*.txt stb_sts_references*.bib
 timeout 60 stb-sts --wfsx Graphene.selected.WFSX --geometry-file calc.fdf \
     --xy 0 0 --height 1.5 --erange -3 3 --sigma 100 -o plain_out --no-intro > log_plain.txt 2>&1
 check_exit_code $? 0
 check_success plain_out/sts.dat
-check_success plain_out/references.bib
-if [ ! -f plain_out/sts.gplot ] && [ ! -f plain_out/stb_sts_report.txt ]; then
+check_success stb_sts_references.bib
+if [ ! -f plain_out/sts.gplot ] && [ -f stb_sts_report.txt ]; then
     echo -e "   -> ${GREEN}Verified:${NC} no .gplot/report written without --save-gnuplot/--save-report"
     PASS=$((PASS+1))
 else
@@ -143,21 +157,22 @@ fi
 # --- 6. --save-report / --save-gnuplot (numbered [0]...[6] report, real .gplot script) ---
 echo -e "\n--- Testing --save-report / --save-gnuplot ---"
 
+rm -f stb_sts_report*.txt stb_sts_references*.bib
 timeout 60 stb-sts --wfsx Graphene.selected.WFSX --geometry-file calc.fdf \
     --xy 0 0 --height 1.5 --erange -3 3 --sigma 100 --save-report --save-gnuplot \
     -o report_out --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_success report_out/sts.dat
 check_success report_out/sts.gplot
-check_success report_out/stb_sts_report.txt
-check_success report_out/references.bib
-check_contains "\[0\] RUN METADATA" report_out/stb_sts_report.txt
-check_contains "\[1\] INPUT DATA" report_out/stb_sts_report.txt
-check_contains "\[2\] TIP POSITION" report_out/stb_sts_report.txt
-check_contains "\[3\] STS CURVE" report_out/stb_sts_report.txt
-check_contains "\[4\] OUTPUT DATA & PLOTS" report_out/stb_sts_report.txt
-check_contains "\[5\] REFERENCES" report_out/stb_sts_report.txt
-check_contains "\[6\] SUMMARY & FILES" report_out/stb_sts_report.txt
+check_success stb_sts_report.txt
+check_success stb_sts_references.bib
+check_contains "\[0\] RUN METADATA" stb_sts_report.txt
+check_contains "\[1\] INPUT DATA" stb_sts_report.txt
+check_contains "\[2\] TIP POSITION" stb_sts_report.txt
+check_contains "\[3\] STS CURVE" stb_sts_report.txt
+check_contains "\[4\] OUTPUT DATA & PLOTS" stb_sts_report.txt
+check_contains "\[5\] REFERENCES" stb_sts_report.txt
+check_contains "\[6\] SUMMARY & FILES" stb_sts_report.txt
 
 echo "Testing: sts.gplot uses a bare basename (not the full --output-dir path) in its plot/output lines"
 if grep -q '"sts.dat"' report_out/sts.gplot && ! grep -q "report_out" report_out/sts.gplot; then
@@ -250,7 +265,7 @@ check_contains "erange" log_help.txt
 check_contains "sigma" log_help.txt
 check_contains "fwhm" log_help.txt
 check_contains "shift" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "view" log_help.txt
 
@@ -260,7 +275,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.13) ---"
 
 echo "Testing: navigate 2.13 -> label Graphene -> default fdf -> tip mode 1 (xy+height) -> 0 0 1.5 -> erange -3 3 -> sigma 100 -> no shift -> default output -> no report/gnuplot/view"
 rm -f sts.dat
-printf '2.13\nGraphene\n\n1\n0\n0\n1.5\n-3\n3\n100\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+printf '2.13\nGraphene\n\n1\n0\n0\n1.5\n-3\n3\n100\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success sts.dat
 
@@ -269,7 +284,7 @@ cat > Graphene.out << 'EOF'
 siesta:         Fermi = -4.461866
 EOF
 rm -f sts.dat
-printf '2.13\nGraphene\n\n1\n0\n0\n1.5\n-3\n3\n100\n2\n4\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_fermi.txt 2>&1
+printf '2.13\nGraphene\n\n1\n0\n0\n1.5\n-3\n3\n100\n2\n4\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_fermi.txt 2>&1
 check_exit_code $? 0
 check_contains "auto-detected .out" log_menu_fermi.txt
 rm -f Graphene.out

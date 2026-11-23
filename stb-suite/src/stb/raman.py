@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -17,13 +18,13 @@ from datetime import datetime
 import numpy as np
 from phonopy.interface.siesta import read_siesta, get_physical_units
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace
 from stb.core.phonon_workflow import (build_phonon_displacements, write_displacement_folders,
                                      write_perfect_supercell, PERFECT_DIR)
 from stb.core.structure_io import read_md_state, prepend_include
 
-REPORT_FILE = "raman_stage1.txt"
+REPORT_FILE = "stb_raman_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 
@@ -91,7 +92,7 @@ machinery is shared, via core/phonon_workflow.py).""",
     parser.add_argument("-c", "--calc", type=str, default="calc.fdf",
                         help="Input calculation parameters file (default: calc.fdf)")
     parser.add_argument("-p", "--pseudo-dir", type=str, default=".",
-                        help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                        help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                              "folder path (default: current directory).")
     parser.add_argument("-dim", type=int, nargs=3, default=[2, 2, 2],
                         help="Supercell dimensions for the phonon force-constant calculation "
@@ -129,7 +130,7 @@ machinery is shared, via core/phonon_workflow.py).""",
                              "forces -- from every displacement's; left in, a small relaxation residual adds up over "
                              "the supercell and shifts the Gamma-point modes by up to several THz.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-raman {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -146,7 +147,7 @@ machinery is shared, via core/phonon_workflow.py).""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("RAMAN SPECTRUM WORKFLOW -- STAGE 1: PHONON DISPLACEMENTS", 'bold'))
@@ -182,7 +183,7 @@ machinery is shared, via core/phonon_workflow.py).""",
         sys.exit(1)
     os.makedirs(phonon_disp_dir, exist_ok=True)
 
-    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("raman")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== RAMAN STAGE 1 REPORT (PHONON DISPLACEMENTS) =====', 'magenta')}", f_out)
@@ -197,7 +198,6 @@ machinery is shared, via core/phonon_workflow.py).""",
     print_dual(f"Output root       : {output_root}", f_out)
     print_dual(f"Vacuum-gap        : {args.vacuum_gap} Ang", f_out)
     print_dual(f"Symmetry tolerance: symprec={args.symprec:g} Ang", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

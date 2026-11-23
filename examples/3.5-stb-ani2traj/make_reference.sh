@@ -52,7 +52,7 @@ report guard_missing water_nvt -l nothing
 echo "== 7. The interactive menu (stb-suite, code 3.5)"
 rm -rf "$WORK/menu"; cp -a "$HERE/siesta_runs/si_npt" "$WORK/menu"; mkdir -p "$REF/menu"
 # label (Enter: the only *.ANI), format 3 = xyz, skip 0, stride 1, no unwrap, default output, no dry run, no report
-(cd "$WORK/menu" && printf '3.5\n\n3\n0\n1\nn\n\nn\nn\n\n0\n' | stb-suite 2>&1) | clean \
+(cd "$WORK/menu" && printf '3.5\n\n3\n0\n1\nn\n\nn\n\n0\n' | stb-suite 2>&1) | clean \
     | sed -n '/STB-ANI2TRAJ REPORT/,/^\[9\] WARNINGS/p' > "$REF/menu/report.txt"
 
 echo "done -- reference_results/<case>/"

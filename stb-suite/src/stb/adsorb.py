@@ -2,16 +2,18 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
 import sys
 import shutil
+import json
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,17 +33,16 @@ from stb.core.adsorption_sites import (
     cluster_candidate_coords, _MIN_LATERAL_IMAGE_SEPARATION_ANG,
     generate_systematic_orientations, deduplicate_orientations,
     parse_positions_file, write_positions_file,
+    bottom_layer_atoms, orient_by_anchor, resolve_anchor, relaxation_block,
 )
+from stb.core.layers import LAYER_TOL_ANG
 from stb.neb import wrap_into_cell
 
-# REPORT_FILE is always written -- it carries the machine-readable
-# "# SITE_TABLE" block stb-adsorbAnalysis::read_site_table depends on, so
-# it is never gated behind --save-report (same split as stb-hubbardu's
-# always-on run_manifest.json vs. its own --save-report-gated narrative).
-# PREP_REPORT_FILE is the optional, human narrative counterpart ([0]-[6]),
-# written only with --save-report, matching every other tool's convention.
-REPORT_FILE = "adsorption_sites.txt"
-PREP_REPORT_FILE = "adsorption_prep_report.txt"
+# SITE_TABLE_FILE (sites/adsorption_sites.json) is always written: the later stages read which
+# adsorbate and height each site folder holds from it. The report (--save-report) is only for
+# the user and goes to the current folder (core.cli.new_report_path).
+from stb.core.adsorption_sites import SITE_TABLE_FILE, write_site_table
+REPORT_FILE = "stb_adsorb_report.txt"
 _KGRID_RE = re.compile(r'kgrid\.MonkhorstPack\s+\[.*?\]', re.IGNORECASE)
 _SPIN_RE = re.compile(r'(Spin\s+)(\S+)', re.IGNORECASE)
 
@@ -148,6 +149,48 @@ def plot_ml_ranking(scored, ads_name, out_path, show=False):
     if show:
         plt.show()
     plt.close(fig)
+
+
+ORIENTATION_MAP_FILE = "orientation_map.txt"
+
+
+def record_ml_rank(site_dir, record, model_label):
+    """Adds an 'ml_rank' entry (sampling index, rank within the site, ML energy) to the
+    fragment_manifest.json write_reference_folder just wrote in `site_dir`, so the folder
+    says which orientation of the deterministic grid it holds: its _orient<N> suffix is
+    the rank by ML energy, which changes with the model."""
+    path = os.path.join(site_dir, "fragment_manifest.json")
+    try:
+        with open(path) as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        return
+    manifest["ml_rank"] = dict(record, model=model_label)
+    with open(path, "w") as f:
+        json.dump(manifest, f, indent=2)
+
+
+def write_orientation_map(sites_root, ml_records, model_label):
+    """sites/orientation_map.txt: one line per --ml-rank site folder -- site, sampling
+    index in the orientation grid (stable between runs), rank by ML energy within the
+    site (the _orient<N> of the folder name), ML energy. Returns its path."""
+    path = os.path.join(sites_root, ORIENTATION_MAP_FILE)
+    with open(path, "w") as f:
+        f.write("# stb-adsorb --ml-rank: what each site folder holds\n")
+        f.write(f"# model: {model_label}\n")
+        f.write("# 'sampled' = index in the deterministic orientation grid (the same in every run "
+                "with the same\n# --n-orientations-polar/--n-orientations-azimuthal); "
+                "'rank' = position by ML energy within the site\n# (the _orient<N> suffix, "
+                "model-dependent); '--' = no orientation sampling.\n")
+        f.write(f"# {'folder':<40}{'adsorbate':<12}{'site':>5} {'type':<10}{'height':>8}"
+                f"{'sampled':>9}{'of':>5}{'rank':>6}{'E_ML (eV)':>16}{'converged':>11}\n")
+        for label, r in ml_records.items():
+            sampled = str(r["sampling_index"]) if r["sampling_index"] is not None else "--"
+            rank = str(r["rank_in_site"]) if r["rank_in_site"] is not None else "--"
+            f.write(f"  {label:<40}{r['adsorbate']:<12}{r['site']:>5} {r['site_type']:<10}"
+                    f"{r['height']:>8.3f}{sampled:>9}{r['n_sampled']:>5}{rank:>6}"
+                    f"{r['energy_eV']:>16.6f}{'yes' if r['converged'] else 'no':>11}\n")
+    return path
 
 
 def min_adsorbate_slab_distance(pmg_structure, n_substrate):
@@ -272,6 +315,40 @@ def main():
                               "stb-adsorbAnalysis will report E_ads vs. height for it. Same min/"
                               "max/step convention as stb-convergence. Incompatible with "
                               "--both-sides.")
+    parser.add_argument("--anchor-atom", default=None, metavar="ATOM",
+                         help="For a molecular adsorbate: the atom that faces the surface, as an "
+                              "element symbol (when the molecule has one atom of it: O for H2O, C "
+                              "for CO) or an atom number (1-based, in the molecule's own order). "
+                              "The molecule is turned so that this atom is the lowest one, the rest "
+                              "pointing away from the surface, and --height is then the height of "
+                              "THIS atom above the site. Default: the molecule as the G2 database "
+                              "stores it (H2O: hydrogens towards the surface), its origin at "
+                              "--height. With --ml-rank orientation sampling it only sets the "
+                              "starting orientation the samples are rotated from.")
+    parser.add_argument("--optimizer", choices=["cg", "broyden", "fire"], default=None,
+                         help="Geometry optimizer written into every folder's config_extra.fdf "
+                              "(MD.TypeOfRun CG / Broyden / FIRE). Default: whatever --calc sets. A weakly "
+                              "bound molecule on a metal is ill-conditioned for SIESTA's CG -- stiff bonds "
+                              "next to almost free translations and rotations: H2O on Ag(111) was still at "
+                              "0.03-1.3 eV/Ang after 130-146 CG steps. Try 'fire' or 'broyden' there, with a "
+                              "small --max-displ.")
+    parser.add_argument("--force-tol", type=float, default=None, metavar="EV_PER_ANG",
+                         help="Force tolerance of the relaxations, MD.MaxForceTol in eV/Ang (default: "
+                              "--calc's own). 0.02 is a usual value; a flat energy surface (physisorbed "
+                              "molecule) may need 0.03-0.05 to finish at all.")
+    parser.add_argument("--max-displ", type=float, default=None, metavar="BOHR",
+                         help="Largest atomic displacement per step, MD.MaxDispl in Bohr (default: --calc's "
+                              "own, i.e. SIESTA's 0.2). About 0.05 keeps a molecular adsorbate from "
+                              "overshooting.")
+    parser.add_argument("--fix-layers", type=int, default=0, metavar="N",
+                         help="Hold the N lowest atomic layers of the slab fixed at their input "
+                              "(bulk-like) positions, in clean_slab/ and in every site folder alike: "
+                              "a %%block Geometry.Constraints in each config_extra.fdf. The adsorbate "
+                              "goes on the top (+c) face. Default 0: the whole slab relaxes. The "
+                              "usual choice is the lower half of the layers.")
+    parser.add_argument("--layer-tol", type=float, default=LAYER_TOL_ANG, metavar="ANG",
+                         help="With --fix-layers: atoms whose heights differ by less than this are "
+                              f"one atomic layer (default: {LAYER_TOL_ANG} Ang, as in stb-slab).")
     parser.add_argument("--both-sides", action="store_true",
                          help="Adsorb on both exposed faces (for a free-standing 2D material with "
                               "vacuum on both sides of the c-axis). Requires a concrete --site-type "
@@ -362,16 +439,16 @@ def main():
                          help="With --ml-rank and orientation sampling: two relaxed orientations "
                               "at the same site are treated as duplicates (only the better-energy "
                               "one kept) when their adsorbate-atom RMSD is below this (Ang) AND "
-                              "their energy differs by less than 0.01 eV. Default 0.3.")
+                              "their energy differs by less than 0.01 eV. The RMSD matches equal "
+                              "atoms by the best permutation (H2O with its two H swapped is one "
+                              "geometry) and uses the nearest periodic image. Default 0.3.")
 
     parser.add_argument("-O", "--output-dir", type=str, default="adsorption_run",
                          help="Root directory (default: adsorption_run) for 'clean_slab', "
                               "'adsorbate' and 'sites' -- everything this study needs lives under "
                               "one folder, same convention as stb-hubbardu's hubbardu_runs.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the full report narrative to {PREP_REPORT_FILE} (under "
-                              "--output-dir). Off by default. 'sites/adsorption_sites.txt' (the "
-                              "SITE_TABLE stb-adsorbAnalysis reads) is always written regardless.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                          help="Open every generated structure (clean_slab, isolated adsorbate(s), "
                               "and every written site) in ASE's interactive 3D viewer as a multi-"
@@ -394,7 +471,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if args.list:
@@ -422,6 +499,18 @@ def main():
         parser.error("--both-sides and --ml-rank are not supported together yet.")
     if args.both_sides and args.height_sweep is not None:
         parser.error("--both-sides and --height-sweep are not supported together yet.")
+    if args.force_tol is not None and args.force_tol <= 0:
+        parser.error("--force-tol must be positive.")
+    if args.max_displ is not None and args.max_displ <= 0:
+        parser.error("--max-displ must be positive.")
+    relax_block = relaxation_block(args.optimizer, args.force_tol, args.max_displ)
+    if args.fix_layers < 0:
+        parser.error("--fix-layers must be 0 (nothing fixed) or a positive number of layers.")
+    if args.layer_tol <= 0:
+        parser.error("--layer-tol must be positive.")
+    if args.fix_layers and args.both_sides:
+        parser.error("--fix-layers holds the BOTTOM layers and --both-sides adsorbs on the bottom "
+                      "face too: not supported together.")
     if args.top_k is not None and not args.ml_rank:
         parser.error("--top-k is only valid with --ml-rank.")
     orientation_flags_used = (
@@ -490,8 +579,8 @@ def main():
     clean_slab_dir = os.path.join(output_root, "clean_slab")
     sites_root = os.path.join(output_root, "sites")
     os.makedirs(sites_root, exist_ok=True)
-    site_table_path = os.path.join(sites_root, REPORT_FILE)
-    report_path = os.path.join(output_root, PREP_REPORT_FILE) if args.save_report else None
+    site_table_path = os.path.join(sites_root, SITE_TABLE_FILE)
+    report_path = new_report_path("adsorb")
     f_out = open(report_path, 'w') if report_path else None
 
     library_warnings = []  # collected via capture_library_noise, reported in [6]
@@ -523,6 +612,26 @@ def main():
                     f"{', '.join(f'{h:.2f}' for h in heights)} Ang", f_out)
     else:
         print_dual(f"  Height          : {heights[0]:.2f} Ang", f_out)
+    print_dual(f"  Anchor atom     : {args.anchor_atom or '(molecule as stored in the G2 database)'}", f_out)
+    print_dual(f"  Fixed layers    : "
+                + (f"{args.fix_layers} lowest (layer tolerance {args.layer_tol:g} Ang)" if args.fix_layers
+                   else "none -- the whole slab relaxes (--fix-layers N to hold the bottom ones)"), f_out)
+    relax_shown = [f"{name} {value}" for name, value in (
+        ("optimizer", args.optimizer), ("force tolerance", None if args.force_tol is None else f"{args.force_tol:g} eV/Ang"),
+        ("max displacement", None if args.max_displ is None else f"{args.max_displ:g} Bohr")) if value]
+    print_dual("  Relaxation      : " + (", ".join(relax_shown) + " (forced in every folder)" if relax_shown
+                                         else "as --calc sets it"), f_out)
+    template_run = structure_io.read_md_state(calc_text)
+    molecular = any(len(mol) > 1 for _name, mol in adsorbates)
+    if (molecular and not args.optimizer and (template_run["typeofrun"] or "cg").lower() == "cg"
+            and str(template_run["steps"] or "0").strip().isdigit() and int(template_run["steps"] or 0) > 0):
+        print_dual(color_text(
+            "  [NOTE] Molecular adsorbate relaxed with SIESTA's CG (the template's optimizer): on a weakly "
+            "binding surface this can fail to reach the force tolerance in hundreds of steps (stiff bonds "
+            "plus nearly free translation/rotation of the molecule). If the site runs do not converge, "
+            "regenerate with --optimizer fire (or broyden), --max-displ 0.05 and, for a flat surface, "
+            "--force-tol 0.03-0.05; stb-adsorbAnalysis flags every run that stopped at the step limit.",
+            'yellow'), f_out)
     print_dual(f"  Both sides      : {'yes' if args.both_sides else 'no'}", f_out)
     print_dual(f"  ML pre-relax    : {'yes' if args.ml_prerelax else 'no'}", f_out)
     print_dual(f"  ML rank         : {'yes' if args.ml_rank else 'no'}"
@@ -541,7 +650,6 @@ def main():
                 "not the isolated ref)", f_out)
     print_dual("  van der Waals   : yes -> DFTD3 T (clean_slab/, isolated ref, and site folders, "
                 "always on)", f_out)
-    print_dual(f"  Save report     : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
 
     # --- [1] REFERENCE FOLDERS: clean slab (once) + one isolated-adsorbate
     # reference per requested adsorbate. ---
@@ -557,12 +665,35 @@ def main():
             "below, or stb-adsorbBsse's atom-count/species match).", 'yellow'), f_out)
     else:
         print_dual("  Slab already centered in the vacuum gap (no boundary-wrap risk).", f_out)
+    fixed_atoms, fixed_note = None, ""
+    if args.fix_layers:
+        try:
+            fixed_atoms, slab_layers = bottom_layer_atoms(pmg_structure, args.fix_layers, args.layer_tol)
+        except ValueError as e:
+            print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+            sys.exit(1)
+        fixed_note = (f"stb-adsorb --fix-layers {args.fix_layers}: the {args.fix_layers} lowest of "
+                      f"{len(slab_layers)} atomic layers ({len(fixed_atoms)} atoms) held fixed")
+        heights_ang = [h for h, _ in slab_layers]
+        print_dual(f"  Slab layers     : {len(slab_layers)} ("
+                    + ", ".join(f"{len(idx)}" for _h, idx in slab_layers) + " atoms, bottom to top)", f_out)
+        print_dual(f"  Fixed           : layers 1-{args.fix_layers} = {len(fixed_atoms)} of {n_substrate} "
+                    f"slab atoms (up to {heights_ang[args.fix_layers - 1] - heights_ang[0]:.2f} Ang above "
+                    f"the bottom layer); {len(slab_layers) - args.fix_layers} layer(s) free. Same block in "
+                    "clean_slab/ and in every site folder.", f_out)
     write_reference_folder(clean_slab_dir, pmg_structure, calc_text, slab_species_meta, args.pseudo_dir,
-                            force_dipole=True, force_vdw=True)
+                            force_dipole=True, force_vdw=True, fixed_atoms=fixed_atoms, fixed_note=fixed_note,
+                            relax_block=relax_block)
     print_dual(f"  {color_text('[OK]', 'green')} {clean_slab_dir}", f_out)
     view_frames.append(("clean_slab", AseAtomsAdaptor.get_atoms(pmg_structure)))
 
-    adsorbate_calc_text = force_spin_polarized(force_gamma_kgrid(calc_text))
+    try:
+        adsorbate_calc_text = force_spin_polarized(force_gamma_kgrid(calc_text))
+    except ValueError as e:
+        print_dual(color_text(
+            f"[ERROR] {e} The isolated-adsorbate reference is run at Gamma by rewriting that tag: "
+            "give the slab's k-grid in --calc as one line, 'kgrid.MonkhorstPack [nx ny nz]' (the %block form is not rewritten).", 'red'), f_out)
+        sys.exit(1)
     adsorbate_dirs = {}  # name -> dir, used below when writing sites
     for i, (name, mol) in enumerate(adsorbates):
         if args.ml_prerelax:
@@ -590,6 +721,27 @@ def main():
             adsorbates[i] = (name, mol)
             print_dual(f"  {'Converged' if converged else 'Hit step cap, not fully converged'} after "
                         f"{steps} step(s).", f_out)
+
+        if args.anchor_atom and len(mol) > 1:
+            try:
+                anchor_index = resolve_anchor(mol, args.anchor_atom)
+            except ValueError as e:
+                print_dual(color_text(f"[ERROR] '{name}': {e}", 'red'), f_out)
+                sys.exit(1)
+            mol, lowest_other = orient_by_anchor(mol, anchor_index)
+            adsorbates[i] = (name, mol)
+            symbol = mol[anchor_index].specie.symbol
+            print_dual(f"  {color_text('Orientation:', 'cyan')} '{name}' turned so that atom "
+                        f"{anchor_index + 1} ({symbol}) faces the surface; --height is the height of "
+                        f"this atom above the site, the other atoms start {lowest_other:+.2f} Ang or "
+                        "more above it.", f_out)
+            if lowest_other < -0.05:
+                print_dual(color_text(
+                    f"  [WARNING] '{name}': another atom is {-lowest_other:.2f} Ang BELOW the anchor in "
+                    "this orientation (the anchor is not at the end of the molecule) -- it is the one "
+                    "closest to the surface. Check the site folders before running SIESTA.", 'yellow'), f_out)
+        elif args.anchor_atom:
+            print_dual(f"  [NOTE] '{name}' is a single atom: --anchor-atom does not apply.", f_out)
 
         extent = molecule_extent(mol)
         if extent > 0.5 * args.vacuum_box:
@@ -628,7 +780,7 @@ def main():
         isolated_structure = isolated_adsorbate_structure(mol, args.vacuum_box)
         pmg_isolated = structure_io.to_pymatgen(isolated_structure)
         write_reference_folder(ads_dir, pmg_isolated, adsorbate_calc_text, {}, args.pseudo_dir,
-                                force_vdw=True)
+                                force_vdw=True, relax_block=relax_block)
         adsorbate_dirs[name] = ads_dir
         print_dual(f"  {color_text('[OK]', 'green')} {ads_dir} (Gamma-only, spin-polarized, "
                     f"{args.vacuum_box:.1f} Ang box)", f_out)
@@ -892,6 +1044,10 @@ def main():
     # SIESTA folder is written, since it decides (with --top-k) which
     # candidates are worth writing at all. ---
     print_section("[3] ML PRE-SCREENING", f_out)
+    ml_info = {}  # name -> {(slot, h, orientation): sampling index, ML energy, ...}
+    ml_records = {}  # site folder label -> its ml_info entry, filled in [4]
+    ml_model_label = (os.path.abspath(args.ml_custom_model) if args.ml_custom_model
+                      else f"MACE-MP-0 {args.ml_model}")
     ranked_by_adsorbate = {}  # name -> list of (slot, h, st, energy, relaxed_struct, relaxed_dist,
                               # orientation), post-top_k (orientation: 0 = sampling not used, else
                               # 1-based rank among that site's unique orientations)
@@ -922,13 +1078,14 @@ def main():
             print_dual(f"  {color_text('Relaxing candidates for', 'cyan')} '{name}' with MACE-MP-0 "
                         f"(substrate fixed, {len(variants)} candidate(s){orient_note}) ...", f_out)
             scored = []
+            ml_info[name] = {}  # (slot, h, orient_id) -> sampling index, ML energy, convergence
             orientation_frames = []  # every relaxed orientation, every site (before dedup/top-k) --
                                       # only populated when orientation_sampling, written to a .xyz
                                       # trajectory below for visual inspection (e.g. in VMD).
             for i, (slot, h, st, coord) in enumerate(variants, start=1):
                 orientations = generate_systematic_orientations(
                     mol, args.n_orientations_polar, args.n_orientations_azimuthal)
-                orient_results = []  # (energy, ase_atoms, converged, steps)
+                orient_results = []  # (energy, ase_atoms, converged, steps, sampling index)
                 for orient_j, orient_mol in enumerate(orientations, start=1):
                     ads_struct = finder.add_adsorbate(orient_mol, coord)
                     ase_atoms = AseAtomsAdaptor.get_atoms(ads_struct)
@@ -949,7 +1106,7 @@ def main():
                     # wrap_into_cell() does via pymatgen, just in place on the Atoms object
                     # these downstream consumers already hold a reference to.
                     ase_atoms.wrap()
-                    orient_results.append((energy, ase_atoms, converged, steps))
+                    orient_results.append((energy, ase_atoms, converged, steps, orient_j))
                     if orientation_sampling:
                         # Succinct, self-overwriting counter (or periodic full lines when not
                         # a tty, e.g. output redirected to a log) -- the per-orientation MACE
@@ -977,7 +1134,7 @@ def main():
 
                 if orientation_sampling:
                     kept = deduplicate_orientations(
-                        [(e, a) for e, a, _c, _s in orient_results], n_substrate,
+                        [(e, a) for e, a, _c, _s, _j in orient_results], n_substrate,
                         rmsd_tol=args.orientation_rmsd_tol)
                     if args.orientation_top_k is not None:
                         kept = kept[:args.orientation_top_k]
@@ -985,14 +1142,24 @@ def main():
                     kept = [0]
 
                 for rank, idx in enumerate(kept, start=1):
-                    energy, ase_atoms, converged, steps = orient_results[idx]
+                    energy, ase_atoms, converged, steps, sample_j = orient_results[idx]
                     # Already wrapped right after relaxing, above -- ase_atoms.wrap() was
                     # called in place before this same object was stored in orient_results.
                     relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)
                     relaxed_dist = min_adsorbate_slab_distance(relaxed_struct, n_substrate)
                     orient_id = rank if orientation_sampling else 0
                     scored.append((slot, h, st, energy, relaxed_struct, relaxed_dist, orient_id))
-                    orient_str = f", orientation {rank}/{len(kept)}" if orientation_sampling else ""
+                    ml_info[name][(slot, h, orient_id)] = {
+                        "sampling_index": sample_j if orientation_sampling else None,
+                        "n_sampled": len(orientations),
+                        "rank_in_site": orient_id if orientation_sampling else None,
+                        "n_kept_in_site": len(kept),
+                        "energy_eV": float(energy),
+                        "converged": bool(converged),
+                        "steps": int(steps),
+                    }
+                    orient_str = (f", orientation {rank}/{len(kept)} (sampled #{sample_j})"
+                                  if orientation_sampling else "")
                     print_dual(f"    [{i}/{len(variants)}{orient_str}] site {slot} ({st}, h={h:.2f}): "
                                 f"E = {energy:.4f} eV ({'converged' if converged else 'hit step cap'}, "
                                 f"{steps} step(s)), relaxed distance = {relaxed_dist:.3f} Ang", f_out)
@@ -1003,12 +1170,16 @@ def main():
                                    if args.orientation_top_k is not None else ""), f_out)
             scored.sort(key=lambda r: r[3])
             e_min = scored[0][3]
-            rows = [([str(rank), str(slot), f"{h:.2f}", f"{dist:.3f}", st,
-                      (str(orient) if orient else "--"), f"{energy:.4f}", f"{energy - e_min:.4f}"],
-                     'green' if rank == 1 else None)
-                    for rank, (slot, h, st, energy, _s, dist, orient) in enumerate(scored, start=1)]
+            rows = []
+            for rank, (slot, h, st, energy, _s, dist, orient) in enumerate(scored, start=1):
+                sample_j = ml_info[name][(slot, h, orient)]["sampling_index"]
+                rows.append(([str(rank), str(slot), f"{h:.2f}", f"{dist:.3f}", st,
+                              (str(orient) if orient else "--"),
+                              (str(sample_j) if sample_j is not None else "--"),
+                              f"{energy:.4f}", f"{energy - e_min:.4f}"],
+                             'green' if rank == 1 else None))
             print_table(["Rank", "Site", "Init. h (Ang)", "Relaxed dist (Ang)", "Type",
-                         "Orientation", "Energy (eV)", "dE (eV)"], rows, f_out)
+                         "Orientation", "Sampled #", "Energy (eV)", "dE (eV)"], rows, f_out)
             print_dual(color_text(
                 "  Note: a relative comparison from a fast ML potential, not an absolute DFT "
                 "adsorption energy -- use it to prioritize which site(s) to relax with SIESTA "
@@ -1019,7 +1190,12 @@ def main():
                 "the SIESTA folders in [4] below. 'Orientation' is '--' when orientation sampling "
                 "wasn't requested (--n-orientations-polar/--n-orientations-azimuthal both 1, the "
                 "default); otherwise it's the 1-based rank (by energy) among that site's unique, "
-                "post-deduplication orientations -- each becomes its own SIESTA folder in [4].",
+                "post-deduplication orientations -- each becomes its own SIESTA folder in [4], "
+                "named _orient<rank>. That rank depends on the model, so two runs with different "
+                "models can give the same folder name to different orientations; 'Sampled #' is "
+                "the index in the deterministic orientation grid (the same in every run with the "
+                "same --n-orientations-polar/--n-orientations-azimuthal), recorded in each "
+                "folder's fragment_manifest.json and in sites/orientation_map.txt.",
                 'yellow'), f_out)
 
             plot_path = os.path.join(sites_root, f"ml_rank_ranking{ads_suffix}.png")
@@ -1135,11 +1311,20 @@ def main():
                     label = f"site_{slot}_{st}{ads_suffix}" + (f"_h{h:.2f}" if multi_height else "") \
                         + (f"_orient{orient}" if orient else "")
                     site_records.append((label, relaxed_struct, name, h))
+                    ml_records[label] = dict(ml_info[name][(slot, h, orient)], site=slot,
+                                             site_type=st, height=round(float(h), 4),
+                                             adsorbate=name)
             else:
                 for slot, h, st, coord in variants:
                     ads_struct = finder.add_adsorbate(mol, coord)
                     label = f"site_{slot}_{st}{ads_suffix}" + (f"_h{h:.2f}" if multi_height else "")
                     site_records.append((label, ads_struct, name, h))
+
+    if ml_records:
+        map_path = write_orientation_map(sites_root, ml_records, ml_model_label)
+        print_dual(f"  {color_text('[Saved]', 'cyan')} {map_path} (folder -> sampling index, rank "
+                    "by ML energy within the site, ML energy; also in each folder's "
+                    "fragment_manifest.json)", f_out)
 
     report_rows = []  # (label, adsorbate_name, height, dir)
     for label, ads_struct, ads_name, height in site_records:
@@ -1169,7 +1354,10 @@ def main():
         site_dir = os.path.join(sites_root, label)
         write_reference_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir,
                                 force_spin=args.force_spin, force_dipole=True, force_vdw=True,
-                                n_substrate=n_substrate)
+                                n_substrate=n_substrate, fixed_atoms=fixed_atoms, fixed_note=fixed_note,
+                                relax_block=relax_block)
+        if label in ml_records:
+            record_ml_rank(site_dir, ml_records[label], ml_model_label)
         print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
         report_rows.append((label, ads_name, height, site_dir))
         view_frames.append((label, AseAtomsAdaptor.get_atoms(ads_struct)))
@@ -1203,18 +1391,9 @@ def main():
     if f_out:
         f_out.close()
 
-    # Machine-readable site table -- always written, independent of
-    # --save-report, since stb-adsorbAnalysis::read_site_table depends on it
-    # (it skips everything before the "# SITE_TABLE" marker, so the exact
-    # format below is unchanged from before this report restructuring).
-    with open(site_table_path, 'w') as f_table:
-        f_table.write("# Machine-readable site table written by stb-adsorb -- see "
-                       f"{PREP_REPORT_FILE if report_path else '--save-report'} (or the console "
-                       "log) for the full human-readable report.\n")
-        f_table.write("\n# SITE_TABLE -- parsed by stb-adsorbAnalysis, do not reorder the columns\n")
-        f_table.write(f"# {'label':<30}{'adsorbate':<14}{'height':<10}{'dir'}\n")
-        for label, ads_name, height, site_dir in report_rows:
-            f_table.write(f"{label:<32}{ads_name:<14}{height:<10.4f}{site_dir}\n")
+    # Site table -- always written, independent of --save-report: stb-adsorbAnalysis,
+    # stb-adsorbBsse and stb-adsorbGibbs read it (adsorption_sites.write_site_table).
+    write_site_table(site_table_path, report_rows)
 
     print(f"\n{color_text('Success:', 'green')} {len(site_records)} site folder(s) written under "
           f"'{sites_root}'.")

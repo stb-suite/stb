@@ -79,12 +79,16 @@ cat > fabricate.py << 'PYEOF'
 import sys, os
 import numpy as np
 from stb.core import structure_io
+from ase.geometry import find_mic
 
 ROOT, CYCLE = sys.argv[1], sys.argv[2]
 K = 2.0
 
 def positions(path):
     return structure_io.to_pymatgen(structure_io.read_fdf(path)).cart_coords
+
+def cell(path):
+    return structure_io.to_pymatgen(structure_io.read_fdf(path)).lattice.matrix
 
 def write_fa(path, forces):
     n = len(forces)
@@ -111,7 +115,8 @@ targets = np.load(targets_path, allow_pickle=True).item()
 for label in labels:
     d = f'{ROOT}/cycle_{CYCLE}/{label}'
     pos = positions(f'{d}/structure.fdf')
-    disp = pos - targets[label]
+    # minimum image: stb-nebCycle wraps positions into the cell, so an atom near a face may sit one lattice vector away
+    disp = find_mic(pos - targets[label], cell(f'{d}/structure.fdf'), True)[0]
     write_fa(os.path.join(d, 'siesta.FA'), -K * disp)
     write_out(os.path.join(d, 'calc.out'), 0.5 * K * float(np.sum(disp**2)) - 300.0)
 PYEOF
@@ -240,8 +245,8 @@ for label in ('image_00', 'image_01', 'image_02', 'image_03'):
 "
 stb-nebCycle --dir degen/neb_run --fmax 0.001 --no-intro > log_degen_step.txt 2>&1
 check_exit_code $? 1
-check_contains "non-finite (NaN/Inf)" log_degen_step.txt
-check_contains "path has collapsed" log_degen_step.txt
+check_contains "Degenerate band: every image has the same geometry" log_degen_step.txt
+check_contains "No cycle folder is written" log_degen_step.txt
 echo "Testing: no corrupted cycle_01/ was written after the guard fired"
 if [ -d degen/neb_run/cycle_01 ]; then
     echo -e "   -> ${RED}Failed:${NC} cycle_01 unexpectedly written despite the NaN guard"

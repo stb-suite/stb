@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-xrdrank (Structure Solution XRD, Analysis, item 5.6.2)
@@ -71,8 +74,10 @@ echo -e "\n--- Testing a basic run (--input-dir candidates --experimental experi
 timeout 120 stb-xrdrank --input-dir candidates --experimental experimental.dat \
     --no-intro -o rank.txt > log_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "Candidates found:.*2 in 'candidates'" log_basic.txt
-check_contains "Ranking (2 of 2 shown, best match first):" log_basic.txt
+check_contains "Input directory        : candidates" log_basic.txt
+check_contains "Found 2 candidate(s)" log_basic.txt
+check_contains "\[3\] RANKING" log_basic.txt
+check_contains "Full ranking (2 candidate(s)) written to 'rank.txt'" log_basic.txt
 check_contains "group_225" log_basic.txt
 check_contains "group_62" log_basic.txt
 check_success rank.txt
@@ -85,7 +90,7 @@ echo -e "\n--- Testing --top 1 ---"
 timeout 120 stb-xrdrank --input-dir candidates --experimental experimental.dat \
     --top 1 --no-intro -o rank_top.txt > log_top.txt 2>&1
 check_exit_code $? 0
-check_contains "Ranking (1 of 2 shown, best match first):" log_top.txt
+check_contains "Top shown/plotted      : 1" log_top.txt
 check_success rank_top.txt
 
 
@@ -113,7 +118,7 @@ timeout 60 stb-xrdrank --input-dir dup_candidates --experimental experimental.da
     --no-intro -o rank_dup.txt > log_dup.txt 2>&1
 check_exit_code $? 0
 check_contains "Warning: skipping.*group_225.*collides" log_dup.txt
-check_contains "Candidates found:.*1 in 'dup_candidates'" log_dup.txt
+check_contains "Found 1 candidate(s)" log_dup.txt
 
 
 # --- 6. Error and robustness cases (all fast: fail before any Similarity() call) ---
@@ -128,7 +133,7 @@ echo "Testing: --input-dir with no candidate structures"
 mkdir -p empty_dir
 stb-xrdrank --input-dir empty_dir --experimental experimental.dat --no-intro > log_empty_dir.txt 2>&1
 check_exit_code $? 1
-check_contains "no candidate structures found" log_empty_dir.txt
+check_contains "No candidate structures found in 'empty_dir'" log_empty_dir.txt
 
 echo "Testing: nonexistent --experimental file"
 stb-xrdrank --input-dir candidates --experimental does_not_exist.dat --no-intro > log_missing_exp.txt 2>&1
@@ -140,9 +145,10 @@ stb-xrdrank --input-dir candidates --experimental tiny_exp.dat --no-intro > log_
 check_exit_code $? 1
 check_contains "at least 4 are needed" log_tiny_exp.txt
 
-echo "Testing: --input-dir omitted (required)"
+echo "Testing: --input-dir omitted -> defaults to xrd_search (stb-xrdsearch's own output), absent here"
 stb-xrdrank --experimental experimental.dat --no-intro > log_missing_arg_dir.txt 2>&1
-check_exit_code $? 2
+check_exit_code $? 1
+check_contains "'xrd_search' is not a directory -- run stb-xrdsearch first" log_missing_arg_dir.txt
 
 echo "Testing: --experimental omitted (required)"
 stb-xrdrank --input-dir candidates --no-intro > log_missing_arg_exp.txt 2>&1
@@ -163,9 +169,9 @@ check_contains "top" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.6.2) (slow: real Similarity() calls) ---"
 
 echo "Testing: navigate 5.6.2 -> candidates dir -> experimental.dat -> default wavelength -> no top -> output -> quit"
-printf '5.6.2\ncandidates\nexperimental.dat\n\n\nmenu_rank.txt\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+printf '5.6.2\ncandidates\nexperimental.dat\n\n\n\nmenu_rank.txt\n\n\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
-check_contains "Ranking (2 of 2 shown, best match first):" log_menu.txt
+check_contains "Full ranking (2 candidate(s)) written to 'menu_rank.txt'" log_menu.txt
 check_success menu_rank.txt
 
 

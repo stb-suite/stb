@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -14,6 +14,7 @@ is computed: for the iterative Hirshfeld-I see stb-hirshfeldPrep/Ions/Analysis (
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import io
 import os
@@ -280,7 +281,7 @@ def main():
                         help="With several folders, also print the full report of each one.")
     parser.add_argument("--csv", default=None, help="Also write every atom's charges (all folders, all methods) as CSV.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (current folder). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-nativecharges {VERSION}")
     args = parser.parse_args()
@@ -290,7 +291,7 @@ def main():
             "Siesta ToolBox Suite - Native Charges",
             "Read and compare SIESTA's own Mulliken/Hirshfeld/Voronoi charges",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     is_glob = any(c in args.path for c in "*?[")
@@ -301,7 +302,9 @@ def main():
         parser.error(f"'{args.path}' is not a directory.")
     batch = len(matches) > 1
 
-    buf = io.StringIO() if args.save_report else None
+    buf = io.StringIO()
+
+    report_file = new_report_path("nativecharges")
     sec = Sections(buf)
 
     def out(text=""):
@@ -362,8 +365,7 @@ def main():
         out(f"{n:<18}: in {sum(1 for r in results if n in r['methods'])} of {len(results)} folder(s)")
     if args.csv:
         out(f"CSV               : {args.csv}")
-    if args.save_report:
-        out(f"Report            : {REPORT_FILE}")
+    out(f"Report            : {report_file}")
 
     sec("WARNINGS")
     allw = [w for r in results for w in r["warnings"]]
@@ -373,7 +375,7 @@ def main():
     else:
         out("  none")
     if buf is not None:
-        with open(REPORT_FILE, "w") as fh:
+        with open(report_file, "w") as fh:
             fh.write(buf.getvalue())
 
     print("\n" + "-" * 60)

@@ -1,0 +1,128 @@
+{
+ "schema": "stb_pseudo_bank_v1",
+ "folder": "sr3plus_pbe_0.4_standard",
+ "table": "nc-sr-04-3plus pbe standard",
+ "source": {
+  "archive": "nc-sr-04-3plus_pbe_standard_psml.tgz",
+  "url": "http://www.pseudo-dojo.org/pseudos/nc-sr-04-3plus_pbe_standard_psml.tgz",
+  "taken": "2026-11-17",
+  "archive_sha256": "f05e2a0d8ff4df4567d0c7206a5ea971caa27cc4aa7735f1b5a0c48226921fa6",
+  "archive_files": 14,
+  "verified": "2026-11-20"
+ },
+ "n_files": 14,
+ "files": {
+  "Ce.psml": {
+   "md5": "91eca51879d7f51d23c32ae20debc6fe",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Dy.psml": {
+   "md5": "38cbe722ce14d224d291ba662ed1d0f6",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Er.psml": {
+   "md5": "3579ffa3d9202584fe43c67f8c296127",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Eu.psml": {
+   "md5": "bf28a8c5a9916e100b46ba70079cc5d3",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Gd.psml": {
+   "md5": "c3ea4b1f1049d9bb4e3b0fe514500002",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Ho.psml": {
+   "md5": "cbb60286184a242ddd05b168c9f22eac",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Lu.psml": {
+   "md5": "00e6d1d91f6fd3e71509447672f0de32",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Nd.psml": {
+   "md5": "5e8e18e04dc3432608ef91ccac748d18",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Pm.psml": {
+   "md5": "b2eea692870c9c0b16ec4b13e2875eef",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Pr.psml": {
+   "md5": "36b387da13f0120f79bbcb7af106d4ff",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Sm.psml": {
+   "md5": "e934895b58c5dc1df35a6962fcde92ec",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Tb.psml": {
+   "md5": "9b602771a675c63ac89429b16f0ddcd9",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Tm.psml": {
+   "md5": "b76809e16f8ecdaa2db0653ac64005c9",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  },
+  "Yb.psml": {
+   "md5": "6046dceb136dfe52a4dc18706b50e353",
+   "z_valence": 11.0,
+   "relativity": "scalar",
+   "lj": false,
+   "scalar_part": true,
+   "ekb_zero": 0
+  }
+ }
+}

@@ -36,6 +36,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -75,6 +85,7 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 1. Basic run: all site types, single adsorbate ---
 echo -e "\n--- Testing a basic screen (H on graphene, all site types) ---"
+rm -f stb_mladsorb_report*.txt stb_mladsorb_references*.bib
 stb-mladsorb --slab graphene_slab.fdf --adsorbate H --site-type all --height 2.0 \
     --save-data --save-report --no-intro -o h_screen > log_screen.txt 2>&1
 check_exit_code $? 0
@@ -85,8 +96,8 @@ done
 check_success h_screen/mladsorb.png
 check_success h_screen/mladsorb_configs.dat
 check_success h_screen/mladsorb_minima.dat
-check_success h_screen/stb_mladsorb_report.txt
-check_contains "STB-MLADSORB REPORT" h_screen/stb_mladsorb_report.txt
+check_success stb_mladsorb_report.txt
+check_contains "STB-MLADSORB REPORT" stb_mladsorb_report.txt
 echo "Testing: no XYZ/gnuplot output unless asked"
 if ls h_screen/*.xyz h_screen/plot >/dev/null 2>&1; then
     echo -e "   -> ${RED}Failed:${NC} XYZ or plot/ written without --save-xyz/--save-gnuplot"; FAIL=$((FAIL+1))
@@ -269,7 +280,7 @@ rm -rf h_nb
 #     no committed carbon+hydrogen SIESTA dataset to fine-tune against,
 #     so this section deliberately doesn't reuse graphene_slab.fdf/H) ---
 echo -e "\n--- Fine-tuning a quick Si model to test the foundation-model comparison with ---"
-PHONONS_FIXTURES="$FIXTURE_DIR/../2-mlphonons/si_mlff_fixtures"
+PHONONS_FIXTURES="$FIXTURE_DIR/../3-mlphonons/si_mlff_fixtures"
 if [ -d "$PHONONS_FIXTURES" ]; then
     cp -r "$PHONONS_FIXTURES" mlff_config_src
     mv mlff_config_src/mlff_config_* .

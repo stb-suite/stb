@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import os
@@ -33,7 +34,6 @@ require_mace()
 OPTIMIZERS = ["FIRE", "BFGS", "LBFGS"]
 
 REPORT_FILE = "stb_mlrelax_report.txt"
-BIB_FILE = "references.bib"
 
 
 def _structure_validation(pmg_structure, vacuum_axes, f_out):
@@ -65,7 +65,7 @@ that distribution.""",
                "  %(prog)s -f defect.fdf\n"
                "  %(prog)s -f bulk.fdf --relax-cell -o bulk_relaxed.fdf\n"
                "  %(prog)s -f slab2d.fdf --relax-cell -o slab2d_relaxed.fdf\n"
-               "  %(prog)s -f defect.fdf --save-report --save-data --view\n"
+               "  %(prog)s -f defect.fdf --save-data --view\n"
                "\n"
                "Note: an initial guess that's very far from equilibrium (e.g. a lattice "
                "constant off by 15-20%% or more) can occasionally lead a universal MLIP to "
@@ -106,7 +106,7 @@ that distribution.""",
     parser.add_argument("-o", "--output", type=str, default="relaxed.fdf",
                         help="Output .fdf file name (default: relaxed.fdf).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-data", action="store_true",
                         help="Also write the raw per-step relaxation convergence trace "
                              "(<stem>_relax_convergence.dat). Off by default.")
@@ -125,10 +125,10 @@ that distribution.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("mlrelax")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -378,10 +378,10 @@ that distribution.""",
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.MACE]
     if not args.custom_model:
         bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[9] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -389,7 +389,7 @@ that distribution.""",
     print_dual(f"Output file    : {args.output}", f_out)
     if conv_plot_path:
         print_dual(f"Convergence plot: {conv_plot_path}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

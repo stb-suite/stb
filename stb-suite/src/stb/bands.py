@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -17,7 +18,6 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.siesta_bands import _is_gamma, read_data, shift_bands, cbm_vbm, read_eig_mesh
 
 REPORT_FILE = "stb_bands_report.txt"
-BIB_FILE = "references.bib"
 
 
 def plot_gnuplot(high_sym, nspin, output_dir="."):
@@ -158,7 +158,7 @@ def main():
                "  stb_bands --file siesta.bands --shift manual --manual-value 0.5\n"
                "  stb_bands --file siesta.bands --shift fermi --gap-tol 0.05\n"
                "  stb_bands --file siesta.bands --shift fermi --eig-file siesta.EIG\n"
-               "  stb_bands --file siesta.bands --shift fermi --save-report",
+               "  stb_bands --file siesta.bands --shift fermi",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -201,11 +201,11 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write bands_gnuplot.dat and bands.gplot into "
-                             "(and stb_bands_report.txt/references.bib, with --save-report) "
+                             "(the report and its references file go to the current folder) "
                              "(default: current directory). Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
 
@@ -247,7 +247,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     shift_desc = args.shift if args.shift != "manual" else f"manual ({args.manual_value} eV)"
@@ -261,7 +261,7 @@ def main():
     result = cbm_vbm(fermi_energy, dic_bands, nspin, args.gap_tol)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("bands")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-BANDS REPORT =====", 'magenta'), f_out)
@@ -360,10 +360,10 @@ def main():
 
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     if mesh_result is not None:
         best_indirect, best_type = mesh_result["combined"][4], mesh_result["combined"][5]
@@ -383,7 +383,7 @@ def main():
             'green'), f_out)
     print_dual(f"Gnuplot data   : {os.path.join(args.output_dir, 'bands_gnuplot.dat')}", f_out)
     print_dual(f"Gnuplot script : {os.path.join(args.output_dir, 'bands.gplot')}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

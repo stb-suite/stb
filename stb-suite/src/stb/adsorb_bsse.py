@@ -2,17 +2,18 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
 import argparse
 from stb.core import structure_io
-from stb.core.bsse import make_ghost_variant, strip_config_extra_include
+from stb.core.bsse import make_ghost_variant, strip_config_extra_include, species_block_overrides
 from stb.core.siesta_log import report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.pseudopotentials import copy_pseudo
@@ -22,7 +23,7 @@ from stb.core.adsorption_sites import (
 )
 from stb.adsorb_analysis import read_site_table
 
-REPORT_FILE = "adsorption_bsse_report.txt"
+REPORT_FILE = "stb_adsorbBsse_report.txt"
 CONFIG_EXTRA_FILE = "config_extra.fdf"
 
 FIXED_CELL_BLOCK = (
@@ -131,15 +132,20 @@ def write_bsse_folders(bsse_dir, site_fdf, calc_text, pp_path):
         config_extra_content += SPIN_POLARIZED_BLOCK
     if dipole_corrected:
         config_extra_content += DIPOLE_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DIPOLE_BENGTSSON)
     if vdw_corrected:
         config_extra_content += VDW_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DFT_D3)
 
     for sub_dir, variant in [("bsse_slab", slab_variant), ("bsse_adsorbate", ads_variant)]:
         out_dir = os.path.join(bsse_dir, sub_dir)
         os.makedirs(out_dir, exist_ok=True)
         structure_io.write_fdf(variant, os.path.join(out_dir, "structure.fdf"))
         with open(os.path.join(out_dir, CONFIG_EXTRA_FILE), "w") as f:
-            f.write(config_extra_content)
+            f.write(config_extra_content + species_block_overrides(
+                calc_text, structure_io.species_list(variant)))
         with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
             f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
         # pp_path (the site's own directory) already has a pseudopotential
@@ -216,7 +222,7 @@ def main():
                               "site's relaxation is flagged as possibly incomplete -- advisory "
                               "only, never blocks BSSE folder generation.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-adsorbBsse {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -227,7 +233,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     library_warnings = []  # collected via capture_library_noise, reported in [4]
@@ -243,7 +249,7 @@ def main():
         print(color_text(f"[ERROR] '{clean_slab_fdf_path}' not found. Did you run stb-adsorb?", 'red'))
         sys.exit(1)
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("adsorbBsse")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== ADSORPTION BSSE (POST-RELAXATION) REPORT =====", 'magenta'), f_out)
@@ -252,7 +258,6 @@ def main():
     print_section("[0] RUN METADATA", f_out)
     print_dual(f"  Directory       : {args.dir}", f_out)
     print_dual(f"  Output file     : {args.file}", f_out)
-    print_dual(f"  Save report     : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
     print_dual(color_text(
         "\n  [WHY THIS STAGE EXISTS] A Boys-Bernardi counterpoise (BSSE) correction is only "
         "valid if every fragment is evaluated at the SAME geometry as the real, relaxed site -- "

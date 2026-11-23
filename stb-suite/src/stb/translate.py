@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
     
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -1443,7 +1444,7 @@ def build_parser():
         epilog="Example usage:\n"
                "  stb-translate -i si.cif -o si.fdf                 # both formats from the names\n"
                "  stb-translate -i POSCAR -o structure.xyz -cf cartesian\n"
-               "  stb-translate -i siesta.STRUCT_OUT -of cif -o relaxed.cif --save-report\n"
+               "  stb-translate -i siesta.STRUCT_OUT -of cif -o relaxed.cif\n"
                "  stb-translate -i '*.cif' -of fdf --out-dir fdf/   # batch\n"
                "  stb-translate -i slab.fdf --dry-run                # report only\n",
         formatter_class=argparse.RawTextHelpFormatter)
@@ -1463,9 +1464,9 @@ def build_parser():
                         help="Output directory in batch mode: each output is named after its input with the output "
                              "format's extension.")
     parser.add_argument("--dry-run", action="store_true",
-                        help="Read and report only (structure, symmetry, checks); write nothing.")
+                        help="Read and report only (structure, symmetry, checks); write no structure file (the report and its references are always written).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (next to --out-file, or in --out-dir).")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-cf", "--coord-format", choices=['direct', 'cartesian'], default=None,
                         help="Coordinates of the output: direct (fractional) or cartesian. Default: the input's, or the "
                              "output format's own.")
@@ -1498,7 +1499,7 @@ def main():
         show_intro(["Siesta ToolBox Suite - File Translator",
                     "Structure files between SIESTA, VASP, CIF, XYZ, XSF, FHI-aims, DFTB+ and LAMMPS",
                     f"Version {VERSION} | University of Brasilia - 2026",
-                    "Developed by Dr. Carlos M. O. Bastos"])
+                    "Developed by the STB-SUITE team"])
 
     is_glob = any(ch in args.in_file for ch in '*?[')
     matches = sorted(glob.glob(args.in_file)) if is_glob else [args.in_file]
@@ -1536,10 +1537,7 @@ def main():
                              f"({', '.join(sorted(OUTPUT_FORMATS))}).")
             out_how = f"auto, from the name '{os.path.basename(args.out_file)}'"
 
-    report_path = None
-    if not args.dry_run and args.save_report:
-        report_dir = args.out_dir if batch else (os.path.dirname(args.out_file) or ".")
-        report_path = os.path.join(report_dir, REPORT_FILE)
+    report_path = new_report_path("translate")
     f_out = open(report_path, "w") if report_path else None
     warns = []
     sections = Sections(f_out)
@@ -1624,7 +1622,7 @@ def main():
             print_dual(f"Written           : {', '.join(written)}", f_out)
         if report_path:
             print_dual(f"Report            : {report_path}", f_out)
-        not_asked = [fl for fl, on in (("--save-report", args.save_report), ("--view", args.view),
+        not_asked = [fl for fl, on in (("--view", args.view),
                                        ("--view-image", bool(args.view_image)), ("-cf", bool(args.coord_format)))
                      if not on]
         if not_asked and not args.dry_run:

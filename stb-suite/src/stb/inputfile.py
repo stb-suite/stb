@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
     
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 from time import sleep
 import numpy as np
@@ -18,7 +19,9 @@ from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, detect_pseudo_bank
+from stb.core.pseudopotentials import (add_nonperturbative_block, refuse_unusable_pseudo,
+                                       files_without_scalar_part, scalar_part_missing_message)
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, canonical_bank, resolve_pseudo_source, detect_pseudo_bank
 from stb.core.ase_view import view_structure_interactive
 
 REPORT_FILE = "stb_inputfile_report.txt"
@@ -78,8 +81,9 @@ PAO.EnergyShift     0.01 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [6  6  6]
 Mesh.CutOff           320  Ry  
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.1.0: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
   # %block kgrid.MonkhostPack
   # %endblock MonkhostPack
@@ -282,8 +286,9 @@ PAO.EnergyShift     0.02 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [4  13  1]
 Mesh.CutOff           320  Ry   
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.1.0: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
   # %block kgrid.MonkhostPack
   # %endblock MonkhostPack
@@ -477,8 +482,9 @@ PAO.EnergyShift     0.02 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [1  1  1]
 Mesh.CutOff           320  Ry    
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.1.0: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
   
   # %block kgrid.MonkhostPack
@@ -682,8 +688,9 @@ PAO.EnergyShift     0.02 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [1  1  1]
 Mesh.CutOff           320  Ry 
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.1.0: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
 
   # %block kgrid.MonkhostPack
@@ -851,7 +858,6 @@ WriteMDXmol             .true.
 
 VACUUM_GAP_ANG = 10.0  # min empty span (wrapped) along an axis to treat it as vacuum-padded
 
-BIB_FILE = "references.bib"
 
 # Method/tool references, keyed the same way the generated calc.fdf actually
 # exercises them: SIESTA, Monkhorst-Pack, and the PBE (XC.Functional GGA /
@@ -906,8 +912,8 @@ def build_bib_entries(chosen_mode, d3_enabled, pseudo_bank=None):
         entries.append(_BIB_DFTD3)
     if chosen_mode == 'aimd':
         entries.append(_BIB_NOSE)
-    if pseudo_bank in citations.PSEUDO_BANK_CITATIONS:
-        entries.append(citations.PSEUDO_BANK_CITATIONS[pseudo_bank])
+    if citations.pseudo_bank_citation(pseudo_bank):
+        entries.append(citations.pseudo_bank_citation(pseudo_bank))
     return entries
 
 
@@ -989,7 +995,10 @@ def copy_pseudopotentials(species_list, pp_path, f_out=None):
         warnings.append(f"[WARNING] PP path '{pp_path}' is not a valid directory -- pseudopotentials not copied.")
         return warnings
 
+    for symbol in species_list:                       # refuse an unusable file before copying any
+        refuse_unusable_pseudo(os.path.join(pp_path, f"{symbol}.psml"))
     copied_files = 0
+    note_pseudo_folder(os.getcwd())
     for symbol in species_list:
         psml_filename = f"{symbol}.psml"
         psf_filename = f"{symbol}.psf"
@@ -1072,6 +1081,14 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             f"DFT-D3 (van der Waals) correction : {'ENABLED' if d3_enabled else 'DISABLED'}",
             f_out
         )
+
+        if d3_enabled and chosen_mode == 'relax':
+            print_dual(color_text(
+                "[WARNING] DFT-D3 with a variable-cell relaxation: SIESTA 5.4.2 writes the D3 contribution "
+                "to the stress tensor with the wrong sign (energies and forces are right), so with that "
+                "version the cell relaxes to the wrong volume. Check your SIESTA version; with 5.4.2 get "
+                "the cell from the energies (stb-eosInputs / stb-eosAnalysis) and relax only the atoms "
+                "(MD.VariableCell false).", 'yellow'), f_out)
 
         d3_line_new = f"DFTD3                   {d3_flag}"
 
@@ -1171,10 +1188,37 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
                 # Keep the original template line
                 output_lines.append(line)
 
+        # Li (PseudoDojo) cannot get its polarization orbital by SIESTA's default perturbative
+        # scheme (LiF: 36/36 folders stopped with 'Generation of polarization orbital failed').
+        new_text, np_labels = add_nonperturbative_block(
+            "".join(output_lines),
+            {lb: meta['Z'] for lb, meta in structure_io.species_dict(fdf_structure).items()})
+        if np_labels:
+            output_lines = new_text.splitlines(keepends=True)
+            print_dual(color_text(
+                f"[NOTE] {', '.join(np_labels)}: PAO.PolarizationScheme non-perturbative written (the default "
+                "perturbative polarization orbital fails for Li and Be).", 'yellow'), f_out)
+
         if cell_fixed_for_vacuum:
             print_dual(color_text(
                 "[NOTE] Vacuum-padded axis detected: MD.VariableCell set to false (the template's "
                 "true would shrink the vacuum). Set it back by hand for a bulk-like relaxation.", 'yellow'), f_out)
+
+        # Refuse, before writing anything, a pseudopotential SIESTA cannot use in this input: ekb = 0
+        # projectors, or full-relativistic files with no scalar-relativistic part (this tool never
+        # writes spin-orbit; most nc-fr-04 PBEsol files)
+        if pp_path and os.path.isdir(pp_path):
+            chosen = []
+            for lb in structure_io.species_dict(fdf_structure):
+                psml = os.path.join(pp_path, f"{lb}.psml")
+                if os.path.exists(psml):                 # .psml first, as copy_pseudopotentials does
+                    chosen.append(psml)
+            for psml in chosen:
+                refuse_unusable_pseudo(psml)
+            no_scalar = files_without_scalar_part(chosen)
+            if no_scalar:
+                print_dual(color_text(f"[ERROR] {scalar_part_missing_message(no_scalar)}", 'red'), f_out)
+                raise SystemExit(1)
 
         # Write the output file
         with open(output_file, 'w') as f_output:
@@ -1185,12 +1229,12 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
         print_section("[5] REFERENCES", f_out)
         pseudo_bank = detect_pseudo_bank(pp_path)
         bib_entries = build_bib_entries(chosen_mode, d3_flag == ".true.", pseudo_bank)
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         if pseudo_bank:
             print_dual(f"Pseudopotential source : bundled bank '{pseudo_bank}'", f_out)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         # --- 5. Copy Pseudopotentials ---
         pp_warnings = []
@@ -1206,7 +1250,7 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
         print_section("[7] SUMMARY & FILES", f_out)
         print_dual("Status       : OK", f_out)
         print_dual(f"Input file   : {output_file}", f_out)
-        print_dual(f"References   : {BIB_FILE}", f_out)
+        print_dual(f"References   : {citations.run_references_path()}", f_out)
         return True
 
     except Exception as e:
@@ -1273,13 +1317,13 @@ def main():
         type=str,
         default="",
         dest="pp_path",
-        help=f"Pseudopotentials source (optional): a bundled bank ({', '.join(BANKS)}) "
+        help=f"Pseudopotentials source (optional): a bundled bank ({BANK_HELP}) "
              "or a folder path."
     )
 
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view of the structure (via ASE) "
                              "after generating calc.fdf. Needs a display. Off by default.")
@@ -1289,7 +1333,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.pp_path in BANKS:
+    if args.pp_path and args.pp_path.lower().startswith("dojo") and not os.path.isdir(args.pp_path):
+        try:
+            canonical_bank(args.pp_path)
+        except ValueError as e:
+            print(color_text(f"[ERROR] {e}", 'red'))
+            sys.exit(1)
+    if is_bank(args.pp_path):
         # Only resolve a recognized bank name -- an invalid value is left
         # as-is so copy_pseudopotentials()'s own os.path.isdir() check
         # produces its existing (non-fatal) "not a valid directory" warning,
@@ -1301,10 +1351,10 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("inputfile")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-INPUTFILE REPORT =====", 'magenta'), f_out)

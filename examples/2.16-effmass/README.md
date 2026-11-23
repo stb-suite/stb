@@ -173,9 +173,8 @@ used to be (incorrectly) assumed safe.
   `STATE SELECTION`, `EFFECTIVE MASS (per-axis Voigt)`,
   `EFFECTIVE MASS (principal, full tensor)`, `BAND VELOCITY`,
   `OUTPUT DATA & PLOTS`, `REFERENCES`, `SUMMARY & FILES`).
-- **`--save-report`**, **`--save-gnuplot`** (writes `effmass.dat`/
-  `velocity.dat` + a real 2-panel bar-chart `.gplot` script) and
-  **`--view`** (matplotlib bar charts) are all off by default.
+- **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **nspin=2 is handled gracefully** (section 1.2/3 above).
 - **The principal effective mass** (section 1.3 above) is reported
   alongside the per-axis values.
@@ -218,7 +217,7 @@ Or try the tool directly:
 
 ```bash
 stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm \
-    --fermi -3.200055 --save-report --save-gnuplot --view
+    --fermi -3.200055 --save-gnuplot --view
 ```
 
 ## 8. What's next

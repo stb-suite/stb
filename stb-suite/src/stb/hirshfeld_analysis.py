@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -40,6 +40,7 @@ per-iteration charges, extended XYZ with the charges), --png/--show (a
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -60,7 +61,7 @@ from stb.core.rho_io import find_one_rho, read_total
 sisl = require_sisl()
 
 HIRSHFELD_IONS_MANIFEST_FILE = "hirshfeld_ions_manifest.json"
-REPORT_FILE = "hirshfeld_analysis_report.txt"
+REPORT_FILE = "stb_hirshfeldAnalysis_report.txt"
 DATA_FILE = "hirshfeld_charges.dat"
 HISTORY_FILE = "hirshfeld_iterations.dat"
 XYZ_FILE = "hirshfeld_charges.xyz"
@@ -339,7 +340,7 @@ def main():
                               "(which assumes that log was left with a .out extension; use "
                               "--ref if yours wasn't).")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-data", action="store_true",
                          help=f"Write {DATA_FILE} (per-atom charges by every method, populations, "
                               f"reference used), {HISTORY_FILE} (every atom's charge per iteration) "
@@ -364,10 +365,10 @@ def main():
             "Siesta ToolBox Suite - Hirshfeld-I Analysis (Stage 3/3)",
             "Iterative Hirshfeld-I atomic charges",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("hirshfeldAnalysis")
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 
@@ -866,7 +867,7 @@ def main():
             written.append(produced)
     if report_path:
         written.append(report_path)
-    print_dual(f"Files written   : {', '.join(written) if written else 'none (add --save-report, --save-data, --png)'}",
+    print_dual(f"Files written   : {', '.join(written) if written else 'none (add --save-data, --png)'}",
                f_out)
 
     # ---------------------------------------------------------------- [10]

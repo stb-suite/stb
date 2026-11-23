@@ -2,14 +2,13 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows**
 
-![Status](https://img.shields.io/badge/status-under%20development-orange.svg)
+![Status](https://img.shields.io/badge/status-stable%2C%20under%20testing-yellowgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Python](https://img.shields.io/badge/python-3.9%20to%203.12-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11%20to%203.12-blue.svg)
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
 [![Documentation](https://img.shields.io/badge/docs-stb--suite.github.io%2Fstb-informational.svg)](https://stb-suite.github.io/stb/)
 
-**Author:** Dr. Carlos M. O. Bastos — University of Brasília (UnB), 2026
-🔗 [bastoscmo.github.io](https://bastoscmo.github.io)
+**Authors:** [project lead and collaborators](https://stb-suite.github.io/stb/authors/) — University of Brasília (UnB), 2026
 
 📚 **Documentation: <https://stb-suite.github.io/stb/>** — a guide for every tool and a reference page for every command.
 
@@ -27,7 +26,7 @@ SIESTA itself is not bundled: the Inputs and Workflow tools write ready-to-run c
 
 ## 🚀 What's inside
 
-The menu groups the tools into seven categories. Each tool has a guide with a runnable example in [`examples/`](examples/) (published on the [documentation site](https://stb-suite.github.io/stb/)).
+The menu groups the tools into seven categories. Each tool has a guide with a runnable example in [`examples/`](https://github.com/stb-suite/stb/tree/main/examples) (published on the [documentation site](https://stb-suite.github.io/stb/)).
 
 | # | Category | What it's for | Tools |
 |---|----------|---------------|-------|
@@ -45,7 +44,7 @@ A workflow is several commands used in order (for example `stb-strain` then `stb
 
 ## 🧠 Requirements
 
-* **Python 3.9 to 3.12**
+* **Python 3.11 to 3.12**
 * Installed automatically: `numpy`, `ase`, `matplotlib`, `pymatgen`, `spglib`, `sisl`, `pybader`, `scipy`, `phonopy`, `pandas`, `icet`, `pyxtal`
 * Optional **`ml` extra** (`torch`, `mace-torch`, `torch-dftd`) for the ML tools — see below
 
@@ -53,21 +52,20 @@ A workflow is several commands used in order (for example `stb-strain` then `stb
 
 ## 📦 Installation
 
+From PyPI:
+
+```bash
+pip install stb-suite              # the suite
+pip install "stb-suite[ml]"        # with the optional ML tools (PyTorch, mace-torch)
+```
+
+From source (`git clone -b dev ...` for the development version):
+
 ```bash
 git clone https://github.com/stb-suite/stb.git
 cd stb/stb-suite
-pip install .
+pip install .                      # or ".[ml]"
 ```
-
-With the optional ML tools:
-
-```bash
-pip install ".[ml]"
-```
-
-If the suite is already installed, `pip install "stb_suite[ml]"` adds the ML extra to it.
-
-There is no PyPI package: install from source as above.
 
 ---
 
@@ -102,5 +100,4 @@ Every tool prints its options with `--help` (for example `stb-kgrid --help`).
 
 ## 🧾 License
 
-Distributed under the **MIT License**.
-© 2026 Dr. Carlos M. O. Bastos – University of Brasília (UnB)- Brazil
+Distributed under the **MIT License** (see [LICENSE](LICENSE)).

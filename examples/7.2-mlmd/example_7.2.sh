@@ -19,6 +19,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 export MPLBACKEND=Agg           # headless-safe; the dashboards are still written with --png
 DEVICE="${DEVICE:-cpu}"
 MODEL="$DIR/model/mlff_model_compiled.model"
@@ -53,7 +58,7 @@ section() {   # $1 = file, $2 = section number
 mlmd() {
     local case=$1 file=$2; shift 2
     mkdir -p "$OUT/$case"
-    (cd "$OUT/$case" && stb-mlmd --file "$file" --device "$DEVICE" --save-report --no-intro "$@" < /dev/null > log.txt 2>&1)
+    (cd "$OUT/$case" && stb-mlmd --file "$file" --device "$DEVICE" --no-intro "$@" < /dev/null > log.txt 2>&1)
 }
 
 
@@ -82,7 +87,7 @@ its card: --custom-model AND --custom-model-card, always both. 200 equilibration
 production steps of 1 fs. Report section [2] prints the card -- here its first blocks: identity (SHA-256 checked
 against the file), level of theory, trained range.
 EOF
-echo "\$ stb-mlmd --file si8.fdf $FT --ensemble nvt --temperature 300 --equilibration-steps 200 --n-steps 1500 --seed 1 --png --save-gnuplot --save-report"
+echo "\$ stb-mlmd --file si8.fdf $FT --ensemble nvt --temperature 300 --equilibration-steps 200 --n-steps 1500 --seed 1 --png --save-gnuplot"
 mlmd case1_nvt300 "$DIR/si8.fdf" $FT --ensemble nvt --temperature 300 --equilibration-steps 200 --n-steps 1500 \
     --seed 1 --png --save-gnuplot
 R1="$OUT/case1_nvt300/stb_mlmd_report.txt"
@@ -256,11 +261,11 @@ banner "Case 9: the same tool from the interactive menu (stb-suite, code 7.2)"
 cat <<'EOF'
 The menu asks the same questions and builds the same command line. Answers piped in: structure, the custom model
 (Enter accepts the card next to it), a 2x2x2 supercell (64 atoms), NVT, 300 K, 100 + 300 steps of 1 fs, no advanced
-settings, a trajectory name, no plots, save the report.
+settings, a trajectory name, no plots (the report is always written).
 EOF
 mkdir -p "$OUT/case9_menu"
-cd "$OUT/case9_menu"
-printf '7.2\n%s\n%s\n\n2 2 2\n1\n300\n100\n300\n1.0\nn\nmenu_traj.xsf\nn\nn\nn\nn\ny\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
+cd "$OUT/case9_menu"; rm -f stb_mlmd_report*.txt
+printf '7.2\n%s\n%s\n\n2 2 2\n1\n300\n100\n300\n1.0\nn\nmenu_traj.xsf\nn\nn\nn\nn\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
     stb-suite > menu_log.txt 2>&1 || true
 ls -1
 strip_colors < stb_mlmd_report.txt | grep -E "^Supercell|^Ensemble|^SHA-256|^Status|^Results" | sed 's/^/  /'

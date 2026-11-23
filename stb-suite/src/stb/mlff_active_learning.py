@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -26,7 +27,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, mlff_workflow
 from stb.core.fdf_directives import parse_kgrid, parse_directives
-from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import is_bank, get_required_pseudos, resolve_pseudo_source
 from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
                           print_progress_line, finish_progress_line, capture_library_noise)
 from stb.mlff import build_rattled_configs, write_config_folder, resolve_reference
@@ -820,7 +821,7 @@ def main():
                              "'spread' and as the initial charge, so ASE's viewer colors by it: View > "
                              "Colors > By initial charge) and open them.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE} (in the output directory). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlffActiveLearning {VERSION}")
     args = parser.parse_args()
@@ -830,7 +831,7 @@ def main():
             "Siesta ToolBox Suite - Custom ML Force Field (Active Learning)",
             "Suggest new SIESTA configurations to label, using the fine-tuned model(s)",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- ACTIVE LEARNING:", 'bold'))
@@ -906,7 +907,7 @@ def main():
         recorded = (state or {}).get("reference", {}).get("pseudo_dir")
         if recorded:
             candidate = mlff_workflow.resolve(recorded, wf_base)
-            args.pseudo_dir = recorded if recorded in BANKS else candidate
+            args.pseudo_dir = recorded if is_bank(recorded) else candidate
         else:
             args.pseudo_dir = "."
     proposer_round = round_entry["round"] if round_entry else (
@@ -938,7 +939,7 @@ def main():
         train_pattern = f"{args.output_dir}/[configs_round_*/]mlff_config_*"
         train_dirs = mlff_workflow.find_config_dirs(args.output_dir)
 
-    report_path = near_out(REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlffActiveLearning")
     f_out = open(report_path, "w") if report_path else None
 
     # seeds of the committee, from the workflow when it lists them
@@ -1050,6 +1051,9 @@ def main():
     d3 = mlff_workflow.dftd3_info(state)
     if d3.get("forced") or args.d3:
         extra_block += mlff_workflow.DFTD3_BLOCK
+        if True:
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DFT_D3)
         print_dual("Dispersion        : DFT-D3 in every pick's config_extra.fdf ("
                    + ("as Stage 1 --d3 recorded in the workflow file" if d3.get("forced") else "--d3") + ")", f_out)
         if args.d3 and state is not None and d3 and not d3.get("on"):

@@ -167,7 +167,7 @@ instead of only seeing it blurred into a population-averaged RDF.
   preview, off by default.
 - **`-o`/`--output-dir`** selects where every output file is written
   (default: the current directory).
-- **`[9] REFERENCES`** writes `references.bib` citing SIESTA for a
+- **`[9] REFERENCES`** writes `stb_aimdAnalysis_references.bib` citing SIESTA for a
   `--label` run; correctly prints a note instead for a generic
   `--trajectory` input, since that path isn't guaranteed to be a SIESTA
   run at all (section 6).
@@ -291,7 +291,7 @@ Or try the tool directly:
 
 ```bash
 stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 \
-    --save-report --save-gnuplot --view
+    --save-gnuplot --view
 ```
 
 ## 10. What's next

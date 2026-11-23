@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 # Guided example: stb-sts (code 2.13 in the stb-suite menu)
 #
 # Not an automated test (see test/2-analysis/13-sts/test.sh for that) -- a
@@ -59,7 +62,7 @@ this is a DOS-like, Brillouin-zone-integrated quantity, and needs the real
 per-orbital radial basis (.fdf + .ion/.ion.xml files), same requirement as
 stb-wfdensity -- never a bare .XV/.HSX.
 
-Every run prints a numbered [0]...[6] report. --save-report persists it;
+Every run prints a numbered [0]...[6] report. It is always saved;
 --save-gnuplot writes sts.dat + a real .gplot script (off by default --
 this tool used to write the .dat unconditionally but never actually wrote
 a .gplot at all); --view shows a matplotlib preview (replaces the old
@@ -198,13 +201,12 @@ pause
 
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
---save-report additionally persists it to stb_sts_report.txt, and
---save-gnuplot writes sts.dat + a real .gplot script -- both off by
-default, so a plain run only ever writes sts.dat + references.bib:
+It is always saved to stb_sts_report.txt; --save-gnuplot writes sts.dat + a real .gplot script -- both off by
+default, so a plain run only ever writes sts.dat + stb_sts_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp calc.fdf structure.fdf C.ion C.ion.xml Graphene.selected.WFSX "$OUT/full-report/"
@@ -212,12 +214,12 @@ echo "\$ stb-sts --label Graphene --geometry-file calc.fdf --xy 0 0 --height 1.5
 (cd "$OUT/full-report" && stb-sts --label Graphene --geometry-file calc.fdf \
     --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only sts.dat + references.bib -- no .gplot, no stb_sts_report.txt)"
+echo "(only sts.dat + stb_sts_references.bib -- no .gplot, no stb_sts_report.txt)"
 echo
 echo "\$ stb-sts --label Graphene --geometry-file calc.fdf --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 \\"
-echo "      --save-report --save-gnuplot --no-intro"
+echo "      --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-sts --label Graphene --geometry-file calc.fdf \
-    --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 --save-report --save-gnuplot \
+    --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 --save-gnuplot \
     --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_sts_report.txt:"
 grep -o '\[[0-9]\] [A-Z& ]*' "$OUT/full-report/stb_sts_report.txt" | sort -u
@@ -249,8 +251,8 @@ TMP="$(mktemp -d)"
 cp calc.fdf structure.fdf C.ion C.ion.xml Graphene.selected.WFSX "$TMP/"
 cp calc.fdf "$TMP/Graphene.fdf"
 echo
-echo "\$ printf '2.13\\nGraphene\\n\\n1\\n0\\n0\\n1.5\\n-5\\n5\\n50\\n\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.13\nGraphene\n\n1\n0\n0\n1.5\n-5\n5\n50\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.13\\nGraphene\\n\\n1\\n0\\n0\\n1.5\\n-5\\n5\\n50\\n\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.13\nGraphene\n\n1\n0\n0\n1.5\n-5\n5\n50\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Peak dI/dV" "$OUT/basic-run/console.log")
 MENU_LINE=$(grep "Peak dI/dV" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -270,9 +272,8 @@ Six self-contained folders were generated under output/:
   basic-run/            label-plus-geometry/   cutoff-radius/
   periodic-wraparound/  fermi-shift/           full-report/
 
-Each has references.bib and sts.dat; full-report/ additionally has
-sts.gplot/sts.pdf and stb_sts_report.txt (only from its --save-report/
---save-gnuplot run).
+Each has stb_sts_references.bib and sts.dat; full-report/ additionally has
+sts.gplot/sts.pdf and stb_sts_report.txt (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:
   - the Tersoff-Hamann LDOS proxy, extended from stb-stm's spatial map to
@@ -291,7 +292,7 @@ Recap of what this walkthrough covered:
     samples the NEXT periodic image of the surface, not true vacuum decay
   - --shift fermi's new priority-ordered Fermi-source hierarchy, shared
     with stb-wfdensity via core.siesta_bands.resolve_fermi_energy_hierarchy
-  - the numbered [0]...[6] report, --save-report, --save-gnuplot (now
+  - the numbered [0]...[6] report (always saved), --save-gnuplot (now
     with a REAL .gplot script, previously missing entirely), --view
     (replacing the old, on-by-default --no-plot)
   - CLI and the interactive stb-suite menu building the same command

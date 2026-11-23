@@ -73,6 +73,23 @@ check_exit_code() {
 
 echo "--- Starting tester for stb-mlmd (item 7.2) ---"
 
+# No mace needed: the model card's settings line says 'DFT-D3 off' for a model without D3 (2.1.0; it printed
+# 'DFTD3 default', which reads as D3 on)
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+D3_OUT=$(python3 - "$ROOT_DIR/examples/7.2-mlmd/model" <<'PYEOF'
+import glob, json, sys
+from stb.core import model_card
+d = sys.argv[1]
+card = json.load(open(f"{d}/mlff_model_card.json"))
+model_card.print_model_card(card, f"{d}/mlff_model_card.json", sorted(glob.glob(f"{d}/*.model"))[0], None, lambda *a: None)
+PYEOF
+)
+if echo "$D3_OUT" | grep -q "Settings          : DFT-D3 off;"; then
+    echo -e "   -> ${GREEN}Verified:${NC} model card settings line: DFT-D3 off"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} model card settings line does not say 'DFT-D3 off'"; FAIL=$((FAIL+1))
+fi
+
 if ! python3 -c "import mace" 2>/dev/null; then
     echo -e "${YELLOW}Skipped entirely:${NC} the optional 'ml' extra is not installed."
     echo "Install with: pip install stb_suite[ml]  (then re-run this test)"
@@ -329,7 +346,7 @@ if command -v mace_run_train &> /dev/null && ls -d "$MLFF_FIX"/mlff_config_* > /
     CM="--custom-model ft/model/ft_compiled.model --custom-model-card ft/model/mlff_model_card.json"
 
     echo "Testing: the report shows the card section by section and checks the run against the trained range"
-    rm -f stb_mlmd_report.txt
+    rm -f stb_mlmd_report*.txt stb_mlmd_references*.bib
     stb-mlmd --file ft/mlff_config_001/calc.fdf $CM --n-steps 60 --stride 10 --seed 1 --save-report \
         -o ft_traj.xsf --output-structure ft_final.fdf --no-intro > log_ft.txt 2>&1
     check_exit_code $? 0
@@ -408,11 +425,11 @@ fi
 
 # --- 7. --save-report ---
 echo -e "\n--- Testing --save-report ---"
-rm -f stb_mlmd_report.txt
+rm -f stb_mlmd_report*.txt stb_mlmd_references*.bib
 stb-mlmd --file si_bulk.fdf --n-steps 10 --save-report --no-intro > log_savereport.txt 2>&1
 check_success stb_mlmd_report.txt
 check_contains "STB-MLMD REPORT" stb_mlmd_report.txt
-rm -f stb_mlmd_report.txt
+rm -f stb_mlmd_report*.txt stb_mlmd_references*.bib
 
 
 # --- 8. Robustness / errors ---

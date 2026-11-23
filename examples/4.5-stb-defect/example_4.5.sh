@@ -57,7 +57,7 @@ Every run always writes a numbered report ([0] RUN METADATA ... [7] SUMMARY
 & FILES -- [4] only appears with --ml-relax/--ml-rank), a
 structure-validation checklist both before and after, and a before/after
 symmetry comparison table for every output structure. A full text report
-(--save-report), MACE pre-relaxation (--ml-relax/--ml-rank), and an
+(always written), MACE pre-relaxation (--ml-relax/--ml-rank), and an
 interactive 3D view (--view) are all off by default.
 EOF
 pause
@@ -213,17 +213,16 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_defect_references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_defect_report.txt with
---save-report) includes the structure-validation checklist for the input
-and the output structure, and a references.bib with SIESTA.
+The full numbered report (always written to stb_defect_report.txt) includes the structure-validation checklist for the input
+and the output structure, and a stb_defect_references.bib with SIESTA.
 EOF
 mkdir -p "$OUT/full-report"
 cp si_bulk.fdf "$OUT/full-report/"
-echo "\$ stb-defect -f si_bulk.fdf --type vacancy --index 1 --save-report --no-intro"
-(cd "$OUT/full-report" && stb-defect -f si_bulk.fdf --type vacancy --index 1 --save-report --no-intro > console.log)
+echo "\$ stb-defect -f si_bulk.fdf --type vacancy --index 1 --no-intro"
+(cd "$OUT/full-report" && stb-defect -f si_bulk.fdf --type vacancy --index 1 --no-intro > console.log)
 echo
 echo "Report sections written to stb_defect_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_defect_report.txt"
@@ -231,8 +230,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib always written -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_defect_references.bib always written -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_defect_references.bib"
 pause
 
 echo "=================================================================="
@@ -243,8 +242,8 @@ echo "entry mode and checking it reaches the same atom count."
 TMP="$(mktemp -d)"
 cp si_bulk.fdf "$TMP/"
 echo
-echo "\$ printf '4.5\\nsi_bulk.fdf\\n1\\n1\\n1\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.5\nsi_bulk.fdf\n1\n1\n1\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '4.5\\nsi_bulk.fdf\\n1\\n1\\n1\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.5\nsi_bulk.fdf\n1\n1\n1\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 if grep -q "Output atoms     : 7" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-defect command as the CLI walkthrough above (7 atoms"
@@ -265,8 +264,8 @@ and ml-relax/ skipped if the optional 'ml' extra isn't installed):
   nearest-position/       all-inequivalent-sites/
   ml-rank/                ml-relax/           full-report/
 
-Each has references.bib; full-report/ additionally has
-stb_defect_report.txt; ml-rank/'s and ml-relax/'s references.bib also cite
+Each has stb_defect_references.bib; full-report/ additionally has
+stb_defect_report.txt; ml-rank/'s and ml-relax/'s stb_defect_references.bib also cite
 the MACE architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -283,7 +282,7 @@ Recap of what this walkthrough covered:
     sites (octahedral ~0.06 eV more stable for a vacancy)
   - --ml-relax vs. --ml-rank: generic pre-relaxation of whatever you're
     writing, vs. relax-and-compare across candidate sites
-  - the structure-validation checklist, references.bib, and --save-report
+  - the structure-validation checklist, stb_defect_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

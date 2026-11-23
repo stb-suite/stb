@@ -132,11 +132,11 @@ run "$OUT/case4/stage2.txt" "$OUT/case4" stb-ramanModes --directory raman_study 
     --use-symmetry --skip-degenerate --optical-mesh 32 32 32 --optical-broaden 0.1 --optical-nbands 16
 for f in "$OUT"/case4/raman_study/optical_disp/mode_01_*; do
     src="$OUT/case3/raman_study/optical_disp/$(basename "$f")"
-    # same geometry and same optical settings (runs/ predates the forced Diag.ParallelOverK line)
-    cmp -s "$f/structure.fdf" "$src/structure.fdf" \
-        && diff -q <(grep -v ParallelOverK "$f/config_extra.fdf") <(grep -v ParallelOverK "$src/config_extra.fdf") > /dev/null \
+    # same optical settings (runs/ predates the forced Diag.ParallelOverK line). The geometry comes from case 3 with
+    # its results: inside the triply degenerate mode, each machine's eigensolver may return another orthogonal basis
+    diff -q <(grep -v ParallelOverK "$f/config_extra.fdf") <(grep -v ParallelOverK "$src/config_extra.fdf") > /dev/null \
         || { echo "  [unexpected] $(basename "$f") differs from case 3"; exit 1; }
-    cp "$src/calc.out" "$src/siesta.EPSIMG" "$f/"
+    cp "$src/structure.fdf" "$src/calc.out" "$src/siesta.EPSIMG" "$f/"
 done
 run "$OUT/case4/stage3.txt" "$OUT/case4" stb-ramanAnalysis --directory raman_study
 grep -E "activity~" "$OUT/case4/stage3.txt" | head -1 | sed 's/^/  /'
@@ -167,7 +167,7 @@ symmetry shortcut, so the rules can be checked rather than assumed): ZO (out of 
 E2g partners (the G line) must have the same activity.
 EOF
 copy_run graphene "$OUT/case6"
-section "$OUT/case6/raman_study/raman_stage2.txt" "[1] PHONON MODES" | grep -E "mode" | sed 's/^/ /'
+section "$(ls "$OUT/case6/raman_study"/stb_ramanModes_report.txt "$OUT/case6"/stb_ramanModes_report.txt 2>/dev/null | head -1)" "[1] PHONON MODES" | grep -E "mode" | sed 's/^/ /'
 run "$OUT/case6/stage3.txt" "$OUT/case6" stb-ramanAnalysis --directory raman_study --save-gnuplot
 section "$OUT/case6/stage3.txt" "[2] RAMAN-ACTIVE" | grep -E "Mode|^  [123] "
 grep -E "^\[WARNING\] Degenerate" "$OUT/case6/stage3.txt" | fold -s -w 116 | sed 's/^/  /'

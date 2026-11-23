@@ -34,6 +34,51 @@ from stb.core.pseudopotentials import copy_pseudo
 SLAB_LABEL_SUFFIX = "_slab"
 ADSORBATE_LABEL_SUFFIX = "_ads"
 FRAGMENT_MANIFEST_FILE = "fragment_manifest.json"
+SITE_TABLE_FILE = "adsorption_sites.json"          # in <run>/sites/, written by stb-adsorb
+LEGACY_SITE_TABLE_FILE = "adsorption_sites.txt"     # its '# SITE_TABLE' block, up to 2.1.0.dev
+
+
+def write_site_table(path, rows):
+    """<run>/sites/adsorption_sites.json: one entry per site folder written by stb-adsorb --
+    label, adsorbate name, height (Ang) and folder -- the record the later stages read to know
+    which adsorbate/<name>/ reference and which height a site belongs to. `rows` are
+    (label, adsorbate, height, dir) tuples."""
+    data = {"schema": "stb_adsorption_sites_v1",
+            "sites": [{"label": label, "adsorbate": ads, "height": round(float(h), 4), "dir": d}
+                      for label, ads, h, d in rows]}
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def read_site_table(sites_root):
+    """{label: (adsorbate name, height)} from <sites_root>/adsorption_sites.json, else from the
+    '# SITE_TABLE' block of the adsorption_sites.txt older versions wrote there; None when
+    neither exists (folders assembled by hand)."""
+    path = os.path.join(sites_root, SITE_TABLE_FILE)
+    if os.path.isfile(path):
+        with open(path) as f:
+            data = json.load(f)
+        table = {e["label"]: (e["adsorbate"], float(e["height"])) for e in data.get("sites", [])}
+        return table or None
+    path = os.path.join(sites_root, LEGACY_SITE_TABLE_FILE)
+    if not os.path.isfile(path):
+        return None
+    table, in_table = {}, False
+    with open(path) as f:
+        for line in f:
+            if line.startswith("# SITE_TABLE"):
+                in_table = True
+                continue
+            if not in_table or line.startswith("#") or not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                table[parts[0]] = (parts[1], float(parts[2]))
+            except ValueError:
+                continue
+    return table or None
 
 # Every folder written via write_reference_folder() gets this via a
 # %include sidecar (same prepend_include convention as hubbardu.py/
@@ -219,10 +264,20 @@ def resolve_slab_orientation(structure, vacuum_gap):
     vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, vacuum_gap)
     if sum(vacuum_axes) != 1:
         detected = ', '.join(axis for axis, is_vac in zip('abc', vacuum_axes) if is_vac) or 'none'
+        gaps = kspace.vacuum_gaps_ang(frac_coords, structure.lattice)
+        measured = ', '.join(f"{axis} {gap:.2f}" for axis, gap in zip('abc', gaps))
+        hint = ""
+        if sum(vacuum_axes) == 0:
+            widest = max(gaps)
+            hint = (f" The widest gap here is {widest:.2f} Ang, below the threshold of {vacuum_gap:g} Ang: "
+                    f"if that gap is the slab's vacuum, pass --vacuum-gap {max(1.0, np.floor(widest - 0.5)):g} "
+                    "(any value below it and above the largest gap between atomic layers).")
         raise ValueError(
             "needs a slab/2D material with vacuum along exactly one axis; detected vacuum "
-            f"axis/axes: {detected}. A bulk 3D structure (no vacuum) or a wire/molecule "
-            "(vacuum on 2-3 axes) doesn't have a single well-defined surface to adsorb onto."
+            f"axis/axes: {detected} (largest empty gap along each axis, Ang: {measured}; an axis "
+            f"counts as vacuum from {vacuum_gap:g} Ang, --vacuum-gap).{hint} A bulk 3D structure "
+            "(no vacuum) or a wire/molecule (vacuum on 2-3 axes) doesn't have a single well-defined "
+            "surface to adsorb onto."
         )
 
     relabel_note = None
@@ -452,8 +507,113 @@ def validate_fragment_manifest(manifest, fdf_structure):
     return slab_labels, adsorbate_labels
 
 
+def relaxation_block(optimizer=None, force_tol=None, max_displ=None):
+    """config_extra.fdf text for the relaxation settings a command line asked
+    for ('' when it asked for none, so the template's own stay in force)."""
+    lines = []
+    if optimizer:
+        name = {"cg": "CG", "broyden": "Broyden", "fire": "FIRE"}[optimizer]
+        lines.append(f"MD.TypeOfRun          {name}")
+    if force_tol is not None:
+        lines.append(f"MD.MaxForceTol        {force_tol:g} eV/Ang")
+    if max_displ is not None:
+        lines.append(f"MD.MaxDispl           {max_displ:g} Bohr")
+    if not lines:
+        return ""
+    return ("# Auto-generated: relaxation settings asked on the command line (--optimizer/--force-tol/--max-displ).\n"
+            + "\n".join(lines) + "\n\n")
+
+
+def fixed_atoms_block(fixed_indices, note=""):
+    """config_extra.fdf text that holds the given atoms (0-based indices, in
+    the order of the written structure) fixed during a relaxation: a
+    %block Geometry.Constraints with one 'atom from i to j' line per run of
+    consecutive atoms (1-based, the form every SIESTA version reads)."""
+    indices = sorted(int(i) + 1 for i in fixed_indices)
+    runs, start, previous = [], indices[0], indices[0]
+    for index in indices[1:]:
+        if index != previous + 1:
+            runs.append((start, previous))
+            start = index
+        previous = index
+    runs.append((start, previous))
+    lines = ["# Auto-generated: " + (note or f"{len(indices)} atom(s) held fixed during the relaxation") + ".",
+             "%block Geometry.Constraints"]
+    lines += [f"  atom from {a} to {b}" for a, b in runs]
+    lines += ["%endblock Geometry.Constraints", ""]
+    return "\n".join(lines) + "\n"
+
+
+def bottom_layer_atoms(pmg_slab, n_layers, tol):
+    """Atoms of the lowest `n_layers` atomic layers of a slab whose vacuum is
+    along c (the adsorbate goes on the other, +c, face). Returns
+    (fixed atom indices, all layers) -- layers as core.layers.atomic_layers
+    gives them, bottom to top. Raises ValueError when the slab has no layer
+    left to relax."""
+    from stb.core.layers import atomic_layers
+    layers = atomic_layers(pmg_slab, tol)
+    if n_layers >= len(layers):
+        raise ValueError(
+            f"--fix-layers {n_layers}: the slab has {len(layers)} atomic layer(s) at --layer-tol "
+            f"{tol:g} Ang, so nothing would be left free under the adsorbate. Fix fewer layers "
+            "(half of them is the usual choice) or raise --layer-tol if a buckled plane was "
+            "counted as several layers.")
+    fixed = np.concatenate([indices for _height, indices in layers[:n_layers]])
+    return sorted(int(i) for i in fixed), layers
+
+
+def orient_by_anchor(mol, anchor):
+    """Rotates and shifts a molecule so that atom `anchor` (0-based) sits at
+    the origin with the rest of the molecule above it (+z): the vector from
+    the anchor to the centroid of the other atoms becomes +z. The adsorbate
+    placement puts the molecule's origin at --height above the site, so the
+    anchor is the atom that ends at that height, facing the surface. Returns
+    (new Molecule, lowest z of any other atom) -- a negative second value means
+    another atom still hangs below the anchor."""
+    coords = np.array(mol.cart_coords, dtype=float)
+    if len(coords) == 1:
+        return Molecule(mol.species, [[0.0, 0.0, 0.0]]), 0.0
+    others = np.delete(coords, anchor, axis=0)
+    axis = others.mean(axis=0) - coords[anchor]
+    norm = np.linalg.norm(axis)
+    shifted = coords - coords[anchor]
+    if norm > 1e-6:
+        axis /= norm
+        z = np.array([0.0, 0.0, 1.0])
+        v = np.cross(axis, z)
+        s, c = np.linalg.norm(v), float(np.dot(axis, z))
+        if s < 1e-10:
+            rotation = np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
+        else:
+            k = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+            rotation = np.eye(3) + k + k @ k * ((1 - c) / s ** 2)
+        shifted = shifted @ rotation.T
+    return Molecule(mol.species, shifted), float(np.delete(shifted[:, 2], anchor).min())
+
+
+def resolve_anchor(mol, spec):
+    """0-based index of the anchor atom of `mol` for --anchor-atom `spec`: an
+    element symbol (must occur exactly once in the molecule, else the 1-based
+    atom number is needed) or a 1-based atom number. Raises ValueError."""
+    symbols = [site.specie.symbol for site in mol]
+    listing = ", ".join(f"{i}:{s}" for i, s in enumerate(symbols, start=1))
+    if spec.isdigit():
+        index = int(spec) - 1
+        if not 0 <= index < len(symbols):
+            raise ValueError(f"--anchor-atom {spec}: the molecule has atoms {listing}.")
+        return index
+    matches = [i for i, s in enumerate(symbols) if s.lower() == spec.lower()]
+    if not matches:
+        raise ValueError(f"--anchor-atom {spec}: no such element in the molecule ({listing}).")
+    if len(matches) > 1:
+        raise ValueError(f"--anchor-atom {spec}: {len(matches)} atoms of that element in the molecule "
+                         f"({listing}); give the atom number instead.")
+    return matches[0]
+
+
 def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
-                            force_spin=False, force_dipole=False, force_vdw=False, n_substrate=None):
+                            force_spin=False, force_dipole=False, force_vdw=False, n_substrate=None,
+                            fixed_atoms=None, fixed_note="", relax_block=""):
     """Writes structure.fdf + calc.fdf + config_extra.fdf + copied
     pseudopotentials for one reference/candidate folder (adsorb.py's
     clean_slab/, adsorbate/, sites/site_*/; neb_sites.py's site_A/,
@@ -486,6 +646,9 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
     structure.fdf. Left at the default None for a single-fragment folder
     (clean_slab/, adsorbate/) -- unchanged, bare-element-symbol behavior.
 
+    `fixed_atoms` (0-based indices in `pmg_structure`'s order, which is the
+    order written) adds a Geometry.Constraints block holding them fixed.
+
     Returns the FdfStructure written, in case a caller needs the exact same
     geometry object again without re-reading the file.
     """
@@ -500,8 +663,16 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
             f.write(SPIN_POLARIZED_BLOCK)
         if force_dipole:
             f.write(DIPOLE_CORRECTION_BLOCK)
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DIPOLE_BENGTSSON)
         if force_vdw:
             f.write(VDW_CORRECTION_BLOCK)
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DFT_D3)
+        if fixed_atoms:
+            f.write(fixed_atoms_block(fixed_atoms, fixed_note))
+        if relax_block:
+            f.write(relax_block)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
     for label in fdf_structure.species:
@@ -577,6 +748,38 @@ def generate_systematic_orientations(mol, n_polar=1, n_azimuthal=1):
     return orientations
 
 
+def adsorbate_rmsd(positions_a, positions_b, symbols, cell=None, pbc=None):
+    """RMSD (Ang) between two geometries of the same adsorbate, invariant to a relabelling
+    of equal atoms and to periodic wrapping: within each element the atoms are matched by
+    the assignment that minimizes the summed squared distance (Hungarian algorithm), and
+    each distance is taken to the nearest periodic image along the axes where `pbc` is
+    True. Without the permutation, H2O with its two H swapped -- the same geometry --
+    reads as an RMSD above 1.5 Ang; without the minimum image, an atom wrapped to the
+    opposite face of the cell reads as a jump of a whole lattice vector."""
+    from scipy.optimize import linear_sum_assignment
+    a = np.asarray(positions_a, dtype=float)
+    b = np.asarray(positions_b, dtype=float)
+    symbols = list(symbols)
+    if cell is not None and pbc is not None and np.any(pbc):
+        cell = np.asarray(cell, dtype=float)
+        inv = np.linalg.inv(cell)
+        pbc_mask = np.asarray(pbc, dtype=bool)
+    else:
+        cell = inv = pbc_mask = None
+    total = 0.0
+    for el in sorted(set(symbols)):
+        idx = [k for k, sym in enumerate(symbols) if sym == el]
+        d = b[idx][None, :, :] - a[idx][:, None, :]        # (i in a, j in b, xyz)
+        if cell is not None:
+            frac = d @ inv
+            frac[..., pbc_mask] -= np.round(frac[..., pbc_mask])
+            d = frac @ cell
+        cost = np.sum(d ** 2, axis=2)
+        rows, cols = linear_sum_assignment(cost)
+        total += cost[rows, cols].sum()
+    return float(np.sqrt(total / len(symbols)))
+
+
 def deduplicate_orientations(entries, n_substrate, rmsd_tol=0.3, energy_tol=0.01):
     """Greedy duplicate filter for a list of relaxed orientation candidates
     at the SAME site: `entries` is a list of `(energy, ase.Atoms)` already
@@ -586,33 +789,30 @@ def deduplicate_orientations(entries, n_substrate, rmsd_tol=0.3, energy_tol=0.01
     RMSD is computed on the adsorbate atoms only (`atoms.positions[
     n_substrate:]`) -- the substrate is identical across every candidate at
     one site (same relaxation, same fixed atoms), so no Kabsch alignment is
-    needed, just a direct per-atom Cartesian distance (same atom count/
-    order across all candidates, guaranteed by construction: every
-    candidate here comes from the SAME `AdsorbateSiteFinder.add_adsorbate`
-    call shape, just a different pre-rotated molecule). A candidate is
-    dropped only if it's within BOTH `rmsd_tol` (Ang) of AND `energy_tol`
-    (eV) of an already-kept one -- requiring both avoids two failure modes
-    a single-metric check would have: merging two genuinely different local
-    minima that happen to share a similar energy by coincidence, or merging
-    two near-identical geometries whose energy differs only by MACE's own
-    numerical noise.
-
-    Does not correct for periodic wraparound (no minimum-image convention)
-    -- two candidates starting at the same site coordinate and relaxing
-    independently aren't expected to drift across a cell boundary
-    differently enough for this to matter in practice; documented as a
-    known simplification, not handled.
+    needed -- with `adsorbate_rmsd`: equal atoms matched by the best
+    permutation (H2O with H1 and H2 swapped is the same geometry; before
+    2.1.0 the file order was used and such pairs survived as "unique", each
+    one an extra SIESTA folder) and distances taken to the nearest periodic
+    image (each candidate is wrapped into the cell after its relaxation).
+    A candidate is dropped only if it's within BOTH `rmsd_tol` (Ang) of AND
+    `energy_tol` (eV) of an already-kept one -- requiring both avoids two
+    failure modes a single-metric check would have: merging two genuinely
+    different local minima that happen to share a similar energy by
+    coincidence, or merging two near-identical geometries whose energy
+    differs only by MACE's own numerical noise.
     """
     kept_indices = []
     kept_ads_positions = []
     kept_energies = []
     for i, (energy, atoms) in enumerate(entries):
         ads_positions = atoms.get_positions()[n_substrate:]
+        symbols = atoms.get_chemical_symbols()[n_substrate:]
         is_duplicate = False
         for other_energy, other_positions in zip(kept_energies, kept_ads_positions):
             if abs(energy - other_energy) >= energy_tol:
                 continue
-            rmsd = np.sqrt(np.mean(np.sum((ads_positions - other_positions) ** 2, axis=1)))
+            rmsd = adsorbate_rmsd(ads_positions, other_positions, symbols,
+                                  cell=atoms.get_cell()[:], pbc=atoms.get_pbc())
             if rmsd < rmsd_tol:
                 is_duplicate = True
                 break

@@ -1,4 +1,7 @@
 #!/bin/bash
+# TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
+timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
+
 
 # --- Setup ---
 # Smoke test for stb-stm (STM Simulator, item 2.11)
@@ -38,6 +41,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -74,6 +87,7 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Basic run: --mode current (default), --label auto-detect, default --iso ---
 echo -e "\n--- Testing a basic constant-current run with the DEFAULT --iso (--label Graphene) ---"
 
+rm -f stb_stm_report*.txt stb_stm_references*.bib
 timeout 60 stb-stm --label Graphene --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Using axis 2" log_basic.txt
@@ -96,25 +110,20 @@ else
 fi
 check_contains "Not written (off by default" log_basic.txt
 
-echo "Testing: no text report without --save-report"
-if [ -e stb_stm_report.txt ]; then
-    echo -e " ... ${RED}FAIL${NC} (stb_stm_report.txt should not have been written)"
-    FAIL=$((FAIL+1))
-else
-    echo -e " ... ${GREEN}OK${NC} (stb_stm_report.txt correctly absent)"
-    PASS=$((PASS+1))
-fi
+echo "Testing: the report is always written"
+check_success stb_stm_report.txt
 
-echo "Testing: references.bib is always written (SIESTA + Tersoff-Hamann)"
-check_success references.bib
-check_contains "Soler2002" references.bib
-check_contains "Garcia2020" references.bib
-check_contains "Tersoff1985" references.bib
+echo "Testing: stb_stm_references.bib is always written (SIESTA + Tersoff-Hamann)"
+check_success stb_stm_references.bib
+check_contains "Soler2002" stb_stm_references.bib
+check_contains "Garcia2020" stb_stm_references.bib
+check_contains "Tersoff1985" stb_stm_references.bib
 
 
 # --- 2b. --save-report / --save-gnuplot ---
 echo -e "\n--- Testing --save-report / --save-gnuplot ---"
 
+rm -f stb_stm_report*.txt stb_stm_references*.bib
 timeout 60 stb-stm --label Graphene --save-report --save-gnuplot --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
 check_success stb_stm_report.txt
@@ -313,7 +322,7 @@ check_contains "z-max" log_help.txt
 check_contains "axis" log_help.txt
 check_contains "geometry-file" log_help.txt
 check_contains "output-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 
@@ -323,19 +332,13 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.11) ---"
 
 echo "Testing: navigate 2.11 -> label Graphene -> mode 1 (current) -> iso left blank (default"
 echo "0.001) -> auto axis -> default output -> no save-report -> save-gnuplot=y -> no view"
-rm -f stm_current.dat stm_current.gplot stb_stm_report.txt
-printf '2.11\nGraphene\n1\n\n\n\nn\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+rm -f stm_current.dat stm_current.gplot stb_stm_report*.txt stb_stm_references*.bib
+printf '2.11\nGraphene\n1\n\n\n\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Iso threshold  : 1.000000e-03" log_menu.txt
 check_success stm_current.dat
 check_success stm_current.gplot
-if [ -e stb_stm_report.txt ]; then
-    echo -e " ... ${RED}FAIL${NC} (stb_stm_report.txt should not have been written -- save-report was 'n')"
-    FAIL=$((FAIL+1))
-else
-    echo -e " ... ${GREEN}OK${NC} (stb_stm_report.txt correctly absent)"
-    PASS=$((PASS+1))
-fi
+check_success stb_stm_report.txt
 
 
 popd > /dev/null

@@ -140,6 +140,7 @@ rm -rf eos_runs
 
 # --- 3. With a template and pseudopotentials: config_extra.fdf ---
 echo -e "\n--- Testing a scan with a calc template (-c) and a pseudopotential bank (-p dojo) ---"
+rm -f stb_eosInputs_report*.txt stb_eosInputs_references*.bib
 stb-eosInputs --file si_cubic.fdf -c calc_tmpl.fdf -p dojo --n-volumes 5 --strain-range 4.0 --no-intro \
     -o eos_tmpl --save-report > log_tmpl.txt 2>&1
 check_exit_code $? 0
@@ -150,8 +151,8 @@ check_success eos_tmpl/vol_0.00/calc.fdf
 check_success eos_tmpl/vol_0.00/config_extra.fdf
 check_success eos_tmpl/vol_0.00/si_cubic.fdf
 check_success eos_tmpl/vol_0.00/Si.psml
-check_success eos_tmpl/stb_eosInputs_report.txt
-check_contains "STB-EOSINPUTS REPORT" eos_tmpl/stb_eosInputs_report.txt
+check_success stb_eosInputs_report.txt
+check_contains "STB-EOSINPUTS REPORT" stb_eosInputs_report.txt
 check_contains "SCF k-grid forced : " log_tmpl.txt
 check_contains "the template defines no k-grid" log_tmpl.txt
 
@@ -286,11 +287,14 @@ fi
 rm -rf eos_custom
 
 
-# --- 10. Physics: refuse a vacuum-padded structure ---
-echo -e "\n--- Testing vacuum-padded (2D) structure rejection ---"
+# --- 10. Physics: a vacuum-padded (2D) structure is scanned by its periodic vectors only ---
+echo -e "\n--- Testing a vacuum-padded (2D) structure: area strain, vacuum axis untouched ---"
 stb-eosInputs --file structure.fdf --no-intro -o eos_2d > log_2d.txt 2>&1
-check_exit_code $? 1
-check_contains "bulk (3D periodic) only" log_2d.txt
+check_exit_code $? 0
+check_contains "Detected        : 2D" log_2d.txt
+check_contains "on the periodic vector(s) a, b only; the vacuum vector(s) c are not touched" log_2d.txt
+check_success eos_2d/eos_scan.json
+check_success eos_2d/vol_5.00/structure.fdf
 
 
 # --- 11. Argument validation ---
@@ -324,7 +328,7 @@ check_contains "stb-eosInputs" log_version.txt
 echo "Testing: --help documents the options"
 stb-eosInputs --help > log_help.txt 2>&1
 for opt in "\-\-file" "\-\-calc" "pseudo-dir" "n-volumes" "strain-range" "relax-positions" "relax-steps" \
-           "\-\-kgrid" "kgrid-density" "output-dir" "vacuum-gap" "save-report"; do
+           "\-\-kgrid" "kgrid-density" "output-dir" "vacuum-gap"; do
     check_contains "$opt" log_help.txt
 done
 

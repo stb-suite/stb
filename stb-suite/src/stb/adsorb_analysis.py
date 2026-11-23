@@ -2,11 +2,12 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -31,8 +32,7 @@ from stb.core.adsorption_sites import (
 )
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
 
-REPORT_FILE = "adsorption_report.txt"
-SITES_REPORT_FILE = "adsorption_sites.txt"
+REPORT_FILE = "stb_adsorbAnalysis_report.txt"
 RANKING_PLOT_FILE = "adsorption_ranking.png"
 GIBBS_LOCAL_META_FILE = "gibbs_local_meta.json"
 _HEIGHT_SUFFIX_RE = re.compile(r'_h[\d.]+$')
@@ -63,40 +63,11 @@ _LOCAL_DISPLACEMENTS = [(0, 1.0), (0, -1.0), (1, 1.0), (1, -1.0), (2, 1.0), (2, 
 
 
 def read_site_table(sites_root):
-    """Parses the '# SITE_TABLE' section stb-adsorb writes in
-    sites/adsorption_sites.txt into {label: (adsorbate_name, height)} --
-    the source of truth for which adsorbate/<name>/ reference and which
-    height each site belongs to (more robust than re-guessing either from
-    the folder name by regex). Returns None if the report (or its table
-    section) isn't found, so the caller can fall back to treating every
-    site as belonging to a single, unnamed adsorbate -- e.g. a report the
-    user deleted, or folders assembled by hand rather than via stb-adsorb.
-    """
-    report_path = os.path.join(sites_root, SITES_REPORT_FILE)
-    if not os.path.isfile(report_path):
-        return None
-    table = {}
-    in_table = False
-    with open(report_path) as f:
-        for line in f:
-            if line.startswith("# SITE_TABLE"):
-                in_table = True
-                continue
-            if not in_table:
-                continue
-            if line.startswith("#") or not line.strip():
-                continue
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-            label, ads_name = parts[0], parts[1]
-            try:
-                height = float(parts[2])
-            except ValueError:
-                continue
-            table[label] = (ads_name, height)
-    return table or None
-
+    """Which adsorbate and height each site folder holds: see
+    core.adsorption_sites.read_site_table (sites/adsorption_sites.json, or the text table of
+    older runs). Kept here because stb-adsorbBsse/stb-adsorbGibbs import it from this module."""
+    from stb.core.adsorption_sites import read_site_table as _read
+    return _read(sites_root)
 
 def read_bsse_energy(bsse_dir, file_name):
     """Reads the two ghost-fragment reference energies stb-adsorb's
@@ -307,6 +278,54 @@ def fragment_min_distance(fdf_structure, slab_labels, adsorbate_labels):
     return float(dm[np.ix_(slab_idx, ads_idx)].min())
 
 
+ORIENTATION_FLAT_DEG = 30.0      # tilt below this: lying flat; above 90 - this: upright; else tilted
+
+
+def adsorbate_orientation(fdf_structure, ads_labels):
+    """Orientation of the adsorbate in `fdf_structure` relative to the surface (normal = a x b, the slab's
+    vacuum axis is c in every stb-adsorb site). Atoms are selected by their '_ads' labels and gathered by
+    minimum image around the first one, so a molecule cut by a cell face is whole. Returns a dict or None:
+      kind    'atom' / 'linear' / 'planar' (3+ atoms, plane from the smallest principal axis)
+      tilt    linear: angle of the molecular axis from the SURFACE PLANE (0 = lying, 90 = upright);
+              planar: angle between the molecular plane and the surface plane (0 = lying flat, 90 = upright)
+      cls     'lying' / 'tilted' / 'upright' (ORIENTATION_FLAT_DEG), None for one atom
+      lowest  element of the adsorbate atom closest to the surface ('level' when dz < 0.2 Ang)
+      extent  vertical extent of the adsorbate along the normal, Ang
+    """
+    lattice = np.asarray(fdf_structure.lattice, dtype=float)
+    pmg = structure_io.to_pymatgen(structure_io.strip_fragment_labels(fdf_structure))
+    labels = [label for label, _ in fdf_structure.atoms]
+    idx = [i for i, label in enumerate(labels) if label in ads_labels]
+    if not idx:
+        return None
+    frac = np.array([pmg[i].frac_coords for i in idx])
+    frac = frac[0] + (frac - frac[0] - np.round(frac - frac[0]))
+    xyz = frac @ lattice
+    normal = np.cross(lattice[0], lattice[1])
+    normal /= np.linalg.norm(normal)
+    heights = xyz @ normal
+    extent = float(heights.max() - heights.min())
+    # which atom faces the surface is noise for a molecule lying level (dz below 0.2 Ang)
+    lowest = pmg[idx[int(np.argmin(heights))]].specie.symbol if extent >= 0.2 or len(idx) == 1 else "level"
+    out = {"kind": "atom", "tilt": None, "cls": None, "lowest": lowest, "extent": extent}
+    if len(idx) < 2:
+        return out
+    centred = xyz - xyz.mean(axis=0)
+    _, sv, vt = np.linalg.svd(centred)
+    if len(idx) == 2 or sv[1] < 0.1 * sv[0]:
+        axis = vt[0]
+        tilt = float(np.degrees(np.arcsin(min(1.0, abs(axis @ normal)))))
+        out["kind"] = "linear"
+    else:
+        plane_normal = vt[2]
+        tilt = float(np.degrees(np.arccos(min(1.0, abs(plane_normal @ normal)))))
+        out["kind"] = "planar"
+    out["tilt"] = tilt
+    out["cls"] = ("lying" if tilt < ORIENTATION_FLAT_DEG else
+                  "upright" if tilt > 90.0 - ORIENTATION_FLAT_DEG else "tilted")
+    return out
+
+
 def force_system_label(calc_text, label):
     """Substitutes/appends SystemLabel -- every derived Gibbs-prep folder
     needs its own distinct label so SIESTA's per-run files (.FA, .DM, ...)
@@ -464,6 +483,79 @@ def write_local_hessian_folders(gibbs_dir, base_structure, local_indices, displa
         }, f)
 
 
+def report_orientations(rows, f_out):
+    """[2b] orientation table: the adsorbate's orientation at the start and at the end of each site's
+    relaxation, and the lowest E_ads reached in each final orientation. A molecule can end in another
+    minimum than the one it started in -- in a 12-point H2O/Ag(111) series 4 relaxations ended lying flat,
+    ~0.1 eV more bound, and the report did not show it."""
+    have = [r for r in rows if r.orientation and r.orientation[0] and r.orientation[0]["kind"] != "atom"]
+    if not have:
+        return
+    def fmt(o):
+        if o is None:
+            return "--"
+        low = "level" if o["lowest"] == "level" else f"{o['lowest']} lowest"
+        return f"{o['cls']} {o['tilt']:.0f} deg, {low}, dz {o['extent']:.2f}"
+    table, changed = [], []
+    for r in have:
+        ini, fin = r.orientation
+        moved = (fin is not None and (fin["cls"] != ini["cls"] or fin["lowest"] != ini["lowest"]
+                                       or abs(fin["tilt"] - ini["tilt"]) > ORIENTATION_FLAT_DEG))
+        if moved:
+            changed.append(r.label)
+        table.append(([r.label, ini["kind"], fmt(ini), fmt(fin) if fin is not None else "(not relaxed yet)",
+                       "CHANGED" if moved else ("--" if fin is None else "same"), f"{r.e_ads:.4f}"],
+                      'yellow' if moved else None))
+    print_dual("", f_out)
+    print_dual(f"Adsorbate orientation (tilt from the surface plane: 0 = lying, 90 = upright; 'lying' below "
+               f"{ORIENTATION_FLAT_DEG:g} deg, 'upright' above {90 - ORIENTATION_FLAT_DEG:g}; dz = vertical extent; "
+               "planar molecules by their plane, linear ones by their axis):", f_out)
+    print_table(["Site", "Shape", "Initial", "Final (relaxed)", "Orientation", "E_ads(eV)"], table, f_out)
+    finals = {}
+    for r in have:
+        fin = r.orientation[1]
+        if fin is not None:
+            key = (r.ads_name, fin["cls"], fin["lowest"])
+            lab, e, n = finals.get(key, (r.label, r.e_ads, 0))
+            if r.e_ads < e:
+                lab, e = r.label, r.e_ads
+            finals[key] = (lab, e, n + 1)
+    if finals:
+        print_dual("Final orientations found (lowest E_ads in each):", f_out)
+        print_table(["Adsorbate", "Final orientation", "Lowest atom", "Sites", "Best site", "Lowest E_ads(eV)"],
+                    [([name or '(default)', cls, low, str(n), lab, f"{e:.4f}"], None)
+                     for (name, cls, low), (lab, e, n) in sorted(finals.items(), key=lambda kv: kv[1][1])], f_out)
+    if changed:
+        print_dual(color_text(
+            f"[WARNING] {len(changed)} of {len(have)} site(s) ended in another orientation than they started in: "
+            f"{', '.join(changed)}. Sites that differ in E_ads may differ in orientation, not in site; compare "
+            "within one final orientation, and start the other sites from it if it is the lower one.",
+            'yellow'), f_out)
+    by_ads = {}
+    for (name, cls, low) in finals:
+        by_ads.setdefault(name, set()).add((cls, low))
+    if any(len(v) > 1 for v in by_ads.values()):
+        print_dual(color_text(
+            "[NOTE] More than one final orientation was reached; the ranking in [3] mixes them.", 'cyan'), f_out)
+
+
+def relaxation_stopped_early(out_path):
+    """None when the log is a single point, an unfinished run or a relaxation
+    SIESTA itself called relaxed; else a short text ('146 of 300 moves, max|F|
+    0.31 eV/Ang vs tolerance 0.02') for a relaxation that ended unrelaxed."""
+    from stb.status import parse_log, n_moves
+    info = parse_log(out_path)
+    if not info or info["relaxed"] is not False:
+        return None
+    force = next((st["max_force"] for st in reversed(info["steps"]) if st["max_force"] is not None), None)
+    text = f"{n_moves(info['steps'])} of {info['max_moves']:g} moves" if info["max_moves"] else "step limit"
+    if force is not None:
+        text += f", max|F| {force:.3f} eV/Ang"
+        if info["force_tol"] is not None:
+            text += f" vs tolerance {info['force_tol']:g}"
+    return text
+
+
 class SiteRow:
     """One analyzed site: label, which adsorbate/height it belongs to, and
     its computed energies. A plain attribute-holder (not a dataclass, to
@@ -473,8 +565,9 @@ class SiteRow:
     """
     def __init__(self, label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
                  dipole=None, spin_moment=None, bond_change=None,
-                 e_bsse_slab=None, e_bsse_ads=None):
+                 e_bsse_slab=None, e_bsse_ads=None, orientation=None):
         self.label = label
+        self.orientation = orientation    # (initial, final) adsorbate_orientation dicts, or None
         self.ads_name = ads_name
         self.height = height
         self.e_site = e_site
@@ -507,8 +600,10 @@ def main():
                               "the common case).")
     parser.add_argument("--file", type=str, default="calc.out",
                          help="SIESTA output filename inside each folder (default: calc.out).")
-    parser.add_argument("-o", "--output", type=str, default="adsorption_curve.dat",
-                         help="Output data file name (default: adsorption_curve.dat).")
+    parser.add_argument("-o", "--output", type=str, default=None,
+                         help="Output data file name (default: <--dir>/adsorption_curve.dat). "
+                              "The gnuplot script, the height curves and adsorption_ranking.png "
+                              "go into the same folder.")
     parser.add_argument("--apply", type=str, default=None, metavar="STRUCTURE_FDF",
                          help="Copy the most stable site's structure.fdf (BSSE-corrected ranking "
                              "when available for every site, else the uncorrected ranking) to "
@@ -520,7 +615,7 @@ def main():
                               "equilibrium geometry rather than the true adsorption minimum. "
                               "Advisory only, never blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                          help="Open clean_slab, every adsorbate reference and every site "
                               "(preferring each folder's own <label>.XV -- the actual relaxed "
@@ -570,7 +665,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("Analyze an adsorption-energy study:", 'bold'))
@@ -589,7 +684,11 @@ def main():
     library_warnings = []  # collected via capture_library_noise, reported in [5]
     view_frames = []  # (label, ase.Atoms), only populated when --view is given
 
-    report_path = REPORT_FILE if args.save_report else None
+    # Every file of this stage goes into --dir (as stb-adsorbGibbs does), so two analyses
+    # of different runs called from the same folder never overwrite each other.
+    report_path = new_report_path("adsorbAnalysis")
+    if args.output is None:
+        args.output = os.path.join(args.dir, "adsorption_curve.dat")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== ADSORPTION ENERGY REPORT =====', 'magenta')}", f_out)
@@ -600,9 +699,9 @@ def main():
     print_dual(f"Output file: {args.file}", f_out)
     if site_table is None:
         print_dual(color_text(
-            "[NOTE] No 'sites/adsorption_sites.txt' site table found -- treating every site "
-            "as a single unnamed adsorbate (pre-multi-adsorbate/height-sweep layout, or the "
-            "report was deleted).", 'yellow'), f_out)
+            "[NOTE] No site table (sites/adsorption_sites.json, or the adsorption_sites.txt of "
+            "older runs) found -- treating every site as a single unnamed adsorbate (folders "
+            "assembled by hand, or the table was deleted).", 'yellow'), f_out)
 
     print_section('[1] REFERENCE ENERGIES', f_out)
     e_clean_slab = siesta_log.get_free_energy(clean_slab_out)
@@ -613,6 +712,10 @@ def main():
         sys.exit(1)
     print_dual(f"E_clean_slab : {e_clean_slab:.6f} eV  ({clean_slab_out})", f_out)
     report_quality_diagnostics("clean_slab", clean_slab_out, args.force_tolerance, f_out)
+    unconverged_relax = []
+    stopped = relaxation_stopped_early(clean_slab_out)
+    if stopped:
+        unconverged_relax.append(("clean_slab", stopped))
     clean_slab_fdf_path = os.path.join(args.dir, "clean_slab", "structure.fdf")
     if args.view:
         with capture_library_noise(library_warnings, "sisl/ASE (clean_slab geometry)"):
@@ -701,6 +804,9 @@ def main():
             continue
         e_ads = e_site - e_clean_slab - adsorbate_energies[ads_name]
         scf_ok, max_force = check_scf_and_force(out_path)
+        stopped = relaxation_stopped_early(out_path)
+        if stopped:
+            unconverged_relax.append((label, stopped))
         if not scf_ok:
             scf_warn_labels.append(label)
         if max_force is not None and max_force > args.force_tolerance:
@@ -740,22 +846,28 @@ def main():
         dipole_mag = float(np.linalg.norm(dipole_vec)) if dipole_vec is not None else None
         spin_moment = siesta_log.get_spin_moment(out_path)
         bond_change = None
+        orientation = None
         try:
             initial_fdf = structure_io.read_fdf(os.path.join(site_dir, "structure.fdf"))
             frag_labels = resolve_fragment_labels(site_dir, initial_fdf)
             if frag_labels is not None:
                 slab_labels, ads_labels = frag_labels
                 dist_initial = fragment_min_distance(initial_fdf, slab_labels, ads_labels)
-                relaxed_fdf, _used_relaxed = structure_io.read_relaxed_or_input(site_dir)
+                relaxed_fdf, used_relaxed = structure_io.read_relaxed_or_input(site_dir)
                 dist_relaxed = fragment_min_distance(relaxed_fdf, slab_labels, ads_labels)
                 if dist_initial is not None and dist_relaxed is not None:
                     bond_change = dist_relaxed - dist_initial
+                try:
+                    orientation = (adsorbate_orientation(initial_fdf, ads_labels),
+                                   adsorbate_orientation(relaxed_fdf, ads_labels) if used_relaxed else None)
+                except Exception:
+                    orientation = None
         except Exception:
             bond_change = None
 
         rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
                              dipole=dipole_mag, spin_moment=spin_moment, bond_change=bond_change,
-                             e_bsse_slab=e_bsse_slab, e_bsse_ads=e_bsse_ads))
+                             e_bsse_slab=e_bsse_slab, e_bsse_ads=e_bsse_ads, orientation=orientation))
         row_color = 'yellow' if (not scf_ok or label in force_warn_labels) else None
         table_rows.append(([
             label, ads_name or '--', "--" if height is None else f"{height:.2f}",
@@ -811,6 +923,14 @@ def main():
         print_dual(color_text(
             f"[WARNING] {len(scf_warn_labels)} site(s) never confirmed SCF convergence -- "
             f"their E_ads may be unreliable: {', '.join(scf_warn_labels)}.", 'yellow'), f_out)
+    if unconverged_relax:
+        print_dual(color_text(
+            f"[WARNING] {len(unconverged_relax)} run(s) ended at the step limit WITHOUT reaching the force "
+            "tolerance (SIESTA wrote 'Final (unrelaxed)' coordinates; the job still ends normally, with "
+            "0_NORMAL_EXIT): " + "; ".join(f"{lab} ({txt})" for lab, txt in unconverged_relax)
+            + ". Their energies are not those of a minimum. Restart them from the .XV (MD.UseSaveXV true), "
+            "or regenerate with stb-adsorb --optimizer fire|broyden / --max-displ 0.05 / a looser "
+            "--force-tol if the surface is flat.", 'yellow'), f_out)
     if force_warn_labels:
         print_dual(color_text(
             f"[WARNING] {len(force_warn_labels)} site(s) have residual force above "
@@ -844,6 +964,7 @@ def main():
         f"{r.bond_change:+.4f}" if r.bond_change is not None else "--",
     ], None) for r in rows]
     print_table(["Site", "Dipole(a.u.)", "MagMoment(muB)", "Bond Change(Ang)"], diag_rows, f_out)
+    report_orientations(rows, f_out)
 
     bsse_breakdown_rows = [r for r in rows if r.e_ads_bsse is not None]
     if bsse_breakdown_rows:
@@ -1052,8 +1173,12 @@ def main():
                     site_config_extra += SPIN_POLARIZED_BLOCK
                 if dipole_site:
                     site_config_extra += DIPOLE_CORRECTION_BLOCK
+                    from stb.core import citations as _citations
+                    _citations.cite(_citations.DIPOLE_BENGTSSON)
                 if vdw_site:
                     site_config_extra += VDW_CORRECTION_BLOCK
+                    from stb.core import citations as _citations
+                    _citations.cite(_citations.DFT_D3)
 
                 # read_original_calc_text (not a plain open().read()) strips the
                 # site's own '%include config_extra.fdf' prefix -- this stage writes
@@ -1088,6 +1213,8 @@ def main():
                 ads_config_extra = GIBBS_SINGLE_POINT_BLOCK + SPIN_POLARIZED_BLOCK
                 if vdw_ads:
                     ads_config_extra += VDW_CORRECTION_BLOCK
+                    from stb.core import citations as _citations
+                    _citations.cite(_citations.DFT_D3)
 
                 # Selected by fragment LABEL (ads_labels, from the site's own
                 # fragment_manifest.json), not an atom-count/index cut -- a
@@ -1180,8 +1307,12 @@ def main():
                         clean_config_extra += SPIN_POLARIZED_BLOCK
                     if dipole_clean:
                         clean_config_extra += DIPOLE_CORRECTION_BLOCK
+                        from stb.core import citations as _citations
+                        _citations.cite(_citations.DIPOLE_BENGTSSON)
                     if vdw_clean:
                         clean_config_extra += VDW_CORRECTION_BLOCK
+                        from stb.core import citations as _citations
+                        _citations.cite(_citations.DFT_D3)
                     clean_folders, _clean_yaml = write_displacement_folders(
                         gibbs_clean_dir, clean_phonon, clean_supercells, "structure.fdf",
                         os.path.join(clean_slab_dir, "calc.fdf"), [])

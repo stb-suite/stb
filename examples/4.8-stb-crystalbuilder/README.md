@@ -117,7 +117,7 @@ it's the first thing you see even if you never read `--help`.
 
 - **A numbered report** (`[0] RUN METADATA` … `[10] SUMMARY & FILES` —
   `[4]` only with `--reduce`, `[5]` only with `--ml-relax`) printed to the
-  console and, with `--save-report`, also saved to
+  console and saved to
   `stb_crystalbuilder_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density, plus the dimensionality note above — run once on the raw
@@ -133,7 +133,7 @@ it's the first thing you see even if you never read `--help`.
   symmetry. No `Layer Group` row here (unlike `stb-unitcell`/`stb-slab`):
   every space group this tool builds from is inherently 3D-periodic, so
   it would always read `N/A (not 2D-periodic)`, never real information.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_crystalbuilder_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: requested vs.
   detected space group, lattice, sites, reduce mode and MACE convergence
@@ -151,8 +151,8 @@ it's the first thing you see even if you never read `--help`.
   inherently 3D-periodic, `--ml-relax-cell` here always relaxes all 3
   cell axes — no vacuum-axis masking is needed (unlike `stb-unitcell`,
   which must handle arbitrary user-supplied slabs/wires too).
-- **`--save-report`** — also persist the full report to
-  `stb_crystalbuilder_report.txt`.
+- **Report** — always saved to `stb_crystalbuilder_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the raw built structure and the final structure in
   ASE's interactive 3D viewer (`ase-gui`), as pageable frames. Needs a
   local display. Never exercised by `example_4.8.sh` itself.
@@ -163,7 +163,7 @@ it's the first thing you see even if you never read `--help`.
   fixtures are needed — unlike most `2-structures` tools,
   `stb-crystalbuilder` builds everything from `--spacegroup`/`--site`
   flags, not from a structure file.
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_crystalbuilder_references.bib`, and
   `stb_crystalbuilder_report.txt`.
 
 ## Running the walkthrough
@@ -185,7 +185,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `reduce-to-primitive/`          | `--reduce primitive` on magnetite: 56 -> 14 atoms, one command         |
 | `out-of-range-error/`           | The fixed bug: `--spacegroup 255` now gives a clear error message      |
 | `ml-relax/`                     | MACE pre-relaxation of the built + reduced structure                   |
-| `full-report/`                  | `--save-report` + the validation checklist + `references.bib`          |
+| `full-report/`                  | the report + the validation checklist + `stb_crystalbuilder_references.bib`          |
 | `bulk-graphite-to-slab/`        | **The 3D-only answer, proven**: bulk graphite -> a real 2D slab via `stb-slab` |
 
 ## Try it yourself
@@ -221,7 +221,6 @@ stb-slab -f graphite.fdf --hkl 0 0 1 --min-slab-size 3.0 --min-vacuum-size 15
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `crystal.fdf`)                        |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the built and final structures in ASE's interactive viewer        |
 
 ## What's next

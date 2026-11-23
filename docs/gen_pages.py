@@ -17,6 +17,9 @@ Reference (`reference/`), one page per console command:
   see `dump_help.py`), its menu code, and a link to its guide.
 - `reference/stb-suite.md` is the map of every menu code.
 
+Changelog (`changelog/`): one page per version of `stb-suite/CHANGELOG.md`, the one
+file where a version's changes are written, plus an overview table of the versions.
+
 If STB_DOCS_EXTRA_ROOTS names extension repositories (see stbdocs/catalog.py), their
 menu entries, examples and commands are added to all of the above, and those pages
 have no "edit this page" link (the source is not in this repository).
@@ -54,6 +57,8 @@ log = logging.getLogger("mkdocs.plugins.gen_pages")
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
+CHANGELOG = ROOT / "stb-suite" / "CHANGELOG.md"
+CHANGELOG_HISTORY_MARKER = "# Per-tool history before the versions were unified"
 
 REPO_URL = "https://github.com/stb-suite/stb"
 BRANCH = "main"
@@ -178,6 +183,80 @@ def write_nav(dest, lines):
         f.writelines(line + "\n" for line in lines)
 
 
+# --- Changelog -------------------------------------------------------------------
+
+VERSION_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) \(([^)]*)\)(?:\s*--\s*(.*))?$", re.M)
+CHANGE_KINDS = ("Fixed", "Changed", "Added", "Known issues")
+
+
+def changelog_versions(text):
+    """(intro, [{version, when, tagline, body}]) from CHANGELOG.md, newest first, without the per-tool history."""
+    cut = text.find(CHANGELOG_HISTORY_MARKER)
+    if cut == -1:
+        log.warning("stb-suite/CHANGELOG.md: %r not found; publishing every version heading", CHANGELOG_HISTORY_MARKER)
+    else:
+        text = text[:cut]
+    heads = list(VERSION_HEADING.finditer(text))
+    intro = text[:heads[0].start()] if heads else text
+    intro = re.sub(r"\A# Changelog\s*", "", intro).strip()
+    versions = []
+    for i, m in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        versions.append({"version": m.group(1), "when": m.group(2).strip(), "tagline": (m.group(3) or "").strip(),
+                         "body": text[m.end():end].strip()})
+    return intro, versions
+
+
+def count_entries(body):
+    """Top-level entries ('- ' at the start of a line) per subsection (Fixed, Changed, Added, Known
+    issues, ...); a version without subsections counts all its entries under 'Changes'."""
+    sections = re.split(r"^### (.+?)\s*$", body, flags=re.M)      # every subsection (Known issues too)
+    if len(sections) == 1:
+        return {"Changes": len(re.findall(r"^- ", body, re.M))}
+    return {sections[k]: len(re.findall(r"^- ", sections[k + 1], re.M)) for k in range(1, len(sections), 2)}
+
+
+def changelog_version_page(v):
+    when = "not released yet -- the content of the `dev` branch" if v["when"] == "unreleased" else f"released {v['when']}"
+    title = f"# {v['version']}" + (f" -- {v['tagline']}" if v["tagline"] else "")
+    counts = count_entries(v["body"])
+    summary = ", ".join(f"{n} {kind.lower()}" for kind, n in counts.items())
+    body = re.sub(r"^### ", "## ", v["body"], flags=re.M)        # Fixed/Changed/Added become the page's sections
+    return (f"{title}\n\nVersion {v['version']}, {when}. {summary[0].upper() + summary[1:]} "
+            f"(the entries of `stb-suite/CHANGELOG.md` for this version).\n\n{body}\n")
+
+
+def changelog_index(intro, versions):
+    lines = ["# Changelog", "", intro, "",
+             "| Version | Released | " + " | ".join(CHANGE_KINDS) + " |",
+             "|---|---|" + "---|" * len(CHANGE_KINDS)]
+    for v in versions:
+        counts = count_entries(v["body"])
+        cells = [str(counts.get(kind, "")) for kind in CHANGE_KINDS]
+        if "Changes" in counts:
+            cells = [f"{counts['Changes']} entries"] + [""] * (len(CHANGE_KINDS) - 1)
+        when = "unreleased (`dev`)" if v["when"] == "unreleased" else v["when"]
+        lines.append(f"| [{v['version']}]({v['version']}.md) | {when} | " + " | ".join(cells) + " |")
+    lines += ["", "## Before 2.0.0", "",
+              "Until 2.0.0 every tool carried a version of its own. That history, and the table of "
+              "old and new menu codes, are in "
+              f"[`stb-suite/CHANGELOG.md`]({REPO_URL}/blob/{BRANCH}/stb-suite/CHANGELOG.md).", ""]
+    return "\n".join(lines)
+
+
+def write_changelog_pages():
+    intro, versions = changelog_versions(CHANGELOG.read_text(encoding="utf-8"))
+    write_page("changelog/index.md", github_markdown_to_python_markdown(changelog_index(intro, versions)),
+               "stb-suite/CHANGELOG.md")
+    nav = ["* [Overview](index.md)"]
+    for v in versions:
+        write_page(f"changelog/{v['version']}.md", github_markdown_to_python_markdown(changelog_version_page(v)),
+                   "stb-suite/CHANGELOG.md")
+        label = v["version"] + (" (unreleased)" if v["when"] == "unreleased" else "")
+        nav.append(f"* [{label}]({v['version']}.md)")
+    write_nav("changelog/SUMMARY.md", nav)
+
+
 def copy_page_images(text, page):
     """Publishes the images a guide README shows. A README written for GitHub
     refers to its pictures relative to its own folder (`figures/plot.png`); on
@@ -274,6 +353,9 @@ def stub_page(page, helps):
 
 
 def stubs_section(stubs, overview_dest):
+    """The overview's table of stub pages; nothing at all when every item has a guide."""
+    if not stubs:
+        return ""
     lines = ["## Tools without a hands-on guide yet", "",
              "Every tool has a page. These have only a short generated summary and the command "
              "reference, until a guide is written.", "",
@@ -440,6 +522,10 @@ def main():
         for page in in_cat:
             nav.append(f"    * [{page.label}]({posixpath.relpath(page.dest, 'guides')})")
     write_nav("guides/SUMMARY.md", nav)
+
+    # Changelog: one page per version of stb-suite/CHANGELOG.md (up to the per-tool
+    # history that precedes the unified version, kept in the repository) and an overview.
+    write_changelog_pages()
 
     # Reference
     write_page("reference/index.md", reference_index(menu, scripts, helps, in_menu), "docs/gen_pages.py")

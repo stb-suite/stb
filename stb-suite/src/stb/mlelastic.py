@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -26,6 +26,7 @@ only counted (same report style as stb-mlmd/stb-mlphonons).
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -840,8 +841,8 @@ def report_clamped(res, f_out, warn):
     big = [r[0][0] for r in rows if r[0][3] != "nan %" and abs(float(r[0][3].rstrip(" %"))) > 5]
     if big:
         print_dual(f"Internal relaxation matters for {', '.join(big)}: a cell with 2+ atoms per primitive cell whose "
-                   "atoms are not all at inversion centres (diamond, zincblende, wurtzite...) relaxes inside the cell "
-                   "under shear.", f_out)
+                   "atoms are not all at inversion centres (diamond, zincblende, wurtzite, graphene, hBN...) relaxes "
+                   "inside the cell under strain.", f_out)
 
 
 def report_sound(res, f_out, warn):
@@ -938,7 +939,7 @@ def build_parser():
         epilog="Example usage:\n"
                "  stb-mlelastic --file structure.fdf\n"
                "  stb-mlelastic --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json "
-               "--device cuda --steps 7 --save-report\n"
+               "--device cuda --steps 7\n"
                "  stb-mlelastic --file structure.fdf --check-convergence --convergence-strains 0.25 0.5 1 2 3\n",
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--file", required=True, help="Input structure (.fdf).")
@@ -1007,7 +1008,7 @@ def build_parser():
                         help="Write the data behind the report: stress_strain.dat (every strained cell's stress), "
                              "elastic_tensor.dat (C, its projection, S), directional.dat. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlelastic {VERSION}")
     return parser
@@ -1034,10 +1035,10 @@ def main():
         show_intro(["Siesta ToolBox Suite - ML Elastic Constants",
                     "Stress-strain stiffness tensor, driven entirely by a MACE potential",
                     f"Version {VERSION} | University of Brasilia - 2026",
-                    "Developed by Dr. Carlos M. O. Bastos"])
+                    "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlelastic")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()
@@ -1172,7 +1173,7 @@ def main():
         if report_path:
             print_dual(f"Report            : {report_path}", f_out)
         not_asked = [f for f, on in (("--save-gnuplot", args.save_gnuplot), ("--save-data", args.save_data),
-                                     ("--show", args.show), ("--save-report", args.save_report)) if not on]
+                                     ("--show", args.show)) if not on]
         if not_asked:
             print_dual(f"Also available    : {' '.join(not_asked)}", f_out)
         print_dual(f"Wall time         : {time.monotonic() - t_start:.1f} s", f_out)
@@ -1344,12 +1345,21 @@ def main():
     elif dimensionality == "2d":
         sections("IN-PLANE MODULI")
         report_2d(main_res, f_out)
+        if "C_clamped" in main_res:
+            sections("INTERNAL RELAXATION (clamped vs relaxed ions)")
+            report_clamped(main_res, f_out, warn)
         p = os.path.join(args.output_dir, "inplane_youngs.png")
         figures.append(plot_inplane(series, unit, p))
         files.append(("In-plane E(θ) plot", p))
     elif dimensionality == "3d":
         warn(f"No data for {', '.join(main_res['missing'])}: the 3D moduli, sound velocities and directional properties "
              "need all six directions and are skipped.")
+        if "C_clamped" in main_res:
+            sections("INTERNAL RELAXATION (clamped vs relaxed ions)")
+            report_clamped(main_res, f_out, warn)
+    elif "C_clamped" in main_res:
+        sections("INTERNAL RELAXATION (clamped vs relaxed ions)")
+        report_clamped(main_res, f_out, warn)
 
     if len(series) > 1:
         sections("FINE-TUNED vs FOUNDATION")

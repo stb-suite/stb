@@ -1,5 +1,6 @@
 output/
 calc.fdf
-references.bib
+stb_*_references*.bib
 *.psml
 *.psf
+/stb_*_report*.txt

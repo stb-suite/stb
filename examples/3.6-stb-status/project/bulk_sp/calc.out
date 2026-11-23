@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/examples/3.6-stb-status/project/bulk_sp
+* Directory : /path/to/stb/examples/3.6-stb-status/project/bulk_sp
 * Running on 4 nodes in parallel.
 >> Start of run:  30-OCT-2026  20:42:00
 

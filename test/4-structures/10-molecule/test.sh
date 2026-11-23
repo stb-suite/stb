@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-molecule (Reference Molecule Builder, item 4.10)
@@ -139,7 +142,7 @@ check_contains "vacuum" log_help.txt
 echo -e "\n--- Testing the standardized report (point-group symmetry, --save-report, provenance header) ---"
 
 echo "Testing: --save-report writes the full symmetry report to file"
-rm -f stb_molecule_report.txt
+rm -f stb_molecule_report*.txt stb_molecule_references*.bib
 stb-molecule --name H2O --save-report -o report_test.fdf --no-intro > log_save_report.txt 2>&1
 check_success stb_molecule_report.txt
 check_contains "\[5\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_molecule_report.txt
@@ -150,6 +153,7 @@ echo "Testing: provenance header written into the output .fdf"
 check_contains "# Reference molecule built by stb-molecule from ASE's G2 database." report_test.fdf
 check_contains "# Point group: C2v." report_test.fdf
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --ml-relax pre-relaxes the molecule's geometry with MACE-MP-0 (positions only)"
 stb-molecule --name H2O --ml-relax -o ml_relaxed.fdf --no-intro > log_ml_relax.txt 2>&1
 check_exit_code $? 0
@@ -157,6 +161,9 @@ check_contains "\[3\] ML PRE-RELAXATION (MACE)" log_ml_relax.txt
 check_contains "Cell relaxation : n/a (isolated molecule, positions only)" log_ml_relax.txt
 check_success ml_relaxed.fdf
 check_contains "ML pre-relaxed with" ml_relaxed.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: --custom-model rejected without --ml-relax (with a valid model + card pair)"
 python3 - <<'EOF'

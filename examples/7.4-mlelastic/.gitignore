@@ -1,3 +1,4 @@
 output/
 reference_run/
 siesta_run/
+/stb_*_report*.txt

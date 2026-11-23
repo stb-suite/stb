@@ -69,7 +69,7 @@ bias window itself is baked into the file; stb-stm cannot change it after
 the fact, only image whatever window you (or whoever ran the calculation)
 chose.
 
-Every run prints a numbered [0]...[5] report. --save-report persists it;
+Every run prints a numbered [0]...[5] report. It is always saved;
 --save-gnuplot writes stm_<mode>.dat/.gplot (off by default -- this tool
 used to write both unconditionally); --view shows a matplotlib preview
 (this tool previously had none at all).
@@ -190,31 +190,24 @@ done
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[5] report to the console.
---save-report additionally persists it to stb_stm_report.txt, and
---save-gnuplot writes stm_<mode>.dat/stm_<mode>.gplot -- both off by
-default, so a plain run only ever writes references.bib:
+It is always saved to stb_stm_report.txt; --save-gnuplot writes stm_<mode>.dat/stm_<mode>.gplot -- both off by
+default, so a plain run only ever writes stb_stm_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp siesta.LDOS siesta.XV "$OUT/full-report/"
 echo
-echo "\$ stb-stm --file siesta.LDOS --geometry-file siesta.XV --no-intro   # default: no report, no data/gnuplot"
+echo "\$ stb-stm --file siesta.LDOS --geometry-file siesta.XV --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-stm --file siesta.LDOS --geometry-file siesta.XV \
-    --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "^siesta\|console"
-echo "(no stm_*.dat/.gplot, no stb_stm_report.txt -- only references.bib)"
-echo
-echo "\$ stb-stm --file siesta.LDOS --geometry-file siesta.XV --save-report --save-gnuplot --no-intro"
-(cd "$OUT/full-report" && stb-stm --file siesta.LDOS --geometry-file siesta.XV \
-    --save-report --save-gnuplot --no-intro > console_saved.log 2>&1)
+    --save-gnuplot --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_stm_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_stm_report.txt"
 echo
-echo "references.bib -- SIESTA + Tersoff-Hamann (the STM simulation method itself):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_stm_references.bib -- SIESTA + Tersoff-Hamann (the STM simulation method itself):"
+grep "^@" "$OUT/full-report/stb_stm_references.bib"
 echo
 echo "The .gplot script's own filenames are bare basenames -- no --output-dir"
 echo "prefix (a real, verified bug fixed while rewriting this tool):"
@@ -243,8 +236,8 @@ EOF
 TMP="$(mktemp -d)"
 cp siesta.LDOS siesta.XV "$TMP/"
 echo
-echo "\$ printf '2.11\\nsiesta\\n1\\n\\n\\n\\nn\\nn\\nn\\n' | stb-suite     # mode 1 = current, defaults"
-(cd "$TMP" && printf '2.11\nsiesta\n1\n\n\n\nn\nn\nn\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.11\\nsiesta\\n1\\n\\n\\n\\nn\\nn\\n' | stb-suite     # mode 1 = current, defaults"
+(cd "$TMP" && printf '2.11\nsiesta\n1\n\n\n\nn\nn\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Corrugation" "$OUT/constant-current/console.log")
 MENU_LINE=$(grep "Corrugation" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -263,9 +256,9 @@ cat <<EOF
 Four self-contained folders were generated under output/:
   constant-current/   constant-height/   iso-sensitivity/   full-report/
 
-Each has references.bib; the --save-gnuplot runs additionally have
+Each has stb_stm_references.bib; the --save-gnuplot runs additionally have
 stm_<mode>.dat/stm_<mode>.gplot, and full-report/ has stb_stm_report.txt
-(only from its --save-report run).
+(every run writes one).
 
 Recap of what this walkthrough covered:
   - the Tersoff-Hamann approximation (tunneling current proportional to
@@ -286,8 +279,8 @@ Recap of what this walkthrough covered:
   - --iso sensitivity: too high leaves points as NaN (a real, reported
     warning), the default gives full coverage and sensible corrugation,
     very low shifts the whole image farther into vacuum
-  - the numbered [0]...[5] report, --save-report, --save-gnuplot,
-    references.bib (now including the Tersoff-Hamann citation)
+  - the numbered [0]...[5] report (always saved), --save-gnuplot,
+    stb_stm_references.bib (now including the Tersoff-Hamann citation)
   - the fixed .gplot path bug: set output/splot always use bare
     basenames now, verified with a real gnuplot run from inside the
     output folder
@@ -295,6 +288,6 @@ Recap of what this walkthrough covered:
 
 As a next step, try on your own with a real SIESTA slab calculation
 (remember %block LocalDensityOfStates in the fdf):
-  stb-stm --label my_slab --save-report --save-gnuplot
+  stb-stm --label my_slab --save-gnuplot
   stb-stm --label my_slab --mode height --z 4.0 --view
 EOF

@@ -54,8 +54,7 @@ otherwise-flat vacuum region is the classic symptom of a missing
 SlabDipoleCorrection.
 
 Every run prints a numbered [0]...[7] report, the same style every newer
-tool in this suite uses. --save-report additionally persists that report
-to stb_workfunction_report.txt -- off by default. --save-gnuplot writes
+tool in this suite uses. The report is always saved to stb_workfunction_report.txt in the current folder. --save-gnuplot writes
 workfunction_data.dat + an annotated workfunction.gplot -- also off by
 default now (this tool used to write both files UNCONDITIONALLY on every
 run; that's no longer the case). --view shows a matplotlib preview,
@@ -108,31 +107,24 @@ grep "^set label\|^plot" "$OUT/save-gnuplot/workfunction.gplot"
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report (off by default)"
+echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[7] report to the console.
---save-report additionally persists it to stb_workfunction_report.txt --
-off by default, so a plain run only ever writes references.bib, no text
+It is always saved to stb_workfunction_report.txt in the current folder, so a plain run only ever writes stb_workfunction_references.bib, no text
 report file (and no data/gnuplot files either, without --save-gnuplot):
 EOF
 mkdir -p "$OUT/full-report"
 cp calc.out siesta.VT siesta.XV "$OUT/full-report/"
 echo
-echo "\$ stb-workfunction --label siesta --file calc.out --no-intro   # default: no report, no data/gnuplot"
+echo "\$ stb-workfunction --label siesta --file calc.out --no-intro"
 (cd "$OUT/full-report" && stb-workfunction --label siesta --file calc.out \
-    --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "^calc.out$\|^siesta.VT$\|^siesta.XV$\|console"
-echo "(no workfunction_data.dat/.gplot, no stb_workfunction_report.txt -- only references.bib)"
-echo
-echo "\$ stb-workfunction --label siesta --file calc.out --save-report --no-intro"
-(cd "$OUT/full-report" && stb-workfunction --label siesta --file calc.out \
-    --save-report --no-intro > console_saved.log 2>&1)
+    --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_workfunction_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_workfunction_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-workfunction run analyzes a finished SIESTA calculation):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_workfunction_references.bib -- SIESTA (every stb-workfunction run analyzes a finished SIESTA calculation):"
+grep "^@" "$OUT/full-report/stb_workfunction_references.bib"
 pause
 
 echo "=================================================================="
@@ -151,8 +143,8 @@ EOF
 TMP="$(mktemp -d)"
 cp calc.out siesta.VT siesta.XV "$TMP/"
 echo
-echo "\$ printf '2.7\\nsiesta\\n\\ncalc.out\\n\\nn\\nn\\nn\\n' | stb-suite     # default grid, --file calc.out, auto axis, no save-report/gnuplot/view"
-(cd "$TMP" && printf '2.7\nsiesta\n\ncalc.out\n\nn\nn\nn\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.7\\nsiesta\\n\\ncalc.out\\n\\nn\\nn\\n' | stb-suite     # default grid, --file calc.out, auto axis, no gnuplot/view"
+(cd "$TMP" && printf '2.7\nsiesta\n\ncalc.out\n\nn\nn\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Work Function |" "$OUT/basic/console.log" | head -1)
 MENU_LINE=$(grep "Work Function |" "$TMP/session.log" | head -1)
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -183,9 +175,9 @@ cat <<EOF
 Three self-contained folders were generated under output/:
   basic/          save-gnuplot/   full-report/
 
-Each has references.bib; save-gnuplot/ additionally has
+Each has stb_workfunction_references.bib; save-gnuplot/ additionally has
 workfunction_data.dat/workfunction.gplot, and full-report/ has
-stb_workfunction_report.txt (only from its --save-report run).
+stb_workfunction_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - the work function Phi = E_vacuum - E_F, and why it needs a real
@@ -195,9 +187,9 @@ Recap of what this walkthrough covered:
     vacuum gap
   - --save-gnuplot's annotated gnuplot script vs. the default (nothing
     written unconditionally anymore)
-  - the numbered [0]...[7] report, --save-report, references.bib
+  - the numbered [0]...[7] report (always saved), stb_workfunction_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own right after a slab calculation:
-  stb-workfunction --label my_slab --save-report --save-gnuplot
+  stb-workfunction --label my_slab --save-gnuplot
 EOF

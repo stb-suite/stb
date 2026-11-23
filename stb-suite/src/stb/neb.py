@@ -2,14 +2,16 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
+import glob
 import time
 import argparse
 from collections import Counter
@@ -20,13 +22,72 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core import neb_manifest
 from stb.core import adsorption_sites
+from stb.core import fdf_directives
 from stb.core.cli import (color_text, show_intro, print_dual, print_section,
                            print_progress_line, finish_progress_line, capture_library_noise)
-from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo, pseudo_source_name
 from stb.core.deps import require_mace
 
-REPORT_FILE = "neb_setup.txt"
+REPORT_FILE = "stb_neb_report.txt"       # the report, in the current folder (new_report_path)
+SETUP_FILE = "neb_setup.json"            # <run>/neb_run/: what stb-nebCycle/stb-nebAnalysis read
+LEGACY_SETUP_FILE = "neb_setup.txt"      # the report-with-tables older versions wrote there
 RUN_SUBDIR = "neb_run"
+
+
+def write_neb_setup(run_root, mode, ml_neb_used, rows, total_path_length, fixed_atoms):
+    """<run_root>/neb_setup.json: the band as stb-neb wrote it -- mode, whether MACE shaped it,
+    one entry per image (label, index, reaction coordinate in Ang, folder), the total path
+    length and the fixed atoms (0-based)."""
+    import json
+    data = {"schema": "stb_neb_setup_v1", "mode": int(mode), "ml_neb_used": bool(ml_neb_used),
+            "total_path_length_ang": round(float(total_path_length), 6),
+            "fixed_atoms": [int(i) for i in fixed_atoms],
+            "images": [{"label": label, "index": int(index), "reaction_coord": round(float(rc), 6), "dir": d}
+                       for label, index, rc, d in rows]}
+    with open(os.path.join(run_root, SETUP_FILE), "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def read_neb_setup(run_root):
+    """The neb_setup.json of a run folder as a dict, or the same fields read from the
+    neb_setup.txt of older versions ('# MODE:', '# ML_NEB_USED:', '# IMAGE_TABLE', 'Total path
+    length'); None when the folder has neither."""
+    import json
+    import re as _re
+    path = os.path.join(run_root, SETUP_FILE)
+    if os.path.isfile(path):
+        with open(path) as f:
+            return json.load(f)
+    path = os.path.join(run_root, LEGACY_SETUP_FILE)
+    if not os.path.isfile(path):
+        return None
+    data = {"schema": "legacy neb_setup.txt", "mode": 1, "ml_neb_used": False, "images": [],
+            "total_path_length_ang": None, "fixed_atoms": []}
+    in_table = False
+    with open(path) as f:
+        for line in f:
+            if line.startswith("# MODE:"):
+                try:
+                    data["mode"] = int(line.split(":", 1)[1].strip())
+                except ValueError:
+                    pass
+            elif line.startswith("# ML_NEB_USED:"):
+                data["ml_neb_used"] = line.split(":", 1)[1].strip().lower() == "yes"
+            elif line.startswith("# IMAGE_TABLE"):
+                in_table = True
+            elif in_table and line.strip() and not line.startswith("#"):
+                parts = line.split()
+                try:
+                    data["images"].append({"label": parts[0], "index": int(parts[1]),
+                                           "reaction_coord": float(parts[2]),
+                                           "dir": parts[3] if len(parts) > 3 else ""})
+                except (IndexError, ValueError):
+                    continue
+            else:
+                m = _re.search(r"Total path length\s*:\s*([0-9.]+)\s*Ang", line)
+                if m and data["total_path_length_ang"] is None:
+                    data["total_path_length_ang"] = float(m.group(1))
+    return data
 
 MODE_DESCRIPTIONS = {
     1: "100% MACE-MP-0, then 1 single-point SIESTA per image",
@@ -132,7 +193,17 @@ def wrap_into_cell(pmg_structure):
     of a static point once both were wrapped first.
     """
     return Structure(pmg_structure.lattice, pmg_structure.species,
-                      pmg_structure.frac_coords % 1.0, coords_are_cartesian=False)
+                      pmg_structure.frac_coords % 1.0, coords_are_cartesian=False,
+                      labels=[site.label for site in pmg_structure])
+
+
+def min_image_displacements(start, end):
+    """Cartesian displacement of every atom from `start` to `end` (same lattice, same atom
+    order) through the nearest periodic image: an atom at frac y 0.002 in one and 0.9987
+    in the other moved 0.03 Ang, not a whole cell."""
+    delta = end.frac_coords - start.frac_coords
+    delta -= np.round(delta)
+    return delta @ start.lattice.matrix
 
 
 def require_lattice_match(initial_pmg, final_pmg, f_out, tol=1e-3):
@@ -178,7 +249,27 @@ def require_lattice_match(initial_pmg, final_pmg, f_out, tol=1e-3):
                       coords_are_cartesian=False)
 
 
-def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort_tol=0.5):
+def nearest_image_final(initial_pmg, final_pmg_matched, autosort_tol=0.5):
+    """(final endpoint, number of atoms moved): the final endpoint with its atoms in
+    --initial's order (pymatgen's distance matching at `autosort_tol`, none at 0) and every
+    atom moved by whole lattice vectors to the periodic image nearest to its initial
+    position. Raises ValueError when the matching fails."""
+    if autosort_tol:
+        final_sorted = initial_pmg.interpolate(final_pmg_matched, nimages=1, interpolate_lattices=False,
+                                               pbc=False, autosort_tol=autosort_tol)[-1]
+    else:
+        final_sorted = final_pmg_matched
+    shift = np.round(final_sorted.frac_coords - initial_pmg.frac_coords)
+    moved = int(np.any(shift != 0, axis=1).sum())
+    if moved:
+        final_sorted = Structure(final_sorted.lattice, final_sorted.species,
+                                 final_sorted.frac_coords - shift, coords_are_cartesian=False,
+                                 labels=[site.label for site in final_sorted])
+    return final_sorted, moved
+
+
+def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort_tol=0.5,
+                              return_crossed=False):
     """Linearly interpolates `n_images` pymatgen Structures (endpoints
     included) between the two endpoints. `autosort_tol` fixes atom-index
     correspondence between the two endpoint .fdf files (a classic NEB
@@ -204,13 +295,21 @@ def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort
     represent the same physical position via different (unwrapped)
     conventions would otherwise interpolate a spuriously huge path instead
     of a near-zero-length one.
+
+    Wrapping both into [0, 1) is not enough by itself: an atom relaxed across a cell face
+    (frac 0.002 in one endpoint, 0.9987 in the other) would then cross the whole cell
+    (8.8 Ang instead of 0.03 Ang for a top-layer Ag atom). So, AFTER the atoms are matched,
+    every atom of the final endpoint is moved to the periodic image nearest to its initial
+    position (nearest_image_final) and only then interpolated literally. With
+    `return_crossed`, returns (images, number of atoms so moved).
     """
-    return initial_pmg.interpolate(final_pmg_matched, nimages=n_images - 1,
-                                    interpolate_lattices=False, pbc=False,
-                                    autosort_tol=autosort_tol)
+    final_near, crossed = nearest_image_final(initial_pmg, final_pmg_matched, autosort_tol)
+    images = initial_pmg.interpolate(final_near, nimages=n_images - 1,
+                                     interpolate_lattices=False, pbc=False, autosort_tol=0)
+    return (images, crossed) if return_crossed else images
 
 
-def idpp_refine_images(pmg_images, fmax=0.1, steps=100):
+def idpp_refine_images(pmg_images, fmax=0.1, steps=100, fixed_atoms=None):
     """Refines the interior images of `pmg_images` (endpoints untouched)
     with ASE's Image Dependent Pair Potential method -- a purely
     classical/geometric smoothing (no MACE/chemistry needed) that usually
@@ -226,7 +325,13 @@ def idpp_refine_images(pmg_images, fmax=0.1, steps=100):
     the working directory with idpp.traj/idpp.log.
     """
     from ase.mep.neb import NEB, idpp_interpolate
+    from stb.core import citations
+    citations.cite(citations.IDPP)
     ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
+    if fixed_atoms:
+        from ase.constraints import FixAtoms
+        for atoms in ase_images:
+            atoms.set_constraint(FixAtoms(indices=fixed_atoms))
     neb = NEB(ase_images, method="improvedtangent")
     idpp_interpolate(neb, traj=None, log=None, fmax=fmax, steps=steps)
     return [AseAtomsAdaptor.get_structure(a) for a in ase_images]
@@ -242,7 +347,8 @@ def cumulative_reaction_coordinates(pmg_images):
     """
     coords = [0.0]
     for prev, curr in zip(pmg_images[:-1], pmg_images[1:]):
-        delta = curr.cart_coords - prev.cart_coords
+        # Nearest periodic image: images written to disk are wrapped into the cell.
+        delta = min_image_displacements(prev, curr)
         coords.append(coords[-1] + float(np.linalg.norm(delta)))
     return coords
 
@@ -262,12 +368,8 @@ def compute_frozen_indices(pmg_images, threshold=0.3):
     "substrate"), the returned list is simply empty and nothing is frozen.
     """
     initial, final = pmg_images[0], pmg_images[-1]
-    frozen = []
-    for i in range(len(initial)):
-        delta = final.cart_coords[i] - initial.cart_coords[i]
-        if np.linalg.norm(delta) < threshold:
-            frozen.append(i)
-    return frozen
+    moved = np.linalg.norm(min_image_displacements(initial, final), axis=1)
+    return [i for i, d in enumerate(moved) if d < threshold]
 
 
 def check_endpoint_displacement(initial_pmg, final_pmg, f_out, threshold, idpp_used):
@@ -289,7 +391,7 @@ def check_endpoint_displacement(initial_pmg, final_pmg, f_out, threshold, idpp_u
     -PROVEN correct). `threshold` reuses --ml-freeze-threshold's own
     already-documented default (0.3 Ang) rather than inventing a new flag.
     """
-    deltas = np.linalg.norm(final_pmg.cart_coords - initial_pmg.cart_coords, axis=1)
+    deltas = np.linalg.norm(min_image_displacements(initial_pmg, final_pmg), axis=1)
     n_moved = int(np.sum(deltas > threshold))
     print_dual(f"  Endpoint displacement: max {deltas.max():.3f} Ang, mean {deltas.mean():.3f} Ang, "
                 f"{n_moved}/{len(deltas)} atom(s) moved > {threshold} Ang.", f_out)
@@ -337,6 +439,82 @@ def check_path_quality(pmg_images, reaction_coords, f_out, manifest_proven=False
                 f"({step:.4f} Ang vs. a mean step of {mean_step:.4f} Ang) -- {hint}.", 'yellow'), f_out)
 
 
+ANGLE_MARGIN_DEG = 15.0     # an interior image's bond angle beyond the endpoints' range by more than this
+BOND_MARGIN = 0.15          # ... or a bond length beyond it by more than this fraction
+
+
+def intramolecular_outliers(pmg_images, bond_scale=1.2):
+    """Bonds and bond angles among non-metal atoms (a molecule, an adsorbate) bonded in BOTH endpoints
+    (d < bond_scale x the sum of covalent radii) whose value in an interior image lies outside the range
+    the two endpoints span by more than BOND_MARGIN (relative) or ANGLE_MARGIN_DEG. A loosely converged
+    IDPP leaves a molecule distorted in the middle of the band (H-O-H 169 deg on H2O/Ag(111)), and a
+    plain linear interpolation of a rotating molecule shortens its bonds; both cost the NEB many steps
+    or give a wrong first barrier. Returns [(image, 'O1-H2' or 'H2-O1-H3', value, lo, hi, unit)]."""
+    from pymatgen.core.periodic_table import Element
+    from pymatgen.analysis.molecule_structure_comparator import CovalentRadius
+    ends = (pmg_images[0], pmg_images[-1])
+    radii = CovalentRadius.radius
+    nonmetal = [i for i, site in enumerate(ends[0])
+                if not Element(site.specie.symbol).is_metal and not Element(site.specie.symbol).is_metalloid]
+    if len(nonmetal) < 2:
+        return []
+
+    def bonded(st):
+        out = {i: set() for i in nonmetal}
+        for a_i, i in enumerate(nonmetal):
+            for j in nonmetal[a_i + 1:]:
+                cut = bond_scale * (radii[st[i].specie.symbol] + radii[st[j].specie.symbol])
+                if st.get_distance(i, j) < cut:
+                    out[i].add(j)
+                    out[j].add(i)
+        return out
+
+    b0, b1 = bonded(ends[0]), bonded(ends[1])
+    common = {i: b0[i] & b1[i] for i in nonmetal}
+    pairs = [(i, j) for i in nonmetal for j in sorted(common[i]) if i < j]
+    triples = [(a, center, c) for center in nonmetal
+               for a in sorted(common[center]) for c in sorted(common[center]) if a < c]
+    sym = lambda st, i: f"{st[i].specie.symbol}{i + 1}"
+    outliers = []
+    for i, j in pairs:
+        lo, hi = sorted(st.get_distance(i, j) for st in ends)
+        for k, st in enumerate(pmg_images[1:-1], start=1):
+            d = st.get_distance(i, j)
+            if d < lo * (1 - BOND_MARGIN) or d > hi * (1 + BOND_MARGIN):
+                outliers.append((k, f"{sym(st, i)}-{sym(st, j)}", d, lo, hi, "Ang"))
+    for a, center, c in triples:
+        lo, hi = sorted(st.get_angle(a, center, c) for st in ends)
+        for k, st in enumerate(pmg_images[1:-1], start=1):
+            with np.errstate(invalid="ignore"):
+                angle = st.get_angle(a, center, c)
+            # NaN: two atoms on top of each other in that image -- a distortion too.
+            if not np.isfinite(angle) or angle < lo - ANGLE_MARGIN_DEG or angle > hi + ANGLE_MARGIN_DEG:
+                outliers.append((k, f"{sym(st, a)}-{sym(st, center)}-{sym(st, c)}", angle, lo, hi, "deg"))
+    return outliers
+
+
+def report_intramolecular_outliers(outliers, idpp_used, warn_line):
+    """One warning (through `warn_line(text)`) summarizing intramolecular_outliers."""
+    if not outliers:
+        return
+
+    def badness(o):
+        value, lo, hi, unit = o[2], o[3], o[4], o[5]
+        if not np.isfinite(value):
+            return np.inf
+        excess = max(lo - value, value - hi)
+        return excess / max(lo, 1e-6) if unit == "Ang" else excess / 90.0
+
+    k, name, value, lo, hi, unit = max(outliers, key=badness)
+    images = sorted({o[0] for o in outliers})
+    warn_line(f"a molecule is distorted along the starting path: {len(outliers)} bond length(s)/angle(s) leave the "
+              f"range of the endpoints by more than {BOND_MARGIN:.0%} / {ANGLE_MARGIN_DEG:g} deg in image(s) "
+              + ", ".join(f"{i:02d}" for i in images)
+              + f" (worst: {name} = {value:.2f} {unit} in image {k:02d}, endpoints {lo:.2f}-{hi:.2f} {unit})"
+              + (": converge IDPP further (e.g. --idpp-fmax 0.01 --idpp-steps 2000)." if idpp_used else
+                 ": use --idpp (with --idpp-fmax 0.01 --idpp-steps 2000 for a molecular adsorbate)."))
+
+
 def write_path_trajectory(pmg_images, out_path):
     """Writes every image (in order) to a single multi-frame extended-XYZ
     file, viewable directly in VESTA/OVITO/ASE-GUI -- a structural
@@ -350,7 +528,8 @@ def write_path_trajectory(pmg_images, out_path):
 
 
 def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
-                        force_spin=False, force_vdw=False, force_dipole=False):
+                        force_spin=False, force_vdw=False, force_dipole=False,
+                        fixed_atoms=None, config_extra_text=None, atom_labels=None):
     """Writes structure.fdf + config_extra.fdf + calc.fdf + copied
     pseudopotentials for one image_NN/ folder. config_extra.fdf is always
     written and always %include'd at the very top of calc.fdf
@@ -368,24 +547,147 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
     -- caught the calc.fdf template's OWN MD.TypeOfRun/MD.Steps
     always losing to config_extra.fdf's (first-occurrence-wins), so
     `calc_text` here is the caller's ORIGINAL --calc text, unmodified.
+
+    `fixed_atoms` (0-based) adds a Geometry.Constraints block: SIESTA then writes the
+    constrained forces to <label>.FAC, and stb-nebCycle holds the same atoms fixed.
+    `config_extra_text`, when given, is written verbatim instead (stb-nebCycle passes the
+    previous cycle's file, so every forced directive and constraint carries over).
+    `atom_labels` (one species label per atom, in order) keeps labels such as 'Ag_slab'
+    through an ASE round trip; each species' pseudopotential is copied from `pp_path`
+    under its label ('Ag_slab.psml' when the folder has it, else 'Ag.psml').
     """
     os.makedirs(out_dir, exist_ok=True)
+    pmg_structure = wrap_into_cell(pmg_structure)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta,
-                                                coord_format="fractional")
+                                                coord_format="fractional", labels=atom_labels)
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
     with open(os.path.join(out_dir, adsorption_sites.CONFIG_EXTRA_FILE), "w") as f:
-        f.write(adsorption_sites.SINGLE_POINT_BLOCK)
-        if force_spin:
-            f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
-        if force_dipole:
-            f.write(adsorption_sites.DIPOLE_CORRECTION_BLOCK)
-        if force_vdw:
-            f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+        if config_extra_text is not None:
+            f.write(config_extra_text)
+        else:
+            f.write(adsorption_sites.SINGLE_POINT_BLOCK)
+            if force_spin:
+                f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
+            if force_dipole:
+                f.write(adsorption_sites.DIPOLE_CORRECTION_BLOCK)
+                from stb.core import citations as _citations
+                _citations.cite(_citations.DIPOLE_BENGTSSON)
+            if force_vdw:
+                f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+                from stb.core import citations as _citations
+                _citations.cite(_citations.DFT_D3)
+            if fixed_atoms:
+                f.write(adsorption_sites.fixed_atoms_block(
+                    fixed_atoms, f"{len(fixed_atoms)} atom(s) held fixed along the NEB band"))
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, adsorption_sites.CONFIG_EXTRA_FILE))
-    symbols = {site.specie.symbol for site in pmg_structure}
-    for sym in sorted(symbols):
-        copy_pseudo(pp_path, sym, out_dir)
+    for label in fdf_structure.species:
+        copy_pseudo(pp_path, pseudo_source_name(pp_path, label, fdf_structure.species_meta),
+                    out_dir, dest_label=label)
+
+
+def parse_atom_spec(spec, n_atoms):
+    """0-based indices of a 1-based atom list such as '1-32,40,45-48'. Raises ValueError."""
+    indices = set()
+    for part in spec.replace(" ", "").split(","):
+        if not part:
+            continue
+        a, _, b = part.partition("-")
+        first, last = int(a), int(b or a)
+        if first < 1 or last > n_atoms or first > last:
+            raise ValueError(f"atom range '{part}' outside 1..{n_atoms}")
+        indices.update(range(first - 1, last))
+    if not indices:
+        raise ValueError(f"no atom in '{spec}'")
+    return sorted(indices)
+
+
+def _endpoint_folder_texts(path):
+    """(folder, [config_extra.fdf text, calc.fdf text]) of the run folder an endpoint
+    comes from (the folder itself, or the folder of the .fdf file given), in SIESTA's
+    reading order (config_extra.fdf is %include'd on top of calc.fdf). Missing files are
+    left out."""
+    folder = path if os.path.isdir(path) else (os.path.dirname(os.path.abspath(path)))
+    texts = []
+    for name in (adsorption_sites.CONFIG_EXTRA_FILE, "calc.fdf"):
+        candidate = os.path.join(folder, name)
+        if os.path.isfile(candidate) and os.path.abspath(candidate) != os.path.abspath(path):
+            with open(candidate, errors="ignore") as f:
+                texts.append(f.read())
+    return folder, texts
+
+
+def resolve_fixed_atoms(fix_atoms_arg, initial_path, final_path, calc_text, n_atoms):
+    """Atoms the NEB holds fixed. Returns (indices or [], source description, notes)
+    where notes are (level, text) pairs for the report. Order: --fix-atoms; else the
+    Geometry.Constraints the endpoints were relaxed with (config_extra.fdf/calc.fdf next
+    to --initial/--final -- stb-adsorb --fix-layers writes it there); else the --calc
+    template's own block. Raises ValueError on a bad --fix-atoms."""
+    notes = []
+    if fix_atoms_arg is not None:
+        if fix_atoms_arg.strip().lower() == "none":
+            return [], "none (--fix-atoms none)", notes
+        return parse_atom_spec(fix_atoms_arg, n_atoms), "--fix-atoms", notes
+    found = []
+    for role, path in (("initial", initial_path), ("final", final_path)):
+        folder, texts = _endpoint_folder_texts(path)
+        indices, unsupported = fdf_directives.constrained_atoms(*texts, n_atoms=n_atoms)
+        if unsupported:
+            notes.append(("warning", f"{role} endpoint folder '{folder}': Geometry.Constraints line(s) "
+                                     f"not applied by the NEB: {'; '.join(unsupported)}"))
+        if indices is not None:
+            found.append((role, folder, indices))
+    if found:
+        sets = {tuple(ind) for _r, _f, ind in found}
+        union = sorted(set().union(*[set(ind) for _r, _f, ind in found]))
+        if len(sets) > 1:
+            notes.append(("warning", "the two endpoints were relaxed with different fixed atoms ("
+                          + ", ".join(f"{r}: {len(ind)}" for r, _f, ind in found)
+                          + f"); the NEB holds the union ({len(union)} atoms) fixed. Pass --fix-atoms "
+                          "to choose."))
+        elif len(found) == 1:
+            notes.append(("note", f"only the {found[0][0]} endpoint's folder has a Geometry.Constraints "
+                                  "block; it is used for the whole band."))
+        source = "Geometry.Constraints of the endpoint folder(s): " + ", ".join(
+            dict.fromkeys(f for _r, f, _i in found))
+        return union, source, notes
+    indices, unsupported = fdf_directives.constrained_atoms(calc_text, n_atoms=n_atoms)
+    if unsupported:
+        notes.append(("warning", "--calc Geometry.Constraints line(s) not applied by the NEB: "
+                                 + "; ".join(unsupported)))
+    if indices:
+        return indices, "Geometry.Constraints of --calc", notes
+    return [], "none (no --fix-atoms, no Geometry.Constraints next to the endpoints or in --calc)", notes
+
+
+def _compact_ranges(indices):
+    """'1-32, 40' for 0-based indices [0..31, 39]."""
+    numbers = sorted(i + 1 for i in indices)
+    runs, start, previous = [], numbers[0], numbers[0]
+    for n in numbers[1:]:
+        if n != previous + 1:
+            runs.append((start, previous))
+            start = n
+        previous = n
+    runs.append((start, previous))
+    return ", ".join(f"{a}-{b}" if b > a else f"{a}" for a, b in runs)
+
+
+def check_fixed_atoms_agree(initial_pmg, final_pmg, fixed, f_out, tol=0.01):
+    """Warns when an atom the NEB holds fixed is not at the same place in both endpoints:
+    the band would then hold it at its interpolated position, which neither endpoint has."""
+    if not fixed:
+        return
+    delta = final_pmg.frac_coords[fixed] - initial_pmg.frac_coords[fixed]
+    delta -= np.round(delta)
+    moved = np.linalg.norm(delta @ initial_pmg.lattice.matrix, axis=1)
+    bad = [(fixed[i] + 1, d) for i, d in enumerate(moved) if d > tol]
+    if bad:
+        listing = ", ".join(f"{a} ({d:.3f} Ang)" for a, d in bad[:8]) + (" ..." if len(bad) > 8 else "")
+        print_dual(color_text(
+            f"  [WARNING] {len(bad)} fixed atom(s) are not at the same position in the two endpoints "
+            f"(> {tol} Ang): {listing}. They stay at their interpolated positions along the band; "
+            "check that both endpoints were relaxed with the same constraints.", 'yellow'), f_out)
 
 
 def write_ml_preview_plot(ase_images, out_path):
@@ -400,13 +702,7 @@ def write_ml_preview_plot(ase_images, out_path):
 
 
 def _print_library_warnings_section(f_out, library_warnings):
-    """Prints the shared '[9] LIBRARY WARNINGS' section. Must be called
-    BEFORE any '# MODE:'/'# IMAGE_TABLE' marker lines are written to f_out
-    -- stb-nebAnalysis's read_image_table() treats every non-blank,
-    non-'#'-prefixed line after '# IMAGE_TABLE' as a table row, with no
-    explicit end-of-table marker, so the marker block must stay the very
-    last thing written to the report file.
-    """
+    """Prints the shared '[9] LIBRARY WARNINGS' section."""
     print_section('[9] LIBRARY WARNINGS', f_out)
     if library_warnings:
         print_dual(color_text(
@@ -469,15 +765,28 @@ def _print_cluster_submission_snippet(f_out, mode, run_root, max_cycles, siesta_
 
     snippet = f"""
 {conda_block}
+# PARALLEL=yes runs every image of a cycle at the same time: the job needs (number of images
+# that run) x {mpirun_np or 'the cores of one SIESTA run'} cores, and each SIESTA must get its own
+# cores (srun --exclusive, or a host file per image). PARALLEL=no runs them one at a time.
+PARALLEL=yes
+finished() {{ [ -f "$1/calc.out" ] && grep -q "Job completed" "$1/calc.out"; }}
 cd "{run_root}"
 for cyc in $(seq 0 {max_cycles - 1}); do
     cycle=$(printf "%02d" "$cyc")
     cdir="cycle_${{cycle}}"
     [ -d "$cdir" ] || break
     for img in "$cdir"/image_*; do
-        (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out)
+        # The endpoints never move: stb-nebCycle copies them with their results, so only
+        # cycle_00 runs them. A finished image is skipped (also when a job is resubmitted).
+        finished "$img" && continue
+        if [ "$PARALLEL" = yes ]; then
+            (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out) &
+        else
+            (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out)
+        fi
     done
-    stb-nebCycle --dir . --fmax {cycle_fmax} --climb-after {climb_after} --no-intro
+    wait
+    stb-nebCycle --dir . --fmax {cycle_fmax} --climb-after {climb_after} --no-intro || break
     [ -f NEB_CONVERGED ] && {{ echo "NEB converged at cycle $cycle"; break; }}
 done
 """
@@ -534,6 +843,16 @@ def main():
     parser.add_argument("--no-force-dipole", dest="force_dipole", action="store_false",
                          help="Leave --calc's own dipole settings untouched.")
 
+    parser.add_argument("--fix-atoms", type=str, default=None, metavar="LIST",
+                         help="Atoms held fixed along the whole band, 1-based (e.g. '1-32' or "
+                              "'1-16,33'), or 'none'. Default: the Geometry.Constraints the "
+                              "endpoints were relaxed with (config_extra.fdf/calc.fdf next to "
+                              "--initial/--final -- stb-adsorb --fix-layers writes it there), "
+                              "else the --calc template's own block. Written into every image's "
+                              "config_extra.fdf; stb-nebCycle then keeps them fixed (FixAtoms) and "
+                              "reads the constrained forces (<label>.FAC), and the MACE stages "
+                              "(--mode 1/2, --ml-prerelax-endpoints) and --idpp keep them fixed too.")
+
     parser.add_argument("-n", "--n-images", type=int, default=7,
                          help="Total images along the band, endpoints included (default: 7).")
     parser.add_argument("--autosort-tol", type=float, default=0.5,
@@ -553,8 +872,10 @@ def main():
                          help="Refine the interior images with ASE's IDPP method after linear "
                               "interpolation -- a better initial guess than plain linear, no "
                               "MACE needed.")
-    parser.add_argument("--idpp-fmax", type=float, default=0.1)
-    parser.add_argument("--idpp-steps", type=int, default=100)
+    parser.add_argument("--idpp-fmax", type=float, default=0.1,
+                         help="IDPP force convergence (default: 0.1, ASE's own). Loose for a molecular adsorbate: on H2O/Ag(111) it stopped after 7 steps with H-O-H at 169 deg in the middle image (DFT: +1.3 eV, 1.37 eV/Ang there); --idpp-fmax 0.01 --idpp-steps 2000 gave 112.7 deg. The report warns when an bond or angle inside a molecule leaves the endpoints' range.")
+    parser.add_argument("--idpp-steps", type=int, default=100,
+                         help="IDPP maximum steps (default: 100). See --idpp-fmax.")
 
     parser.add_argument("--mode", type=int, choices=[1, 2, 3], default=2,
                          help="How to build the path and what to write (default: 2). A pure "
@@ -628,7 +949,7 @@ def main():
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if args.n_images < 3:
@@ -675,6 +996,16 @@ def main():
     if manifest_pair is not None:
         args.autosort_tol = 0.0
     species_meta = structure_io.species_dict(initial_structure)
+    # Species labels ('Ag_slab', 'O_ads' from stb-adsorb) are kept per atom: the images
+    # follow --initial's atom order, and ASE (MACE, IDPP) drops pymatgen's labels.
+    atom_labels = [label for label, _ in initial_structure.atoms]
+    pseudo_note = ""
+    if not args.pseudo_dir:
+        endpoint_folder = args.initial if os.path.isdir(args.initial) else os.path.dirname(
+            os.path.abspath(args.initial))
+        if glob.glob(os.path.join(endpoint_folder, "*.psml")) + glob.glob(os.path.join(endpoint_folder, "*.psf")):
+            args.pseudo_dir = endpoint_folder
+            pseudo_note = " (no -p: the --initial endpoint's folder, which holds pseudopotentials)"
 
     initial_pmg = structure_io.to_pymatgen(initial_structure)
     final_pmg = structure_io.to_pymatgen(final_structure)
@@ -683,10 +1014,17 @@ def main():
         calc_text = f.read()
     calc_text, include_status, old_include_name = structure_io.fix_structure_include(calc_text)
 
+    try:
+        fixed_atoms, fixed_source, fixed_notes = resolve_fixed_atoms(
+            args.fix_atoms, args.initial, args.final, calc_text, len(initial_structure.atoms))
+    except ValueError as e:
+        print(color_text(f"[ERROR] --fix-atoms: {e}", 'red'))
+        sys.exit(1)
+
     output_root = args.output_dir
     run_root = os.path.join(output_root, RUN_SUBDIR)
     os.makedirs(run_root, exist_ok=True)
-    report_path = os.path.join(run_root, REPORT_FILE)
+    report_path = new_report_path("neb")
 
     run_start = time.monotonic()
     library_warnings = []
@@ -728,7 +1066,17 @@ def main():
                 "  [NOTE] Could not find a '%include ...struct....fdf'-style line in --calc to "
                 "auto-correct -- make sure it '%include structure.fdf' itself so SIESTA picks "
                 "up the generated geometry.", 'yellow'), f_out)
-        print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}", f_out)
+        print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}{pseudo_note}", f_out)
+        print_dual(f"  Fixed atoms       : {len(fixed_atoms)}"
+                    + (f" ({_compact_ranges(fixed_atoms)})" if fixed_atoms else "")
+                    + f" -- {fixed_source}", f_out)
+        for level, text in fixed_notes:
+            print_dual(color_text(f"  [{level.upper()}] {text}",
+                                  'yellow' if level == "warning" else 'cyan'), f_out)
+        print_dual("  Energy            : SIESTA's FreeEng (siesta: FreeEng, the energy the forces are the "
+                    "derivative of with electronic smearing); stb-nebCycle and stb-nebAnalysis use it. "
+                    "It differs from E_KS (siesta: Etot, used by the adsorption workflow) by -T*S of the "
+                    "smearing.", f_out)
         print_dual(f"  Output dir        : {output_root}", f_out)
         print_dual(f"  Run folder        : {run_root} (every generated file/folder lives here)", f_out)
         print_dual(f"  N images          : {args.n_images}", f_out)
@@ -767,6 +1115,9 @@ def main():
             for label, pmg in (("initial", initial_pmg), ("final", final_pmg)):
                 print_dual(f"  Relaxing the {label} endpoint (positions only, MACE-MP-0) ...", f_out)
                 ase_atoms = AseAtomsAdaptor.get_atoms(pmg)
+                if fixed_atoms:
+                    from ase.constraints import FixAtoms
+                    ase_atoms.set_constraint(FixAtoms(indices=fixed_atoms))
 
                 def _on_step(step, energy, max_force, _label=label):
                     print_progress_line(
@@ -797,6 +1148,7 @@ def main():
 
         check_endpoint_displacement(initial_pmg, final_pmg_matched, f_out,
                                      threshold=args.ml_freeze_threshold, idpp_used=args.idpp)
+        check_fixed_atoms_agree(initial_pmg, final_pmg_matched, fixed_atoms, f_out)
 
         if manifest_pair is not None:
             _manifest_i, _manifest_f, pair_ids_match = manifest_pair
@@ -811,9 +1163,11 @@ def main():
                     "double-check these really are the intended endpoint pair).", 'yellow'), f_out)
 
         print_section('[3] PATH INTERPOLATION', f_out)
+        crossed = 0
         try:
-            pmg_images = linear_interpolate_images(initial_pmg, final_pmg_matched, args.n_images,
-                                                    autosort_tol=args.autosort_tol)
+            pmg_images, crossed = linear_interpolate_images(initial_pmg, final_pmg_matched, args.n_images,
+                                                             autosort_tol=args.autosort_tol,
+                                                             return_crossed=True)
         except ValueError as e:
             if args.autosort_tol != 0:
                 # Distance-based matching failed at the requested tolerance. Rather than making
@@ -836,8 +1190,9 @@ def main():
                     "large per-image displacement -- that would be the sign this fallback guessed "
                     "wrong, not this warning alone.", 'yellow'), f_out)
                 try:
-                    pmg_images = linear_interpolate_images(initial_pmg, final_pmg_matched,
-                                                            args.n_images, autosort_tol=0)
+                    pmg_images, crossed = linear_interpolate_images(
+                        initial_pmg, final_pmg_matched, args.n_images, autosort_tol=0,
+                        return_crossed=True)
                 except ValueError:
                     pmg_images = None
             else:
@@ -871,12 +1226,17 @@ def main():
                 sys.exit(1)
         print_dual(f"  [OK] Linear interpolation: {len(pmg_images)} images "
                     f"(image_00 .. image_{len(pmg_images) - 1:02d}).", f_out)
+        print_dual(f"  Periodic images   : {crossed} atom(s) of --final sit across a cell face from their "
+                    "--initial position; each is interpolated through the nearest periodic image, "
+                    "not across the cell" if crossed else
+                    "  Periodic images   : no atom crosses a cell face between the endpoints", f_out)
 
         if args.idpp:
             print_dual(f"  Refining interior images with ASE's IDPP method "
                         f"(fmax={args.idpp_fmax}, max {args.idpp_steps} steps) ...", f_out)
             with capture_library_noise(library_warnings, "IDPP refinement"):
-                pmg_images = idpp_refine_images(pmg_images, fmax=args.idpp_fmax, steps=args.idpp_steps)
+                pmg_images = idpp_refine_images(pmg_images, fmax=args.idpp_fmax, steps=args.idpp_steps,
+                                                fixed_atoms=fixed_atoms)
             print_dual("  [OK] IDPP refinement applied to interior images.", f_out)
 
         ml_neb_used = False
@@ -892,14 +1252,19 @@ def main():
             print_dual(f"  Spring constant k : {args.ml_k} eV/Ang^2", f_out)
             print_dual(f"  Target fmax       : {args.ml_fmax} eV/Ang (max {args.ml_max_steps} steps)", f_out)
             ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
+            frozen_indices = list(fixed_atoms)
             if args.ml_freeze_substrate:
-                frozen_indices = compute_frozen_indices(pmg_images, threshold=args.ml_freeze_threshold)
-                if frozen_indices:
-                    from ase.constraints import FixAtoms
-                    for atoms in ase_images:
-                        atoms.set_constraint(FixAtoms(indices=frozen_indices))
-                print_dual(f"  Freezing {len(frozen_indices)}/{len(ase_images[0])} atom(s) with "
-                            f"< {args.ml_freeze_threshold} Ang displacement between endpoints.", f_out)
+                spectators = compute_frozen_indices(pmg_images, threshold=args.ml_freeze_threshold)
+                frozen_indices = sorted(set(frozen_indices) | set(spectators))
+                print_dual(f"  Freezing {len(frozen_indices)}/{len(ase_images[0])} atom(s): "
+                            f"{len(spectators)} with < {args.ml_freeze_threshold} Ang displacement "
+                            f"between endpoints, {len(fixed_atoms)} fixed along the band.", f_out)
+            elif fixed_atoms:
+                print_dual(f"  Freezing the {len(fixed_atoms)} atom(s) fixed along the band.", f_out)
+            if frozen_indices:
+                from ase.constraints import FixAtoms
+                for atoms in ase_images:
+                    atoms.set_constraint(FixAtoms(indices=frozen_indices))
 
             with capture_library_noise(library_warnings, "MACE calculator setup"):
                 # dispersion=args.force_vdw: same level-of-theory-matching
@@ -949,6 +1314,10 @@ def main():
                     f"(cumulative Cartesian displacement, image_00 to image_{len(pmg_images) - 1:02d})",
                     f_out)
         check_path_quality(pmg_images, reaction_coords, f_out, manifest_proven=(manifest_pair is not None))
+        if not ml_neb_used:
+            report_intramolecular_outliers(
+                intramolecular_outliers(pmg_images), args.idpp,
+                lambda text: print_dual(color_text(f"  [WARNING] {text}", 'yellow'), f_out))
 
         trajectory_path = os.path.join(run_root, "neb_path.xyz")
         write_path_trajectory(pmg_images, trajectory_path)
@@ -963,7 +1332,8 @@ def main():
             image_dir = os.path.join(images_root, label)
             write_image_folder(image_dir, pmg_image, calc_text, species_meta,
                                 args.pseudo_dir, force_spin=args.force_spin,
-                                force_vdw=args.force_vdw, force_dipole=args.force_dipole)
+                                force_vdw=args.force_vdw, force_dipole=args.force_dipole,
+                                fixed_atoms=fixed_atoms, atom_labels=atom_labels)
             print_dual(f"  {color_text('[OK]', 'green')} {image_dir}", f_out)
             report_rows.append((label, i, reaction_coords[i], image_dir))
         print_dual(f"  {len(pmg_images)} image folder(s) written under '{images_root}'.", f_out)
@@ -987,12 +1357,9 @@ def main():
 
         _print_library_warnings_section(f_out, library_warnings)
 
-        f_out.write(f"\n# MODE: {args.mode}\n")
-        f_out.write(f"# ML_NEB_USED: {'yes' if ml_neb_used else 'no'}\n")
-        f_out.write("# IMAGE_TABLE -- parsed by stb-nebAnalysis, do not reorder the columns\n")
-        f_out.write(f"# {'label':<14}{'index':<8}{'reaction_coord':<18}{'dir'}\n")
-        for label, index, reaction_coord, image_dir in report_rows:
-            f_out.write(f"{label:<16}{index:<8}{reaction_coord:<18.6f}{image_dir}\n")
+        write_neb_setup(run_root, args.mode, ml_neb_used, report_rows, reaction_coords[-1], fixed_atoms)
+        print_dual(f"\n  Band record (read by stb-nebCycle/stb-nebAnalysis): "
+                   f"{os.path.join(run_root, SETUP_FILE)}", f_out)
 
     print(f"\n{color_text('Success:', 'green')} {len(pmg_images)} image folder(s) written "
           f"under '{images_root}'.")

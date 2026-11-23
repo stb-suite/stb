@@ -104,8 +104,7 @@ output — `example_4.3.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[7] SUMMARY & FILES` — `[4]`
-  only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_slab_report.txt`.
+  only appears with `--ml-relax`) printed to the console and saved to `stb_slab_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density, each an explicit `[OK]`/`[WARNING]`/`[SKIPPED]` row — run once on
   the bulk input and once per written slab.
@@ -114,9 +113,8 @@ output — `example_4.3.sh` proves this directly at the end.
   bulk structure vs. that slab. The bulk always reports `Layer Group: N/A
   (not 2D-periodic)`; the slab (always genuinely 2D-periodic by
   construction) always gets a real one — see `basic/` below.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
-  `--ml-relax` was used. Merges with whatever `references.bib` is already
-  in the working directory.
+- **`stb_slab_references.bib`** — SIESTA always, plus the MACE papers if
+  `--ml-relax` was used. One file per run, never overwritten; it also lists every library the run loaded.
 - **A provenance header** written into every output `.fdf`: the input file,
   Miller index, termination index (polar/non-polar, symmetric/asymmetric),
   passivation detail if used, and MACE convergence/energy if `--ml-relax`
@@ -143,8 +141,8 @@ output — `example_4.3.sh` proves this directly at the end.
   in-plane cell — the vacuum axis always stays exactly fixed.
   `--model small/medium/large` (default `small`) or `--custom-model PATH`
   picks which MACE potential to use.
-- **`--save-report`** — also persists the full report to
-  `stb_slab_report.txt`.
+- **Report** — always saved to `stb_slab_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the bulk structure and every written slab in ASE's
   interactive 3D viewer (`ase-gui`), as pageable frames. Needs a local
   display. Never exercised by `example_4.3.sh` itself.
@@ -158,7 +156,7 @@ output — `example_4.3.sh` proves this directly at the end.
   lattice, 2-atom basis), conventional 8-atom cubic cell (`a` = 5.64 Å,
   space group Fm-3m No. 225) — ionic, for the polar-surface caveat.
 - `example_4.3.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_slab_references.bib`, and
   `stb_slab_report.txt`.
 
 ## Running the walkthrough
@@ -180,7 +178,7 @@ installed):
 | `polar-caveat/`      | NaCl(100)/(111) both report `Polar: No` through stb-slab — the oxidation-state gotcha, proven live |
 | `passivate/`         | Si(111), `--passivate` — 8/8 dangling bonds genuinely resolved with H  |
 | `ml-relax/`          | Si(111), `--ml-relax` — measured surface relaxation                    |
-| `full-report/`       | `--save-report` + the validation checklist + `references.bib`         |
+| `full-report/`       | the report + the validation checklist + `stb_slab_references.bib`         |
 
 ## Try it yourself
 
@@ -205,6 +203,8 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 | `-f/--file`          | Input bulk structure file, `.fdf` (required)                           |
 | `--hkl H K L`        | Miller index of the surface to cut (required)                          |
 | `--min-slab-size`    | Minimum slab thickness, Å (default `10.0`)                             |
+| `--layers N`         | Number of atomic layers instead of a thickness: layers are removed from the top until N are left, same vacuum (`--min-slab-size` is ignored; not with `--symmetrize`) |
+| `--layer-tol`        | Atoms within this height, Å, are one atomic layer (default `0.1`)      |
 | `--min-vacuum-size`  | Minimum vacuum thickness, Å (default `15.0`)                           |
 | `--lll-reduce`       | LLL-reduce the slab lattice                                            |
 | `--center-slab`      | Center the slab in the vacuum                                          |
@@ -224,7 +224,6 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the bulk structure and every written slab in ASE's interactive viewer |
 
 ## What's next

@@ -133,9 +133,9 @@ B -- interactive stb-suite menu:
 
 Every run always writes a structure-validation section (atom-proximity,
 left-handed-cell, density, space-group checks -- the same ones
-stb-inputfile/stb-fetch already run) and references.bib. A full text report
-(--save-report), the raw convergence trace (--save-data), and an
-interactive before/after 3D view (--view) are all off by default.
+stb-inputfile/stb-fetch already run), stb_mlrelax_references.bib and the full text report
+(stb_mlrelax_report.txt). The raw convergence trace (--save-data) and an
+interactive before/after 3D view (--view) are off by default.
 EOF
 pause
 
@@ -305,7 +305,7 @@ EOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, --save-data, references.bib"
+echo " output/full-report/  --  the report, --save-data, stb_mlrelax_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 Two extra physical quantities show up in [5] BEFORE/AFTER COMPARISON that
@@ -330,17 +330,17 @@ criterion.
 EOF
 mkdir -p "$OUT/full-report"
 cp si_defect.fdf "$OUT/full-report/"
-echo "\$ stb-mlrelax -f si_defect.fdf --save-report --save-data --no-intro"
-(cd "$OUT/full-report" && stb-mlrelax -f si_defect.fdf --save-report --save-data --no-intro > console.log)
+echo "\$ stb-mlrelax -f si_defect.fdf --save-data --no-intro"
+(cd "$OUT/full-report" && stb-mlrelax -f si_defect.fdf --save-data --no-intro > console.log)
 echo
 awk '/\[5\] BEFORE \/ AFTER COMPARISON/,/^$/' "$OUT/full-report/console.log"
 echo
 echo "Report sections written to stb_mlrelax_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_mlrelax_report.txt"
 echo
-echo "references.bib always written -- SIESTA (output is a .fdf) + the MACE"
+echo "stb_mlrelax_references.bib always written -- SIESTA (output is a .fdf) + the MACE"
 echo "architecture/foundation-model papers (this run used the foundation model):"
-grep "^@" "$OUT/full-report/references.bib"
+grep "^@" "$OUT/full-report/stb_mlrelax_references.bib"
 echo
 echo "Convergence trace files:"
 ls "$OUT/full-report/"*.dat "$OUT/full-report/"*.png
@@ -354,8 +354,8 @@ echo "manual entry mode and diffing the energy/displacement lines."
 TMP="$(mktemp -d)"
 cp si_defect.fdf "$TMP/"
 echo
-echo "\$ printf '1.7\\nsi_defect.fdf\\nn\\n\\n\\n\\n\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.7\nsi_defect.fdf\nn\n\n\n\n\n\nn\nn\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.7\\nsi_defect.fdf\\nn\\n\\n\\n\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.7\nsi_defect.fdf\nn\n\n\n\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_LINE=$(grep "^Energy" "$OUT/positions-only/console.log")
 MENU_LINE=$(grep "^Energy" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -375,7 +375,7 @@ Six self-contained folders were generated under output/:
   positions-only/   relax-cell/   bad-structure/
   model-comparison/   optimizer-comparison/   full-report/
 
-Each has references.bib; full-report/ additionally has stb_mlrelax_report.txt
+Each has stb_mlrelax_references.bib; full-report/ additionally has stb_mlrelax_report.txt
 and the *_relax_convergence.dat/.png convergence trace.
 
 Recap of what this walkthrough covered:
@@ -389,7 +389,7 @@ Recap of what this walkthrough covered:
     malformed input, and why the repulsive energy there is so large
   - the small/medium/large speed-vs-accuracy tradeoff, with real numbers
   - space group and stress as extra physical diagnostics in the report
-  - references.bib and --save-report/--save-data
+  - stb_mlrelax_references.bib, the report file and --save-data
   - CLI and the interactive stb-suite menu producing identical results
 
 Not exercised by this script (needs a display): --view opens an interactive

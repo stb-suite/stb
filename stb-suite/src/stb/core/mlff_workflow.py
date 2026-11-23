@@ -115,7 +115,11 @@ def dftd3_block(state):
     """config_extra.fdf text every new folder of this workflow needs for the
     same dispersion as Stage 1's: DFTD3_BLOCK when Stage 1 forced it, else ''
     (a template's own DFTD3 travels with the copied calc.fdf)."""
-    return DFTD3_BLOCK if dftd3_info(state).get("forced") else ""
+    if dftd3_info(state).get("forced"):
+        from stb.core import citations
+        citations.cite(citations.DFT_D3)
+        return DFTD3_BLOCK
+    return ""
 
 
 WORKFLOW_FILE = "mlff_workflow.json"

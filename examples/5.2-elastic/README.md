@@ -2,7 +2,7 @@
 
 This workflow has 2 stages: **Stage 1** (`stb-elasticInputs`, code `5.2.1`)
 applies canonical Voigt strains to a relaxed structure and writes one
-ready-to-run, single-point SIESTA folder per strain value; **Stage 2**
+ready-to-run SIESTA folder per strain value (fixed cell; atoms relaxed or held, `--ions`); **Stage 2**
 (`stb-elasticAnalysis`, code `5.2.2`) reads the finished SIESTA runs back and
 fits the full symmetric stiffness matrix `C_ij`, then checks whether the
 material is even mechanically stable. Together they answer a question
@@ -152,20 +152,40 @@ automatically, whenever `--method stress` is used — reusing the *same*
 applies a canonical Voigt strain (or, for `--method energy`, a pure or
 combined pattern) to the lattice vectors for a range of strain values, and
 writes one ready-to-run folder per value: the deformed structure, a copy of
-`calc.fdf` (with the single-point override added, section 2.2), a new
+`calc.fdf` (with the override added, section 2.2), a new
 `config_extra.fdf`, and any linked pseudopotentials. It also writes ONE
 `reference_structure.fdf` — the *undeformed* structure — at the top of
 `--output-dir` (section 2.4). It does **not** run SIESTA itself — you run
 each folder yourself, then hand the results to Stage 2 (section 3).
 
-Unlike `stb-strain`, there is **no `--relax-mode`**: every generated folder
-is unconditionally forced to a pure single-point SCF (section 2.2) — the
-imposed strain must stay exactly at the sampled geometry for the
-stress/energy fit to be physically meaningful, so there's no "which
-convention do you want the cell to relax under" choice to make in the first
-place.
+Unlike `stb-strain`, there is **no `--relax-mode`**: the cell of every
+generated folder is fixed at the imposed strain (section 2.2), because the
+stress/energy fit needs the response AT that strain.
 
-### 2.2 The single-point-SCF precedence proof, live
+**Clamped or relaxed ions (`--ions`, since 2.1.0).** What the atoms do inside
+the strained cell is a separate choice:
+
+| `--ions` | Each folder runs | Constants |
+|---|---|---|
+| `relaxed` (default) | CG relaxation at fixed cell (`MD.Steps` = `--relax-steps`, 200; `MD.MaxForceTol` = `--fmax`, 0.01 eV/Ang) | relaxed-ion: what an experiment measures and what `stb-mlelastic` reports |
+| `clamped` | a single point (what 2.0.0 always wrote) | clamped-ion: atoms at the positions the homogeneous strain gives them |
+| `both` | the two series, in `<output-dir>/relaxed` and `<output-dir>/clamped` | both; analysing each prints relaxed minus clamped |
+
+The two coincide only when symmetry leaves no force on the atoms of a strained
+cell (fcc/bcc metals, rock salt). With an atom off an inversion centre (diamond,
+zincblende, graphene, hBN, wurtzite, perovskites) a strain is followed by an
+internal relaxation and the clamped-ion constant is larger: Si C44 is ~100 GPa
+clamped and ~75 GPa relaxed. `stb-elasticAnalysis` says which kind it fitted
+(section `[0b]`), warns when a clamped-ion run shows forces above 0.05 eV/Ang
+on a strained cell, and flags every relaxation that stopped before its force
+tolerance. The fit itself is the same in both modes, for `--method stress`
+(stress of the last geometry) and `--method energy` (energy of the last
+geometry).
+
+The SiC data shipped with this example are **clamped-ion** runs made with
+2.0.0; the commands below carry `--ions clamped` so they reproduce them.
+
+### 2.2 The override precedence proof, live
 
 `--calc` (`calc.fdf` in this folder) is the SAME file used for
 `structure.fdf`'s own real relaxation — DZP basis, a 12×12×1 Monkhorst-Pack
@@ -178,19 +198,20 @@ section 2.2 of `5.1-strain/README.md`), `stb-elasticInputs` never trusts
 regardless of what `--calc` contains:
 
 ```
-$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --dirs all --symmetry-method full --steps 5 --no-intro
-[4] SINGLE-POINT SCF ENFORCEMENT
+$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --dirs all --symmetry-method full --steps 5 --no-intro
+[4] FIXED CELL, IONS: CLAMPED
 ------------------------------------------------------------
 Calc template (current state, before forcing):
   MD.TypeOfRun=CG  Steps: MD.Steps=200  MD.VariableCell=true
-Every generated folder is forced to a pure single-point SCF -- NO ionic relaxation, NO cell relaxation -- regardless of the state above, since the imposed strain must stay exactly at the sampled geometry for the stress/energy fit to be meaningful. Forced via '%include config_extra.fdf' PREPENDED at the very top of every generated calc.fdf (before your own directives, including the structure %include) -- SIESTA's fdf reader is first-occurrence-wins for duplicate labels, so this ordering guarantees the forced values win even if your own template already sets any of them (the common case for a real relaxation calc.fdf).
+The cell of every generated folder is fixed at the imposed strain (MD.VariableCell false), whatever the template says: the fit needs the stress/energy AT that strain.
+Ions CLAMPED: a single point, atoms at the positions the homogeneous strain gives them. Equal to the relaxed-ion constants only when symmetry leaves no force on the atoms; stb-elasticAnalysis warns when the forces say otherwise.
+Forced via '%include config_extra.fdf' PREPENDED at the very top of every generated calc.fdf (before your own directives, including the structure %include) -- SIESTA's fdf reader is first-occurrence-wins for duplicate labels, so the forced values win even if your own template already sets any of them.
 
-config_extra.fdf (written into every generated folder):
-  # Auto-generated by stb-elasticInputs -- forces a pure single-point SCF (no ionic or
-  # cell relaxation) at the imposed-strain geometry, regardless of --calc's own settings.
+config_extra.fdf of the clamped series (in every folder of 'elastic_runs'):
+  # Auto-generated by stb-elasticInputs (--ions clamped): single-point SCF, no ionic
+  # or cell relaxation, at the imposed-strain geometry, regardless of --calc's settings.
   MD.TypeOfRun       CG
   MD.Steps           0
-  MD.NumCGsteps      0
   MD.VariableCell    false
 ```
 
@@ -223,7 +244,7 @@ relaxation template, exactly like this one.
 ### 2.3 `--method stress` vs. `energy` at generation time
 
 ```
-$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --method energy --steps 5 --no-intro
+$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --method energy --steps 5 --no-intro
 [3] DEFORMATION DIRECTIONS / SYMMETRY REDUCTION
 ------------------------------------------------------------
 [INFO] Point group -6m2 has 5 independent elastic constant(s); 2 strain pattern(s) needed to determine the ones reachable without leaving the periodic plane/axis (of 6 physically valid candidate(s), 21 in total).
@@ -296,7 +317,7 @@ everything with no extra flags:
 
 ```bash
 # Direct CLI
-stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --dirs all --symmetry-method full --steps 5 --no-intro
 
 # Interactive
@@ -325,8 +346,8 @@ the same inputs and `diff -rq`-ing the result.
 [5] SUMMARY & FILES                   -- one glanceable results table + file paths
 ```
 
-`--save-report` persists the exact same report to `elastic_stage2.txt`
-(matching `elastic_inputs.py`'s own `elastic_stage1.txt` naming logic).
+The exact same report is always saved to `stb_elasticAnalysis_report.txt` in the current folder
+(Stage 1's is `stb_elasticInputs_report.txt`).
 
 ### 3.2 `-d/--dir` and dimensionality — both auto-detected, no `cd` required
 
@@ -487,10 +508,9 @@ Reading this the way sections 1 and 3 set up:
 
 ## 5. Known, deliberate limitations
 
-- **No `--relax-mode`** (section 2.1) — every generated folder is always a
-  pure single-point SCF; there is no clamped-cell-vs-relaxed-transverse-stress
-  choice the way `stb-strain` offers, since the imposed strain must stay
-  exactly at the sampled geometry for either fitting method to be valid.
+- **No `--relax-mode`** (section 2.1) — the cell is always fixed at the imposed
+  strain; there is no clamped-cell-vs-relaxed-transverse-stress choice the way
+  `stb-strain` offers. Only the atoms may relax (`--ions`).
 - **`--method energy`'s DFT cost scales with symmetry, not always
   favorably** — a genuinely low-symmetry (triclinic/monoclinic) structure
   can need many more combined patterns than either `stress` variant needs
@@ -520,7 +540,7 @@ Reading this the way sections 1 and 3 set up:
    loses that check).
 
 2. **Run Stage 1** (`stb-elasticInputs`, code `5.2.1`):
-   - CLI: `stb-elasticInputs -s structure.fdf -c calc.fdf -p <bank> --dirs
+   - CLI: `stb-elasticInputs -s structure.fdf -c calc.fdf -p <bank> [--ions relaxed|clamped|both] --dirs
      all --symmetry-method <basic|full> --max <pct> --steps <n>` (or
      `--method energy` instead of `--symmetry-method`).
    - Interactive: `stb-suite` → `5.2.1` — same questions instead of flags.
@@ -553,8 +573,8 @@ Reading this the way sections 1 and 3 set up:
    FILES`** for the same numbers in one glanceable table plus where
    everything ended up on disk.
 
-7. **(Optional) persist or plot**: `--save-report` writes
-   `elastic_stage2.txt`; `--save-gnuplot` writes `<mode>_fit.dat`/`.gplot`
+7. **(Optional) plot** (the report is always saved to
+   `stb_elasticAnalysis_report.txt`): `--save-gnuplot` writes `<mode>_fit.dat`/`.gplot`
    into `--plot-dir` (section 3.4); `--view` opens the same fits
    interactively in matplotlib instead.
 

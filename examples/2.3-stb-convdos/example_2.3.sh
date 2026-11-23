@@ -53,8 +53,8 @@ stb-convdos --dir <folder> --sigma <meV>
   stb-dos output tree) with the same width, mirroring the folder
   structure into --output-dir (default: <folder>_filtered).
 
-Every run prints a numbered [0]...[6] report. --save-report additionally
-persists it to stb_convdos_report.txt -- off by default.
+Every run prints a numbered [0]...[6] report. It is always saved
+to stb_convdos_report.txt.
 EOF
 pause
 
@@ -146,31 +146,24 @@ echo "Mirrored output tree (dos_output_filtered/) -- same subfolders, same filen
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report (off by default)"
+echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
---save-report additionally persists it to stb_convdos_report.txt -- off
-by default, so a plain run only ever writes the filtered .dat file(s)
-and references.bib, no text report file:
+It is always saved to stb_convdos_report.txt in the current folder; a plain run also
+writes the filtered .dat file(s) and stb_convdos_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp dos_total.dat "$OUT/full-report/"
 echo
 echo "\$ stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat --no-plot --no-intro"
-(cd "$OUT/full-report" && stb-convdos --file dos_total.dat --sigma 100 \
-    --out dos_filtered.dat --no-plot --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "\.dat$\|console"
-echo "(no stb_convdos_report.txt -- only the filtered .dat + references.bib)"
-echo
-echo "\$ stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat --no-plot --save-report --no-intro"
 (cd "$OUT/full-report" && stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat \
-    --no-plot --save-report --no-intro > console_saved.log 2>&1)
+    --no-plot --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_convdos_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_convdos_report.txt"
 echo
-echo "references.bib -- SIESTA (every DOS file here is ultimately SIESTA-derived):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_convdos_references.bib -- SIESTA (every DOS file here is ultimately SIESTA-derived):"
+grep "^@" "$OUT/full-report/stb_convdos_references.bib"
 pause
 
 echo "=================================================================="
@@ -186,13 +179,13 @@ B -- interactive stb-suite menu:
 
 Both paths call the exact same underlying tool -- proven directly below.
 The menu adds one extra first choice (single file vs. a whole folder)
-before the usual --sigma/--fwhm/--size/plot/save-report prompts.
+before the usual --sigma/--fwhm/--size/plot prompts.
 EOF
 TMP="$(mktemp -d)"
 cp dos_total.dat "$TMP/"
 echo
-echo "\$ printf '2.3\\n1\\ndos_total.dat\\n\\n\\n50\\n\\nn\\nn\\n' | stb-suite     # mode=1 (file), sigma 50 meV"
-(cd "$TMP" && printf '2.3\n1\ndos_total.dat\n\n\n50\n\nn\nn\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.3\\n1\\ndos_total.dat\\n\\n\\n50\\n\\nn\\n' | stb-suite     # mode=1 (file), sigma 50 meV"
+(cd "$TMP" && printf '2.3\n1\ndos_total.dat\n\n\n50\n\nn\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Sigma " "$OUT/sigma-vs-fwhm/console_sigma.log")
 MENU_LINE=$(grep "Sigma " "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -224,7 +217,7 @@ Recap of what this walkthrough covered:
   - --dir: broadening an entire stb-dos output tree in one command,
     mirroring its folder structure, skipping an invalid file without
     aborting the batch
-  - the numbered [0]...[6] report, --save-report, references.bib
+  - the numbered [0]...[6] report (always saved), stb_convdos_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): the interactive
@@ -232,5 +225,5 @@ before/after plot -- try it yourself without MPLBACKEND=Agg:
   stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat
 
 As a next step, try on your own with a real stb-dos output:
-  stb-convdos --dir my_calc_dos/ --sigma 50 --save-report
+  stb-convdos --dir my_calc_dos/ --sigma 50
 EOF

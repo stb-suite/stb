@@ -59,7 +59,7 @@ it depends on the material, the functional, the pseudopotential, and the
 basis set (screening, hybridization with neighboring ligands all shift
 it). stb-dftu bundles one literature table (Wang, Maxisch & Ceder, Phys.
 Rev. B 73, 195107 (2006) -- the Materials Project's own GGA+U oxide
-calibration, and the exact reference this tool writes to references.bib)
+calibration, and the exact reference this tool writes to stb_dftu_references.bib)
 purely as a starting-point SANITY CHECK, never a validated value -- you
 always have to pass --u explicitly, or opt in with --use-reference.
 
@@ -83,7 +83,7 @@ B -- interactive stb-suite menu:
 
 "1.5" itself offers two sub-modes: [1] read species off a structure file
 and auto-fill U from the reference table, or [2] enter species one at a
-time by hand. Both end with the same save-block / save-report prompts.
+time by hand. Both end with the same save-block prompt.
 EOF
 pause
 
@@ -91,8 +91,8 @@ echo "=================================================================="
 echo " output/single/  --  one species, explicit U"
 echo "=================================================================="
 mkdir -p "$OUT/single"
-echo "\$ stb-dftu --species Mn --u 3.9 --save-report --no-intro"
-(cd "$OUT/single" && stb-dftu --species Mn --u 3.9 --save-report --no-intro > console.log)
+echo "\$ stb-dftu --species Mn --u 3.9 --no-intro"
+(cd "$OUT/single" && stb-dftu --species Mn --u 3.9 --no-intro > console.log)
 grep -E "shell=3d|Literature reference" "$OUT/single/console.log"
 echo
 echo "Folder contents:"
@@ -102,10 +102,10 @@ pause
 echo "=================================================================="
 echo " output/multi/  --  two species, explicit U/J/shell"
 echo "=================================================================="
-echo "\$ stb-dftu --species Fe Co --u 5.3 3.32 --j 0.5 0.5 --shell 3d 3d -o ldau_block.fdf --save-report --no-intro"
+echo "\$ stb-dftu --species Fe Co --u 5.3 3.32 --j 0.5 0.5 --shell 3d 3d -o ldau_block.fdf --no-intro"
 mkdir -p "$OUT/multi"
 (cd "$OUT/multi" && stb-dftu --species Fe Co --u 5.3 3.32 --j 0.5 0.5 --shell 3d 3d \
-    -o ldau_block.fdf --save-report --no-intro > console.log)
+    -o ldau_block.fdf --no-intro > console.log)
 cat "$OUT/multi/ldau_block.fdf"
 echo
 echo "One %block/%endblock pair wraps both stanzas -- confirmed:"
@@ -125,8 +125,8 @@ EOF
 mkdir -p "$OUT/from-structure"
 cp sc_fe_o.fdf "$OUT/from-structure/"
 echo
-echo "\$ stb-dftu --fdf sc_fe_o.fdf --use-reference --save-report --no-intro"
-(cd "$OUT/from-structure" && stb-dftu --fdf sc_fe_o.fdf --use-reference --save-report --no-intro > console.log)
+echo "\$ stb-dftu --fdf sc_fe_o.fdf --use-reference --no-intro"
+(cd "$OUT/from-structure" && stb-dftu --fdf sc_fe_o.fdf --use-reference --no-intro > console.log)
 grep -E "Species found|WARNING|^  Fe:" "$OUT/from-structure/console.log"
 echo
 if grep -q "^Fe   1" "$OUT/from-structure/console.log" || grep -q "Fe   1" "$OUT/from-structure/console.log"; then
@@ -140,25 +140,25 @@ pause
 echo "=================================================================="
 echo " output/list-reference/ and output/suggest/  --  pure lookups"
 echo "=================================================================="
-echo "Neither generates a block -- both still write references.bib (just the"
+echo "Neither generates a block -- both still write stb_dftu_references.bib (just the"
 echo "reference-table citation, no SIESTA entries, since nothing SIESTA-bound"
 echo "was produced)."
 mkdir -p "$OUT/list-reference" "$OUT/suggest"
 echo
-echo "\$ stb-dftu --list-reference --save-report --no-intro"
-(cd "$OUT/list-reference" && stb-dftu --list-reference --save-report --no-intro > console.log)
+echo "\$ stb-dftu --list-reference --no-intro"
+(cd "$OUT/list-reference" && stb-dftu --list-reference --no-intro > console.log)
 grep "eV$" "$OUT/list-reference/console.log" | head -3
 echo "..."
 echo
-echo "\$ stb-dftu --suggest Ni --save-report --no-intro"
-(cd "$OUT/suggest" && stb-dftu --suggest Ni --save-report --no-intro > console.log)
+echo "\$ stb-dftu --suggest Ni --no-intro"
+(cd "$OUT/suggest" && stb-dftu --suggest Ni --no-intro > console.log)
 grep "Ni:" "$OUT/suggest/console.log"
 echo
 for case in list-reference suggest; do
-    if grep -q "@article{Soler2002," "$OUT/$case/references.bib"; then
-        echo "Unexpected: $case/references.bib has a SIESTA entry it shouldn't."
+    if grep -q "@article{Soler2002," "$OUT/$case/stb_dftu_references.bib"; then
+        echo "Unexpected: $case/stb_dftu_references.bib has a SIESTA entry it shouldn't."
     else
-        echo "Confirmed: $case/references.bib has no SIESTA entry (nothing SIESTA-bound was generated)."
+        echo "Confirmed: $case/stb_dftu_references.bib has no SIESTA entry (nothing SIESTA-bound was generated)."
     fi
 done
 pause
@@ -190,8 +190,8 @@ echo "Driving the same single-species (Mn) case through the interactive"
 echo "menu's manual entry mode and diffing the block against output/single/."
 TMP="$(mktemp -d)"
 echo
-echo "\$ printf '1.5\\n2\\nMn\\n3.9\\n0.0\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.5\n2\nMn\n3.9\n0.0\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.5\\n2\\nMn\\n3.9\\n0.0\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.5\n2\nMn\n3.9\n0.0\n\n\n\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_BLOCK=$(sed -n '/^%block LDAU\.proj$/,/^%endblock LDAU\.proj$/p' "$OUT/single/console.log")
 MENU_BLOCK=$(sed -n '/^%block LDAU\.proj$/,/^%endblock LDAU\.proj$/p' "$TMP/session.log")
 if [ "$CLI_BLOCK" = "$MENU_BLOCK" ]; then
@@ -209,7 +209,7 @@ cat <<EOF
 Five self-contained folders were generated under output/:
   single/   multi/   from-structure/   list-reference/   suggest/
 
-Each has stb_dftu_report.txt and references.bib (SIESTA citations for the
+Each has stb_dftu_report.txt and stb_dftu_references.bib (SIESTA citations for the
 3 block-generating cases; just the reference-table citation for the 2
 lookup-only ones).
 

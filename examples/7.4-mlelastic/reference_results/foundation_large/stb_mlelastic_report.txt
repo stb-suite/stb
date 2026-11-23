@@ -5,7 +5,7 @@
 Date/time         : 2026-10-28 17:49:05
 Software          : stb 1.9.300, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Input file        : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/si8.fdf
+Input file        : /path/to/stb/examples/7.4-mlelastic/si8.fdf
 Mode              : single fit
 Strains           : 7 points in +-1 % per direction (-1, -0.667, -0.333, +0, +0.333, +0.667, +1 %)
 Relaxation        : reference cell + atoms; strained cells atoms relaxed (relaxed-ion constants); --fmax 0.001 eV/Ang, --max-steps 200

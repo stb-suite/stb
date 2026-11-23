@@ -89,6 +89,7 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 1. 3D bulk Si: full 6-direction cubic stiffness matrix ---
 echo -e "\n--- Testing a basic 3D run (bulk Si, all 6 directions) ---"
+rm -f stb_mlelastic_report*.txt stb_mlelastic_references*.bib
 stb-mlelastic --file si8.fdf --max 1.0 --steps 4 --save-data --save-report \
     --no-intro -o si_elastic > log_si.txt 2>&1
 check_exit_code $? 0
@@ -109,9 +110,9 @@ check_success si_elastic/stress_strain.dat
 check_success si_elastic/elastic_tensor.dat
 check_success si_elastic/directional.dat
 check_success si_elastic/directional_moduli.png
-check_success si_elastic/stb_mlelastic_report.txt
-check_contains "STB-MLELASTIC REPORT" si_elastic/stb_mlelastic_report.txt
-check_contains "Report            :" si_elastic/stb_mlelastic_report.txt
+check_success stb_mlelastic_report.txt
+check_contains "STB-MLELASTIC REPORT" stb_mlelastic_report.txt
+check_contains "Report            :" stb_mlelastic_report.txt
 check_contains "SOUND VELOCITIES" log_si.txt
 check_contains "Debye temperature" log_si.txt
 check_contains "DIRECTIONAL ANISOTROPY" log_si.txt
@@ -124,7 +125,7 @@ import re, sys
 # stdout (log_si.txt) still carries ANSI color codes around the numeric
 # value -- read the saved report file instead, which print_dual wrote with
 # color codes already stripped.
-text = open('si_elastic/stb_mlelastic_report.txt').read()
+text = open('stb_mlelastic_report.txt').read()
 m = re.search(r'Debye temperature\s*:\s*([\d.]+) K', text)
 m2 = re.search(r'Isotropic \(Hill\)\s*:\s*v_l \d+, v_t (\d+)', text)
 if not (m and m2):
@@ -141,6 +142,7 @@ else
 fi
 
 echo "Testing: --skip-anisotropy-surface omits the 3D surface (the directional numbers stay)"
+rm -f stb_mlelastic_report*.txt stb_mlelastic_references*.bib
 stb-mlelastic --file si8.fdf --max 1.0 --steps 4 --skip-anisotropy-surface \
     --no-intro -o si_noaniso > log_noaniso.txt 2>&1
 check_exit_code $? 0
@@ -151,7 +153,7 @@ rm -rf si_noaniso
 echo "Testing: cubic symmetry recovered (C11~=C22~=C33, C12~=C13~=C23, C44~=C55~=C66)"
 python3 -c "
 import re, sys
-text = open('si_elastic/stb_mlelastic_report.txt').read()
+text = open('stb_mlelastic_report.txt').read()
 rows = re.findall(r'^  i=(\d) \|(.*)$', text, re.M)[:6]
 if len(rows) < 6:
     sys.exit(1)
@@ -174,7 +176,7 @@ else
 fi
 
 echo "Testing: Born stability criteria pass for a real, stable crystal"
-check_contains "VERDICT .*: STABLE" si_elastic/stb_mlelastic_report.txt
+check_contains "VERDICT .*: STABLE" stb_mlelastic_report.txt
 rm -rf si_elastic
 
 
@@ -227,7 +229,7 @@ rm -rf graphene_3d_override
 #     wiring/report sections, same scope as test/7-mlsimulations/3-mlphonons's
 #     own --custom-model test. ---
 echo -e "\n--- Fine-tuning a quick Si model to test --custom-model with (--epochs 3) ---"
-PHONONS_FIXTURES="$FIXTURE_DIR/../2-mlphonons/si_mlff_fixtures"
+PHONONS_FIXTURES="$FIXTURE_DIR/../3-mlphonons/si_mlff_fixtures"
 if [ -d "$PHONONS_FIXTURES" ]; then
     cp -r "$PHONONS_FIXTURES" mlff_config_src
     mv mlff_config_src/mlff_config_* .
@@ -353,6 +355,7 @@ check_not_contains "INTERNAL RELAXATION" log_gp.txt
 rm -rf si_gp
 
 echo "Testing: --steps 1 is rejected (a fit needs two strains)"
+rm -f stb_mlelastic_report*.txt stb_mlelastic_references*.bib
 stb-mlelastic --file si8.fdf --steps 1 --no-intro > log_steps.txt 2>&1
 check_exit_code $? 2
 check_contains "at least 2" log_steps.txt
@@ -361,7 +364,7 @@ check_contains "at least 2" log_steps.txt
 # --- 5. Interactive path (stb-suite, shortcut 7.4) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 7.4) ---"
 rm -rf interactive_out
-printf '7.4\nsi8.fdf\n\nsmall\n\n1.0\n4\n\ninteractive_out\nn\nn\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '7.4\nsi8.fdf\n\nsmall\n\n1.0\n4\n\ninteractive_out\nn\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/stress_strain.png
 
@@ -369,10 +372,11 @@ check_success interactive_out/stress_strain.png
 if [ -n "$QUICK_MODEL" ]; then
     echo "Testing: the menu asks for the device with a custom model too"
     rm -rf interactive_custom_out
-    printf '7.4\nsi8.fdf\n%s\n%s\ncpu\n1.0\n3\n\ninteractive_custom_out\nn\nn\nn\nn\nn\nn\ny\n\n0\n' "$QUICK_MODEL" "$QUICK_CARD" | \
+    rm -f stb_mlelastic_report*.txt stb_mlelastic_references*.bib
+    printf '7.4\nsi8.fdf\n%s\n%s\ncpu\n1.0\n3\n\ninteractive_custom_out\nn\nn\nn\nn\nn\nn\n\n0\n' "$QUICK_MODEL" "$QUICK_CARD" | \
         stb-suite > log_menu_custom.txt 2>&1
     check_contains "Device \\[cpu/cuda" log_menu_custom.txt
-    check_contains "Device            : cpu" interactive_custom_out/stb_mlelastic_report.txt
+    check_contains "Device            : cpu" stb_mlelastic_report.txt
 fi
 
 popd > /dev/null

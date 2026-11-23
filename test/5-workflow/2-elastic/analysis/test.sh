@@ -26,6 +26,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -62,11 +72,12 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Baseline: existing xx-only fixtures (regression, still works) ---
 echo -e "\n--- Testing baseline analysis (xx-only, existing checked-in fixtures) ---"
+rm -f stb_elasticAnalysis_report*.txt stb_elasticAnalysis_references*.bib
 stb-elasticAnalysis --dir . --save-report --no-intro > log_baseline.txt 2>&1
 check_exit_code $? 0
-check_success elastic_stage2.txt
-check_contains "C11:    16.0 GPa" elastic_stage2.txt
-check_contains "coupling" elastic_stage2.txt
+check_success stb_elasticAnalysis_report.txt
+check_contains "C11:    16.0 GPa" stb_elasticAnalysis_report.txt
+check_contains "coupling" stb_elasticAnalysis_report.txt
 
 
 # --- 3. Physics: corrected 2D Poisson's ratio on an anisotropic fixture
@@ -499,6 +510,26 @@ check_contains "C11:   166.0 GPa" log_full_cubic.txt
 check_contains "C22:   166.0 GPa" log_full_cubic.txt
 check_contains "C44:    80.0 GPa" log_full_cubic.txt
 check_contains "C12:    64.0 GPa" log_full_cubic.txt
+echo "Testing: no --symmetry-method -> the prep's method is read from elastic_scan.json"
+check_success elastic_scan.json
+stb-elasticAnalysis --dir . --no-intro > log_full_cubic_auto.txt 2>&1
+check_exit_code $? 0
+check_contains "symmetry-method full) -- method read from ./elastic_scan.json" log_full_cubic_auto.txt
+check_contains "C44:    80.0 GPa" log_full_cubic_auto.txt
+popd > /dev/null
+
+echo "Testing: cubic, only xx run -- 'full' stops and names the direction to add (xy, the prep's choice)"
+rm -rf xx_only_run && cp -r full_cubic_run xx_only_run && rm -rf xx_only_run/xy
+pushd xx_only_run > /dev/null
+stb-elasticAnalysis --dir . --no-intro > log_xx_full.txt 2>&1
+check_exit_code $? 1
+check_contains "Not determined by these data: C44, C55, C66" log_xx_full.txt
+check_contains "Run also: stb-elasticInputs --dirs xy" log_xx_full.txt
+echo "Testing: cubic, only xx run, 'basic' -- C44 = 0 is an [ERROR], not 'VERDICT: UNSTABLE'"
+stb-elasticAnalysis --dir . --symmetry-method basic --no-intro > log_xx_basic.txt 2>&1
+check_exit_code $? 1
+check_contains "Point group m-3m allows C44, C55, C66, but --symmetry-method basic left them at 0" log_xx_basic.txt
+check_not_contains "VERDICT" log_xx_basic.txt
 popd > /dev/null
 
 # --- The strain is measured from each folder's cell, not read from its rounded name: with --max 1 --steps 7,
@@ -606,6 +637,18 @@ check_contains "C66.*7.50" log_full_hex.txt
 # Only yy/xy are physically relevant directions for 2D (zz/yz/xz always
 # touch the vacuum-padded axis and are filtered out of this advisory).
 check_contains "Direction(s) yy, xy were never run directly" log_full_hex.txt
+echo "Testing: 2D, folders reduced with 'full' (xx only) analysed with 'basic' -> [ERROR], suggests 'full'"
+stb-elasticAnalysis --dir . --dimensionality 2d --symmetry-method basic --no-intro > log_hex_basic.txt 2>&1
+check_exit_code $? 1
+check_contains "but --symmetry-method basic left" log_hex_basic.txt
+check_contains "run again with --symmetry-method full" log_hex_basic.txt
+echo "Testing: 2D, no elastic_scan.json but the prep report -> method read from elastic_stage1.txt"
+rm -f elastic_scan.json
+printf 'Symmetry method   : full\n' > elastic_stage1.txt
+stb-elasticAnalysis --dir . --dimensionality 2d --no-intro > log_hex_auto.txt 2>&1
+check_exit_code $? 0
+check_contains "symmetry-method full) -- method read from ./elastic_stage1.txt" log_hex_auto.txt
+check_contains "C66.*7.50" log_hex_auto.txt
 popd > /dev/null
 
 echo "Testing: triclinic fixture, full method requires --reference-structure (else a clear error)"
@@ -899,7 +942,8 @@ for folder in glob.glob('*/strain_*'):
         f.write( "siesta:  0.0000000000   0.0000000000   0.0000000000\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --dir . --dimensionality 2d --no-intro > log_2d_eggbox.txt 2>&1
+# only xx was run: 'basic' would leave C22 and C66 at 0 (an [ERROR] since 2.1.0); 'full' fills them
+stb-elasticAnalysis --dir . --dimensionality 2d --symmetry-method full --no-intro > log_2d_eggbox.txt 2>&1
 check_exit_code $? 0
 check_contains "xx: stress =   200.00 N/m | energy =   200.00 N/m | diff =  0.00%" log_2d_eggbox.txt
 check_contains "All checked direction(s) agree within tolerance" log_2d_eggbox.txt
@@ -1347,7 +1391,7 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --dir . --save-gnuplot --no-intro > log_report.txt 2>&1
+stb-elasticAnalysis --dir . --save-gnuplot --symmetry-method basic --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_contains "\[0\] RUN METADATA" log_report.txt
 check_contains "Method               : stress (--symmetry-method basic)" log_report.txt
@@ -1361,9 +1405,9 @@ check_success elastic_plots/all_directions_fit.gplot
 check_contains "C_xx = 166.0000 GPa" elastic_plots/xx_fit.dat
 check_contains "f(x) = 166" elastic_plots/xx_fit.gplot
 check_contains "\[5\] SUMMARY & FILES" log_report.txt
-check_contains "E (Young's modulus)        | 163.27 GPa" log_report.txt
-check_contains "A\^U (anisotropy index)     | 0.247" log_report.txt
-check_contains "VERDICT                    | STABLE" log_report.txt
+check_contains "E (Young's modulus) *| 163.27 GPa" log_report.txt
+check_contains "A\^U (anisotropy index) *| 0.247" log_report.txt
+check_contains "VERDICT *| STABLE" log_report.txt
 check_contains "Plot data   : elastic_plots/ (3 file pair(s)" log_report.txt
 if command -v gnuplot > /dev/null 2>&1; then
     ( cd elastic_plots && gnuplot xx_fit.gplot > /dev/null 2>gnuplot_err.txt )
@@ -1448,8 +1492,11 @@ check_contains "strain_\* folders found: 3" log_dir_single.txt
 
 echo "Testing: --dir at the top-level directory -- reference_structure.fdf found under it too"
 stb-elasticAnalysis --dir dir_flag_run --no-intro > log_dir_top.txt 2>&1
-check_exit_code $? 0
+# a cubic crystal with only xx run: since 2.1.0 'basic' stops instead of reporting C44 = 0 (rc 1); the reference
+# structure must still be found (the point group comes from it)
+check_exit_code $? 1
 check_contains "Reference structure  : dir_flag_run/reference_structure.fdf (found)" log_dir_top.txt
+check_contains "Point group m-3m allows C44, C55, C66" log_dir_top.txt
 
 echo "Testing: no strain_* folders"
 mkdir -p empty_run
@@ -1524,17 +1571,17 @@ popd > /dev/null
 # --- 15. Interactive path (stb-suite, shortcut 5.2.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.2.2) ---"
 
-echo "Testing: navigate 5.2.2 -> dir '.' -> calc.out -> all defaults (stress, auto dimensionality, basic symmetry, skip advanced) -> save report -> quit"
-rm -f elastic_stage2.txt
+echo "Testing: navigate 5.2.2 -> dir '.' -> calc.out -> all defaults (stress, auto dimensionality, symmetry as prepared, skip advanced) -> save report -> quit"
+rm -f stb_elasticAnalysis_report*.txt stb_elasticAnalysis_references*.bib
 # Prompts in order: dir (. -> current dir), file, method (blank -> stress),
 # reference-structure (blank -> default), dimensionality (blank -> auto),
-# symmetry-method (blank -> basic), advanced settings (n -> skip, CLI
+# symmetry-method (blank -> as the folders were prepared; none recorded here -> basic), advanced settings (n -> skip, CLI
 # defaults apply), save report (y), save gnuplot (n), view (n), then the
 # "Press Enter to continue" pause, then quit.
-printf '5.2.2\n.\ncalc.out\n\n\n\n\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.2.2\n.\ncalc.out\n\n\n\n\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "STABILITY AND PROPERTIES" log_menu.txt
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
-check_success elastic_stage2.txt
+check_success stb_elasticAnalysis_report.txt
 if grep -q "Traceback" log_menu.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
     FAIL=$((FAIL+1))
@@ -1544,13 +1591,13 @@ else
 fi
 
 echo "Testing: navigate 5.2.2 -> manual dimensionality override -> 1D"
-rm -f elastic_stage2.txt
+rm -f stb_elasticAnalysis_report*.txt stb_elasticAnalysis_references*.bib
 # Prompts in order: dir (. -> current dir), file, method (blank -> stress),
 # reference-structure (blank -> default), dimensionality (1d -> manual
-# override), symmetry-method (blank -> basic), advanced settings (n ->
+# override), symmetry-method (blank -> as prepared), advanced settings (n ->
 # skip), save report (n), save gnuplot (n), view (n), then the "Press
 # Enter to continue" pause, then quit.
-printf '5.2.2\n.\ncalc.out\n\n\n1d\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
+printf '5.2.2\n.\ncalc.out\n\n\n1d\n\nn\nn\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
 check_contains "Dimensionality: .*1D.*(manual override" log_1d_menu.txt
 check_contains "1D (manual override)" log_1d_menu.txt
 if grep -q "Traceback" log_1d_menu.txt 2>/dev/null; then

@@ -165,7 +165,7 @@ pause
 
 
 banner "Case 7 -- Labels and folders"
-sc . case7_path.txt -l si/si -t VT --potential-unit Ry --save-report
+sc . case7_path.txt -l si/si -t VT --potential-unit Ry
 grep -E "^Input|^Log|^File  .*cube|^Report" "$OUT/case7_path.txt" | sed 's/^/  /'
 sc h2o case7_auto.txt -t DRHO --dry-run
 grep "^Input" "$OUT/case7_auto.txt" | sed 's/^/  /'
@@ -178,7 +178,7 @@ pause
 
 banner "Case 8 -- The interactive menu (stb-suite, code 3.3)"
 # type 10 = VH, label h2o, spin 1 = total, unit Ha, default output, no dry run, no report, Enter, 0 = exit
-(cd "$OUT/h2o" && printf '3.3\n10\nh2o\n1\nHa\n\nn\nn\n\n0\n' | stb-suite 2>&1 | strip_colors > "$OUT/case8.txt") || true
+(cd "$OUT/h2o" && printf '3.3\n10\nh2o\n1\nHa\n\nn\n\n0\n' | stb-suite 2>&1 | strip_colors > "$OUT/case8.txt") || true
 grep -E "^Grid type  |^Potential unit|^Output|^Read-back" "$OUT/case8.txt" | sed 's/^/  /'
 cat <<'EOF'
   -> The menu asks for the grid type (a numbered list with each type's fdf flag), the label, the spin channel, the

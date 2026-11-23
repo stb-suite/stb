@@ -7,6 +7,7 @@
 #################################################
     
 from stb import __version__ as VERSION
+from stb._input_header import mark_input
 from stb.core.cli import new_report_path
 
 from time import sleep
@@ -1221,6 +1222,7 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
                 raise SystemExit(1)
 
         # Write the output file
+        mark_input(output_file)
         with open(output_file, 'w') as f_output:
             f_output.writelines(output_lines)
 

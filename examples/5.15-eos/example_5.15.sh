@@ -105,9 +105,9 @@ echo
 echo "\$ cat eos_runs/vol_8.00/config_extra.fdf"
 cat "$F/config_extra.fdf"
 echo
-echo "\$ head -3 eos_runs/vol_8.00/calc.fdf; diff <(tail -n +3 eos_runs/vol_8.00/calc.fdf) calc.fdf"
+echo "\$ head -4 eos_runs/vol_8.00/calc.fdf; diff <(tail -n +4 eos_runs/vol_8.00/calc.fdf) calc.fdf"
 head -3 "$F/calc.fdf"
-diff <(tail -n +3 "$F/calc.fdf") calc.fdf && echo "-> the template is copied byte for byte below the %include"
+diff <(tail -n +4 "$F/calc.fdf") calc.fdf && echo "-> the template is copied byte for byte below the %include"
 echo
 echo "\$ grep -A4 'block LatticeVectors' structure.fdf eos_runs/vol_8.00/structure.fdf   # factor (1.08)^(1/3) = 1.0260"
 grep -A4 "block LatticeVectors" structure.fdf | head -5

@@ -330,7 +330,7 @@ check_contains "MD.Steps           0" elastic_runs/xx/strain_xx_1.00/config_extr
 check_contains "MD.VariableCell    false" elastic_runs/xx/strain_xx_1.00/config_extra.fdf
 
 echo "Testing: '%include config_extra.fdf' is the very FIRST line (prepended, not appended)"
-first_line=$(head -1 elastic_runs/xx/strain_xx_1.00/calc_relaxation.fdf)
+first_line=$(grep -v '^#' elastic_runs/xx/strain_xx_1.00/calc_relaxation.fdf | head -1)
 if [ "$first_line" = "%include config_extra.fdf" ]; then
     echo -e "   -> ${GREEN}Verified:${NC} config_extra.fdf is %included as the very first line"
     PASS=$((PASS+1))

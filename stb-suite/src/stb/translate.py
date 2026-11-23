@@ -7,6 +7,7 @@
 #################################################
     
 from stb import __version__ as VERSION
+from stb._input_header import INPUT_HEADER, mark_input
 from stb.core.cli import new_report_path
 
 import os
@@ -636,7 +637,7 @@ def writefileposcar(typevectors, latticeparameter, vectors, getatoms, atomsposit
     # --- END NEW ---
 
     outfile = []
-    outfile.append('# automatic create using stb-translate (https://github.com/stb-suite/stb)')
+    outfile.append(INPUT_HEADER)
     outfile.append(f"{latticeparameter}")
     for lin in vectors:
         outfile.append(f"{lin[0]}   {lin[1]}   {lin[2]} ")
@@ -688,6 +689,7 @@ def writefilecif(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # symmetric position (by up to the tolerance) and writes the asymmetric unit in the standard setting; None writes
     # P1 with the positions exactly as read
     CifWriter(structure, symprec=CIF_SYMPREC).write_file(outfilename)
+    mark_input(outfilename)
 
 
 
@@ -795,7 +797,7 @@ def writefilexsf(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # --- END NEW ---
     
     outfile = []
-    outfile.append('# automatic create using stb-translate (https://github.com/stb-suite/stb)')
+    outfile.append(INPUT_HEADER)
     natoms_total = 0
     comment = ""
     for el in getatoms:
@@ -832,7 +834,7 @@ def writefilefhi(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # --- END NEW ---
 
     outfile = []
-    outfile.append('# automatic create using stb-translate (https://github.com/stb-suite/stb)')
+    outfile.append(INPUT_HEADER)
     natoms_total = 0
     comment = ""
     for el in getatoms:
@@ -875,6 +877,11 @@ def writefilelammps(typevectors, latticeparameter, vectors, getatoms, atomsposit
     atoms = build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposition)
     from ase.io import write as ase_write
     ase_write(outfilename, atoms, format='lammps-data', masses=True)
+    with open(outfilename) as f:      # line 1 of a LAMMPS data file is free text; the next ones are data
+        data_lines = f.readlines()
+    data_lines[0] = INPUT_HEADER + "\n"
+    with open(outfilename, 'w') as f:
+        f.writelines(data_lines)
 
 
 ##### NEW HELPER FUNCTION #####

@@ -53226,6 +53226,10 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   Authors: a new page on the site and a chapter in the manual list the project lead and the
   collaborators. Tool banners, source headers and package metadata now name the STB-SUITE team,
   and the comment \texttt{stb-\allowbreak{}translate} writes in its files points to the current repository.
+\item
+  Every input file the suite writes starts with \texttt{\#\ Created/modified\ with\ STB-\allowbreak{}SUITE\ (https://stb-\allowbreak{}suite.github.io/stb/)}: every \texttt{.fdf}, including copied templates and phonopy\textquotesingle s supercells, and
+  the POSCAR, CIF, XSF, FHI-aims and LAMMPS files of \texttt{stb-\allowbreak{}translate}. XYZ and DFTB+ \texttt{.gen} keep their first
+  line, which those formats reserve for the atom count. The stored example files keep their earlier header.
 \end{itemize}
 
 \section{Added}

@@ -1,0 +1,5 @@
+.stb-authors { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin: 1rem 0; }
+.stb-author { padding: 1rem; text-align: center; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .4rem; }
+.md-typeset .stb-author img { display: block; width: 8rem; height: 8rem; margin: 0 auto .7rem; object-fit: cover; border-radius: 50%; }
+.stb-author strong, .stb-author span, .stb-author a { display: block; }
+.stb-author span { color: var(--md-default-fg-color--light); font-size: .85em; line-height: 1.4; margin: .25rem 0; }

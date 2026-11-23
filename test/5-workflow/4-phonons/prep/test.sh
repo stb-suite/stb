@@ -162,7 +162,7 @@ else
     FAIL=$((FAIL+1))
 fi
 check_contains "MD.VariableCell    false" phonon_runs/disp-001/config_extra.fdf
-first_line=$(head -1 phonon_runs/disp-001/calc.fdf)
+first_line=$(grep -v '^#' phonon_runs/disp-001/calc.fdf | head -1)
 if [ "$first_line" = "%include config_extra.fdf" ]; then
     echo -e "   -> ${GREEN}Verified:${NC} '%include config_extra.fdf' is the FIRST line of the generated calc.fdf"
     PASS=$((PASS+1))

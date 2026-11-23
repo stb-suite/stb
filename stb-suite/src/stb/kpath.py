@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb._input_header import mark_input
 from stb.core.cli import new_report_path
 
 import numpy as np
@@ -123,6 +124,7 @@ def write_siesta_kpath_file(kpoints_dict, path_segments, num_points=50,
         print_dual(color_text(f"Available labels: {list(kpoints_dict.keys())}", 'red'), f_out)
         return False
     try:
+        mark_input(output_filename)
         with open(output_filename, 'w') as f:
             f.write("### BANDS\n")
             f.write(" BandLinesScale  ReciprocalLatticeVectors\n\n")

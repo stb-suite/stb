@@ -98,8 +98,8 @@ ls "$OUT/case1-si/optical_study" | tr '\n' ' '; echo
 echo "\$ cat optical_study/dir_xy/config_extra.fdf          # the biaxial xy folder"
 cat "$F/config_extra.fdf"
 echo
-echo "\$ head -3 optical_study/dir_xy/calc.fdf"
-head -3 "$F/calc.fdf"
+echo "\$ head -4 optical_study/dir_xy/calc.fdf"
+head -4 "$F/calc.fdf"
 echo
 echo "--- Without --kgrid: the template has none, so a grid is suggested (density 0.2 1/Ang) and forced"
 mkdir -p "$OUT/case2-kgrid"

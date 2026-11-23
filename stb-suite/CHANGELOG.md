@@ -574,6 +574,10 @@ version before) and **Added** (new options and tools).
 - Authors: a new page on the site and a chapter in the manual list the project lead and the
   collaborators. Tool banners, source headers and package metadata now name the STB-SUITE team,
   and the comment `stb-translate` writes in its files points to the current repository.
+- Every input file the suite writes starts with `# Created/modified with STB-SUITE
+  (https://stb-suite.github.io/stb/)`: every `.fdf`, including copied templates and phonopy's supercells, and
+  the POSCAR, CIF, XSF, FHI-aims and LAMMPS files of `stb-translate`. XYZ and DFTB+ `.gen` keep their first
+  line, which those formats reserve for the atom count. The stored example files keep their earlier header.
 
 ### Added
 

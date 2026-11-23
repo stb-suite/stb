@@ -128,7 +128,8 @@ check_contains "Spin                polarized" $RUN/sites/site_1_ontop/config_ex
 python3 -c "
 with open('$RUN/sites/site_1_ontop/calc.fdf') as f:
     lines = [l for l in f if l.strip()]
-assert lines[0].startswith('%include config_extra.fdf'), lines[0]
+first = next(l for l in lines if not l.startswith('#'))
+assert first.startswith('%include config_extra.fdf'), first
 print('OK')
 " > log_spin_order_check.txt 2>&1
 check_contains "OK" log_spin_order_check.txt

@@ -178,7 +178,7 @@ check_contains "Slab.DipoleCorrection" neb_run/cycle_00/image_02/config_extra.fd
 check_contains "DFTD3" neb_run/cycle_00/image_02/config_extra.fdf
 check_contains "%include config_extra.fdf" neb_run/cycle_00/image_02/calc.fdf
 echo "Testing: %include config_extra.fdf is the first line of calc.fdf"
-first_line=$(head -1 neb_run/cycle_00/image_02/calc.fdf)
+first_line=$(grep -v '^#' neb_run/cycle_00/image_02/calc.fdf | head -1)
 if [[ "$first_line" == *"%include config_extra.fdf"* ]]; then
     echo -e "   -> ${GREEN}Verified:${NC} %include is the first line"
     PASS=$((PASS+1))

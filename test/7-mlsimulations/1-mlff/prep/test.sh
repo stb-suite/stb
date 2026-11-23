@@ -118,7 +118,7 @@ echo "Testing: every folder forces a single-point run through config_extra.fdf"
 check_success $R1/mlff_config_001/config_extra.fdf
 check_contains "MD.Steps              0" $R1/mlff_config_001/config_extra.fdf
 check_contains "MD.VariableCell       false" $R1/mlff_config_001/config_extra.fdf
-if [ "$(head -1 $R1/mlff_config_001/calc.fdf)" = "%include config_extra.fdf" ]; then
+if [ "$(grep -v '^#' $R1/mlff_config_001/calc.fdf | head -1)" = "%include config_extra.fdf" ]; then
     echo -e "   -> ${GREEN}Verified:${NC} '%include config_extra.fdf' is the first line of calc.fdf"
     PASS=$((PASS+1))
 else

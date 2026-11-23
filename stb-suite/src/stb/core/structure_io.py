@@ -630,7 +630,7 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
     total_atoms = sum(len(atoms_by_species[s]) for s in species_with_atoms)
 
     if header_comment is None:
-        header_lines = ["# automatic create using stb-translate (https://github.com/stb-suite/stb)\n"]
+        header_lines = []      # the first line comes from stb._input_header
     else:
         raw_header = [header_comment] if isinstance(header_comment, str) else header_comment
         header_lines = [line if line.startswith("#") else f"# {line}" for line in raw_header]

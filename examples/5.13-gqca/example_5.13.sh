@@ -108,11 +108,11 @@ F="$OUT/case1-stage1/gqca_study/cluster_n1"
 echo "\$ cat gqca_study/cluster_n1/config_extra.fdf"
 cat "$F/config_extra.fdf"
 echo
-echo "\$ head -4 gqca_study/cluster_n1/calc.fdf     # the %include is line 1"
-head -4 "$F/calc.fdf"
+echo "\$ head -5 gqca_study/cluster_n1/calc.fdf     # the %include follows the header"
+head -5 "$F/calc.fdf"
 echo
 echo "The rest of calc.fdf is your template, unchanged:"
-if diff <(tail -n +3 "$F/calc.fdf") calc.fdf > /dev/null; then
+if diff <(tail -n +4 "$F/calc.fdf") calc.fdf > /dev/null; then
     echo "  confirmed -- calc.fdf (minus the 2 include lines) is identical to ./calc.fdf"
 fi
 echo

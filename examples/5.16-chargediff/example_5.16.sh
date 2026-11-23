@@ -120,9 +120,9 @@ echo
 echo "\$ grep -v '^#' chargediff_run/fragment1/config_extra.fdf"
 grep -v "^#" "$R/fragment1/config_extra.fdf" | grep -v "^$"
 echo
-echo "\$ head -2 chargediff_run/fragment1/calc.fdf; diff <(tail -n +3 chargediff_run/fragment1/calc.fdf) calc.fdf"
-head -2 "$R/fragment1/calc.fdf"
-diff <(tail -n +3 "$R/fragment1/calc.fdf") calc.fdf && echo "-> the template is copied byte for byte below the %include"
+echo "\$ head -3 chargediff_run/fragment1/calc.fdf; diff <(tail -n +4 chargediff_run/fragment1/calc.fdf) calc.fdf"
+head -3 "$R/fragment1/calc.fdf"
+diff <(tail -n +4 "$R/fragment1/calc.fdf") calc.fdf && echo "-> the template is copied byte for byte below the %include"
 echo
 echo "\$ python3 -c ...   # chargediff_manifest.json, what Stage 2 reads"
 python3 - "$R/chargediff_manifest.json" <<'EOF2'

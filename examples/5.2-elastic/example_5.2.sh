@@ -159,8 +159,8 @@ echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions 
     --dirs all --symmetry-method full --steps 5 --no-intro | tee console.log \
     | sed -n '/\[4\] SINGLE-POINT/,/\[5\] PSEUDOPOTENTIALS/p')
 echo
-echo "First line of the generated calc.fdf (the forced override, prepended):"
-head -1 "$OUT/case1-precedence/elastic_runs/xx/strain_xx_2.00/calc.fdf"
+echo "First lines of the generated calc.fdf (the header, then the forced override):"
+head -2 "$OUT/case1-precedence/elastic_runs/xx/strain_xx_2.00/calc.fdf"
 echo
 echo "...and calc.fdf's OWN MD block, still there, further down, silently overridden:"
 grep -E "^MD\." "$OUT/case1-precedence/elastic_runs/xx/strain_xx_2.00/calc.fdf"

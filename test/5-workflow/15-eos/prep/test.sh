@@ -157,8 +157,8 @@ check_contains "SCF k-grid forced : " log_tmpl.txt
 check_contains "the template defines no k-grid" log_tmpl.txt
 
 echo "Testing: calc.fdf = '%include config_extra.fdf' on top + the template, untouched"
-head -1 eos_tmpl/vol_0.00/calc.fdf | grep -q "^%include config_extra.fdf$"
-if [ $? -eq 0 ] && diff <(tail -n +3 eos_tmpl/vol_0.00/calc.fdf) calc_tmpl.fdf > /dev/null; then
+grep -v '^#' eos_tmpl/vol_0.00/calc.fdf | head -1 | grep -q "^%include config_extra.fdf$"
+if [ $? -eq 0 ] && diff <(tail -n +4 eos_tmpl/vol_0.00/calc.fdf) calc_tmpl.fdf > /dev/null; then
     echo -e "   -> ${GREEN}Verified:${NC} the template is copied byte for byte below the %include"
     PASS=$((PASS+1))
 else
@@ -218,7 +218,7 @@ check_exit_code $? 0
 check_contains "the structure file is itself the input" log_sc.txt
 check_success eos_sc/vol_0.00/si_full.fdf
 check_success eos_sc/vol_0.00/config_extra.fdf
-head -1 eos_sc/vol_0.00/si_full.fdf | grep -q "^%include config_extra.fdf$"
+grep -v '^#' eos_sc/vol_0.00/si_full.fdf | head -1 | grep -q "^%include config_extra.fdf$"
 if [ $? -eq 0 ]; then
     echo -e "   -> ${GREEN}Verified:${NC} the scaled self-contained file starts with %include config_extra.fdf"
     PASS=$((PASS+1))

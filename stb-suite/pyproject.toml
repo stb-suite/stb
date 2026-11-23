@@ -38,7 +38,7 @@ dependencies = [
     "pybader",
     "setuptools",
     "scipy",
-    "phonopy",
+    "phonopy>=4.7.1",  # exclude_gamma_acoustic of run_thermal_displacement_matrices (stb-phononsPos)
     "pandas",
     "icet",
     "pyxtal"

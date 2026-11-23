@@ -137,7 +137,7 @@ requirements:
     - pybader
     - setuptools
     - scipy
-    - phonopy
+    - phonopy >=4.7.1
     - pandas
     - icet
     - pyxtal

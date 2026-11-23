@@ -535,6 +535,8 @@ version before) and **Added** (new options and tools).
   error; pip now refuses at once with the reason. 3.10 is dropped: it reached its end of life in
   October 2026 and cannot install a pymatgen newer than 2025.10.7, with which `stb-sqs` stops (no
   support for icet 4) and `stb-symmetry` reports wrong distortions for planar molecules.
+- `phonopy>=4.7.1` is now required: with an older one, `stb-phononsPos --thermal-displacements` stopped with
+  a `TypeError` (the option that leaves the Gamma acoustic modes out of the sums does not exist there).
 - `pymatgen>=2026.9.24` is now required, for the same two reasons (2026.9.23 and older return a wrong
   mirror plane for a planar molecule of low symmetry).
 

@@ -1,6 +1,6 @@
 # 2.11 — STM Simulator (`stb-stm`)
 
-> **Release candidate note.** The sulfur pseudopotential behind the stored `siesta.LDOS` could not be confirmed (the folder has no log), and the file has not been regenerated for 2.1.0. A new run can differ from this page.
+> **Note.** The sulfur pseudopotential behind the stored `siesta.LDOS` could not be confirmed (the folder has no log), and the file has not been regenerated for 2.1.0. A new run can differ from this page.
 
 ## What this tool does
 

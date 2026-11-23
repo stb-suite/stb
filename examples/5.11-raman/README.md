@@ -1,6 +1,6 @@
 # 5.11 — Workflow: Raman Spectrum (`stb-raman` / `stb-ramanModes` / `stb-ramanAnalysis`)
 
-> **Release candidate note.** The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+> **Note.** The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
 
 The non-resonant, first-order Raman spectrum of a crystal or molecule, entirely from SIESTA, in three
 stages: **Stage 1** (`stb-raman`, code `5.11.1`) displaces atoms to get the phonons; **Stage 2**

@@ -1,6 +1,6 @@
 # 2.12 — Wavefunction Density (`stb-wfdensity`)
 
-> **Release candidate note.** The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
+> **Note.** The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
 
 ## What this tool does
 

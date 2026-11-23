@@ -7909,7 +7909,7 @@ Usage examples:
 \end{toolinfo}
 
 \begin{quote}
-\textbf{Release candidate note.} The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
+\textbf{Note.} The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
 \end{quote}
 
 \subsection{Guide}
@@ -9561,7 +9561,7 @@ Example usage:
 \end{toolinfo}
 
 \begin{quote}
-\textbf{Release candidate note.} The sulfur pseudopotential behind the stored \texttt{siesta.LDOS} could not be confirmed (the folder has no log), and the file has not been regenerated for 2.1.0. A new run can differ from this page.
+\textbf{Note.} The sulfur pseudopotential behind the stored \texttt{siesta.LDOS} could not be confirmed (the folder has no log), and the file has not been regenerated for 2.1.0. A new run can differ from this page.
 \end{quote}
 
 \subsection{Guide}
@@ -9983,7 +9983,7 @@ Example usage:
 \end{toolinfo}
 
 \begin{quote}
-\textbf{Release candidate note.} The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
+\textbf{Note.} The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
 \end{quote}
 
 \subsection{Guide}
@@ -33199,7 +33199,7 @@ Usage examples:
 \end{toolinfo}
 
 \begin{quote}
-\textbf{Release candidate note.} The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+\textbf{Note.} The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
 \end{quote}
 
 \subsection{Guide}
@@ -39328,7 +39328,7 @@ Example usage:
 \end{toolinfo}
 
 \begin{quote}
-\textbf{Release candidate note.} The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+\textbf{Note.} The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
 \end{quote}
 
 \subsection{Guide}
@@ -46207,7 +46207,7 @@ Example usage:
 \end{toolinfo}
 
 \begin{quote}
-\textbf{Release candidate note.} The stored results and the numbers on this page were generated before 2.1.0 left modes below 0.01 THz out of the thermal properties and have not been regenerated yet. A new \texttt{-\/-qha} run gives different thermal-expansion values (MACE-MP-0 medium Si: alpha\_L(300 K) = 9.46e-6 1/K).
+\textbf{Note.} The stored results and the numbers on this page were generated before 2.1.0 left modes below 0.01 THz out of the thermal properties and have not been regenerated yet. A new \texttt{-\/-qha} run gives different thermal-expansion values (MACE-MP-0 medium Si: alpha\_L(300 K) = 9.46e-6 1/K).
 \end{quote}
 
 \subsection{Overview}
@@ -53222,6 +53222,9 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
 \item
   \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}parameter\ basis}: a setting of the mesh or range stage closes only when its V0
   agrees with every tighter setting of the scan (was: the next two); verdicts can move to tighter values.
+\item
+  Authors: a new page on the site and a chapter in the manual list the project lead and the
+  collaborators. Tool banners, source headers and package metadata now name the STB-SUITE team.
 \end{itemize}
 
 \section{Added}
@@ -53378,12 +53381,12 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   \texttt{stb-\allowbreak{}phononsPos\ -\/-\allowbreak{}thermal-\allowbreak{}displacements} next to soft or imaginary modes: phonopy can refuse the
   sum; section {[}3c{]} says so and the rest of the analysis is written. Relax the structure first.
 \item
-  Stored example results not regenerated for this release candidate: 2.7 and 2.12 still use the
+  Stored example results not regenerated for this release: 2.7 and 2.12 still use the
   nc-sr-05 S that 2.1.0 refuses; the S behind the 2.11 \texttt{siesta.LDOS} is unconfirmed; 5.11, 5.16 and
   7.3 predate the last fixes. Their pages say so. Thermal values stored in 5.4 and 5.8 also predate
   the 0.01 THz cutoff of the phonon thermal properties. A new run can differ from all of these.
 \item
-  Not validated end to end for this release candidate: the corrected example 5.11, the complete
+  Not validated end to end for this release: the corrected example 5.11, the complete
   example and test suites from a clean install on Python 3.11 and 3.12, and the effect of the
   0.01 THz cutoff on the \texttt{stb-\allowbreak{}adsorbGibbs} entropy of a real case. Check these results independently.
 \end{itemize}

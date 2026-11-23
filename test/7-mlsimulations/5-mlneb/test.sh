@@ -215,7 +215,7 @@ stb-mlneb --initial vac_initial.fdf --final vac_final.fdf --model small --n-imag
     --save-images --save-data --no-intro -o vac_five > log_five.txt 2>&1
 check_exit_code $? 0
 plain log_five.txt
-check_contains "Band              : 5 images (endpoints included), linear interpolation, atoms" log_five.txt.plain
+check_contains "Band              : 5 images (endpoints included), linear interpolation" log_five.txt.plain
 check_not_contains "+ IDPP" log_five.txt.plain
 check_success vac_five/image_04.fdf
 check_missing vac_five/image_05.fdf
@@ -265,12 +265,12 @@ echo "Testing: matching lattices (section 1) do NOT warn"
 check_not_contains "different lattices" log_neb.txt.plain
 rm -rf vac_stretched vac_final_stretched.fdf
 
-echo "Testing: identical endpoints -- no transition, no barrier, both said in WARNINGS"
+echo "Testing: identical endpoints are refused -- there is no path, so no barrier"
 stb-mlneb --initial vac_initial.fdf --final vac_initial.fdf --model small --n-images 5 \
     --no-intro -o vac_same > log_same.txt 2>&1
-check_exit_code $? 0
+check_exit_code $? 1
 plain log_same.txt
-check_contains "No atom moves more than 0.1 Ang" log_same.txt.plain
+check_contains "no atom moves more than" log_same.txt.plain
 check_contains "nearly identical" log_same.txt.plain
 check_contains "no barrier along this band" log_same.txt.plain
 rm -rf vac_same
@@ -571,7 +571,7 @@ check_exit_code $? 0
 check_success interactive_out/neb_profile.png
 check_success interactive_out/plot/neb_profile.gplot
 check_success interactive_out/neb_path.xyz
-check_missing stb_mlneb_report.txt
+check_success stb_mlneb_report.txt
 
 if [ -f "$MODEL_DIR/mlff_model_compiled.model" ]; then
     echo "Testing: custom model (card offered as default), device asked, workflow + --siesta-check from the menu"

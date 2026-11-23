@@ -50,6 +50,11 @@ if ! python3 -c "import stb, mace" 2>/dev/null || ! command -v git > /dev/null; 
     exit 0
 fi
 
+if ! git -C "$FIXTURE_DIR" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${YELLOW}Skipped entirely:${NC} not a git checkout (a 'git archive' or tarball has no commit count)."
+    exit 0
+fi
+
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 

@@ -234,7 +234,7 @@ fi
 
 # --- 1d. --qha ---
 echo -e "\n--- Testing --qha (small volume scan) ---"
-stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 8 8 8 --qha --n-volumes 4 --strain-range 3.0 \
+stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 8 8 8 --qha --n-volumes 5 --strain-range 3.0 \
     --save-data --no-intro -o mlphonons_qha > log_qha.txt 2>&1
 check_exit_code $? 0
 check_contains "VOLUME SCAN" log_qha.txt
@@ -266,10 +266,10 @@ got = float(row.split()[8])
 sys.exit(0 if abs(got - expect) < 0.05 else 1)
 "
 
-echo "Testing: --qha requires --n-volumes >= 4 (expects failure)"
-stb-mlphonons --file si8.fdf --qha --n-volumes 3 --no-intro > log_qha_toofew.txt 2>&1
+echo "Testing: --qha requires --n-volumes >= 5 (expects failure)"
+stb-mlphonons --file si8.fdf --qha --n-volumes 4 --no-intro > log_qha_toofew.txt 2>&1
 check_exit_code $? 2
-check_contains "n-volumes must be at least 4" log_qha_toofew.txt
+check_contains "n-volumes must be at least 5" log_qha_toofew.txt
 
 rm -rf mlphonons_qha
 
@@ -396,7 +396,7 @@ if command -v gnuplot &> /dev/null; then
     check_contains "gnuplot figure" log_gp.txt
 fi
 check_contains "show needs a display" log_gp.txt
-MPLBACKEND=Agg stb-mlphonons --file si8.fdf --qha --n-volumes 4 --dim 1 1 1 --mesh 6 6 6 --save-gnuplot \
+MPLBACKEND=Agg stb-mlphonons --file si8.fdf --qha --n-volumes 5 --dim 1 1 1 --mesh 6 6 6 --save-gnuplot \
     --no-intro -o mlphonons_gp_qha > log_gp_qha.txt 2>&1
 check_exit_code $? 0
 check_success mlphonons_gp_qha/plot/qha.gplot

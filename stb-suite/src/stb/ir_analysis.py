@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -314,7 +314,7 @@ alongside their individual (basis-dependent) values.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("IR SPECTRUM WORKFLOW -- STAGE 3: ANALYSIS", 'bold'))

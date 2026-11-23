@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -587,7 +587,7 @@ missing dipole correction) rather than being genuinely flat.""",
             "Siesta ToolBox Suite - Work Function",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("WORK FUNCTION CALCULATOR:", 'bold'))

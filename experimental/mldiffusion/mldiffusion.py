@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -176,7 +176,7 @@ def main():
             "Siesta ToolBox Suite - ML Vacancy Diffusion",
             "Vacancy migration-barrier screening via MACE-driven NEB",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("ML VACANCY MIGRATION-BARRIER SCREENING:", 'bold'))

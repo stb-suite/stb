@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -568,7 +568,7 @@ def main():
             "Siesta ToolBox Suite - AIMD Trajectory Analysis",
             "RDF, MSD/diffusion, VACF-derived VDOS, atom/pair tracking",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     if args.list_atoms:

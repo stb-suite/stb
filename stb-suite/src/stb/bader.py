@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 

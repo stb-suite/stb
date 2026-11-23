@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -834,7 +834,7 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("OPTICAL PROPERTIES WORKFLOW -- STAGE 2: ANALYSIS", 'bold'))

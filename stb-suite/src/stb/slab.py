@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -411,7 +411,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     report_path = new_report_path("slab")

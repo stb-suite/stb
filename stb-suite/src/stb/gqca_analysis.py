@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -426,7 +426,7 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("GQCA WORKFLOW -- STAGE 2: MASS-ACTION ANALYSIS", 'bold'))

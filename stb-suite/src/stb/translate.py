@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
     
@@ -1499,7 +1499,7 @@ def main():
         show_intro(["Siesta ToolBox Suite - File Translator",
                     "Structure files between SIESTA, VASP, CIF, XYZ, XSF, FHI-aims, DFTB+ and LAMMPS",
                     f"Version {VERSION} | University of Brasilia - 2026",
-                    "Developed by Dr. Carlos M. O. Bastos"])
+                    "Developed by the STB-SUITE team"])
 
     is_glob = any(ch in args.in_file for ch in '*?[')
     matches = sorted(glob.glob(args.in_file)) if is_glob else [args.in_file]

@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -1095,7 +1095,7 @@ def main():
             "Siesta ToolBox Suite - Custom ML Force Field (Train)",
             "Fine-tune MACE-MP on real SIESTA data",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- TRAIN:", 'bold'))

@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -288,7 +288,7 @@ def main():
             "Siesta ToolBox Suite - Hirshfeld-I Prep (Stage 1/3)",
             "Combined system + isolated NEUTRAL atom references, ready to run",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     report_path = new_report_path("hirshfeldPrep")

@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -1038,7 +1038,7 @@ def main():
         show_intro(["Siesta ToolBox Suite - ML NEB",
                     "Climbing-image nudged elastic band, driven entirely by a MACE potential",
                     f"Version {VERSION} | University of Brasilia - 2026",
-                    "Developed by Dr. Carlos M. O. Bastos"])
+                    "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)
     report_path = new_report_path("mlneb")

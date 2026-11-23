@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -129,7 +129,7 @@ compare several slices on the same scale.""",
             "Siesta ToolBox Suite - Density Plotter",
             "Exports RHO to 2D Maps, 3D Clouds, and matplotlib previews",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("DENSITY PLOTTER:", 'bold'))

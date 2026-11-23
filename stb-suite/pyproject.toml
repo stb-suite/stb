@@ -11,7 +11,7 @@ description = "Command-line tools for every stage of a SIESTA DFT project: input
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{name = "Carlos M. O. Bastos"}]
+authors = [{name = "STB-SUITE team"}]
 keywords = ["SIESTA", "DFT", "density functional theory", "materials science", "computational chemistry",
             "phonons", "elastic constants", "adsorption", "NEB", "machine-learning potentials", "MACE"]
 classifiers = [

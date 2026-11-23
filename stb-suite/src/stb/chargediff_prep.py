@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -592,7 +592,7 @@ def main():
             "Siesta ToolBox Suite - Charge Density Difference (Prep)",
             "Writes one ghosted SIESTA fragment folder per N-fragment split",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)

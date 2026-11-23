@@ -118,5 +118,4 @@ interactive menu.
 
 The source code, the example inputs behind every guide, and the issue tracker are on
 [GitHub](https://github.com/stb-suite/stb). Distributed under the MIT License.
-Developed by Dr. Carlos M. O. Bastos, University of Brasília (UnB) —
-[bastoscmo.github.io](https://bastoscmo.github.io).
+Developed at the University of Brasília (UnB); see the [authors](authors.md).

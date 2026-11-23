@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -407,7 +407,7 @@ def main():
             "Siesta ToolBox Suite - ML Structure Search",
             "Basin-hopping global search for the lowest-energy arrangement, via MACE",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text(f"ML STRUCTURE SEARCH ({args.algorithm.upper()}):", 'bold'))

@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -831,7 +831,7 @@ def main():
             "Siesta ToolBox Suite - Custom ML Force Field (Active Learning)",
             "Suggest new SIESTA configurations to label, using the fine-tuned model(s)",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- ACTIVE LEARNING:", 'bold'))

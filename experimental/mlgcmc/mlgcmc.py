@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -345,7 +345,7 @@ def main():
             "Siesta ToolBox Suite - ML Grand Canonical Monte Carlo",
             "Adsorption Monte Carlo (canonical/grand-canonical), driven entirely by a MACE potential",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text(f"ML MONTE CARLO ({args.ensemble.upper()}):", 'bold'))

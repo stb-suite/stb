@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -1035,7 +1035,7 @@ def main():
             "Siesta ToolBox Suite - Custom ML Force Field (Validate)",
             "Score each training round against a held-out SIESTA test set",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- VALIDATE:", 'bold'))
     print("-" * 60)

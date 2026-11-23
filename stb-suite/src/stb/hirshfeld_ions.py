@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -215,7 +215,7 @@ def main():
             "Siesta ToolBox Suite - Hirshfeld-I Ions (Stage 2/3)",
             "Write BOTH cation and anion references, per species",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     report_path = new_report_path("hirshfeldIons")

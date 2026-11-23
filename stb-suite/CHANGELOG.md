@@ -571,6 +571,8 @@ version before) and **Added** (new options and tools).
   slab or a 2D material; was 8x8x8). Phonon RMSEs on the mesh of 2D systems change.
 - `stb-convergenceAnalysis --parameter basis`: a setting of the mesh or range stage closes only when its V0
   agrees with every tighter setting of the scan (was: the next two); verdicts can move to tighter values.
+- Authors: a new page on the site and a chapter in the manual list the project lead and the
+  collaborators. Tool banners, source headers and package metadata now name the STB-SUITE team.
 
 ### Added
 

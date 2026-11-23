@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 #     Mechanical Properties Analyzer            #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -695,7 +695,7 @@ def main():
     if args.intro:
         show_intro([
             f"Siesta Tool Box - Mechanical Analysis v{VERSION}",
-            "Developed by Dr. Carlos M. O. Bastos",
+            "Developed by the STB-SUITE team",
             "bastoscmo.github.io"
         ])
 

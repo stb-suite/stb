@@ -2,7 +2,7 @@
 
 #################################################
 #     Siesta Tool Box - Suite                   #
-# Developed by Dr. Carlos M. O. Bastos          #
+# Developed by the STB-SUITE team               #
 #      bastoscmo.github.io                      #
 #################################################
 
@@ -482,7 +482,7 @@ combined system and every fragment are spin-polarized).""",
             "Siesta ToolBox Suite - Charge Density Difference (Analysis)",
             "Delta rho = rho_combined - sum(rho_fragment_i)",
             f"Version {VERSION} | University of Brasilia - 2026",
-            "Developed by Dr. Carlos M. O. Bastos"
+            "Developed by the STB-SUITE team"
         ])
 
     print("\n" + color_text("CHARGE DENSITY DIFFERENCE -- STAGE 2: ANALYSIS", 'bold'))

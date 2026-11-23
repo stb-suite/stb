@@ -421,6 +421,9 @@ version before) and **Added** (new options and tools).
   lacked `pyxtal` (stb-xrd, stb-xrdsearch), pinned `scipy==1.13.1` where `pyproject.toml` does not
   (the suite is tested with scipy 1.18), and pointed `home` to an old account.
 
+- `stb-2Dstacking`: `-i -id 0` is refused on every Python. Up to Python 3.11, argparse let an option
+  through when its value equalled its default, so the run entered the interactive mode despite `-id 0`.
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

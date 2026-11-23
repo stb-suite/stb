@@ -162,7 +162,7 @@ def main():
     
     match_group = parser.add_mutually_exclusive_group()
     match_group.add_argument("-i", "--interactive", action="store_true", help="Interactive mode: shows table to select match ID")
-    match_group.add_argument("-id", "--match_id", type=int, default=0, help="Directly select a specific match ID (default: 0)")
+    match_group.add_argument("-id", "--match_id", type=int, default=None, help="Directly select a specific match ID (default: 0)")
     
     parser.add_argument("--batch_sym", action="store_true", help="Generate all high-symmetry stackings automatically")
     
@@ -270,7 +270,7 @@ def main():
         layer1, layer2, gaps=gaps, target_vacuum=args.vacuum,
         max_area=args.max_area, max_strain=args.max_strain,
         shift_x=args.shift_x, shift_y=args.shift_y, twist_angle=args.twist,
-        strain_mode=args.strain_mode, match_id=args.match_id,
+        strain_mode=args.strain_mode, match_id=args.match_id or 0,
         interactive=args.interactive, batch_sym=args.batch_sym
     )
     print_dual(f"Heterostructure(s) built: {len(results)}", f_out)

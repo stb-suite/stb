@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 from stb import __version__ as VERSION
@@ -128,7 +128,7 @@ compare several slices on the same scale.""",
         show_intro([
             "Siesta ToolBox Suite - Density Plotter",
             "Exports RHO to 2D Maps, 3D Clouds, and matplotlib previews",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

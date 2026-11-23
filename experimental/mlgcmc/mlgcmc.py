@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Monte Carlo (canonical or grand-canonical) adsorption simulation driven
@@ -344,7 +344,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - ML Grand Canonical Monte Carlo",
             "Adsorption Monte Carlo (canonical/grand-canonical), driven entirely by a MACE potential",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

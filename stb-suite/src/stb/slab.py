@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 from stb import __version__ as VERSION
@@ -410,7 +410,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

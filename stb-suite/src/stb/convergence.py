@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Stage 1 of 2: writes one ready-to-run SIESTA folder (structure + calc.fdf
@@ -238,7 +238,7 @@ def run_basis_mode(args, parser):
 
     if args.intro:
         show_intro(["Siesta ToolBox Suite", "A comprehensive toolkit for SIESTA DFT simulations",
-                    f"Version {VERSION} | University of Brasilia - 2026", "Developed by the STB-SUITE team"])
+                    f"Version {VERSION} | 2026", "Developed by the STB-SUITE team"])
     base = os.path.join(args.output_dir, "basis")
     os.makedirs(base, exist_ok=True)
     report_path = new_report_path("convergence")
@@ -566,7 +566,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

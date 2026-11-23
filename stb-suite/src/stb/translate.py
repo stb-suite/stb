@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
     
 from stb import __version__ as VERSION
@@ -636,7 +636,7 @@ def writefileposcar(typevectors, latticeparameter, vectors, getatoms, atomsposit
     # --- END NEW ---
 
     outfile = []
-    outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
+    outfile.append('# automatic create using stb-translate (https://github.com/stb-suite/stb)')
     outfile.append(f"{latticeparameter}")
     for lin in vectors:
         outfile.append(f"{lin[0]}   {lin[1]}   {lin[2]} ")
@@ -795,7 +795,7 @@ def writefilexsf(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # --- END NEW ---
     
     outfile = []
-    outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
+    outfile.append('# automatic create using stb-translate (https://github.com/stb-suite/stb)')
     natoms_total = 0
     comment = ""
     for el in getatoms:
@@ -832,7 +832,7 @@ def writefilefhi(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # --- END NEW ---
 
     outfile = []
-    outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
+    outfile.append('# automatic create using stb-translate (https://github.com/stb-suite/stb)')
     natoms_total = 0
     comment = ""
     for el in getatoms:
@@ -1498,7 +1498,7 @@ def main():
     if args.intro:
         show_intro(["Siesta ToolBox Suite - File Translator",
                     "Structure files between SIESTA, VASP, CIF, XYZ, XSF, FHI-aims, DFTB+ and LAMMPS",
-                    f"Version {VERSION} | University of Brasilia - 2026",
+                    f"Version {VERSION} | 2026",
                     "Developed by the STB-SUITE team"])
 
     is_glob = any(ch in args.in_file for ch in '*?[')

@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 from stb import __version__ as VERSION
@@ -566,7 +566,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Status Checker",
             "What's in this calc folder, and did it finish OK?",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

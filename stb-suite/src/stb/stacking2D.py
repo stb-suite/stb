@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """
@@ -219,7 +219,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Monolayer Stacker",
             "ZSL Heteroepitaxy Algorithm & Geometric Control",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

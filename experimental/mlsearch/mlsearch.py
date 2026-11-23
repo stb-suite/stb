@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Global structure search driven entirely by a MACE potential -- the
@@ -406,7 +406,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - ML Structure Search",
             "Basin-hopping global search for the lowest-energy arrangement, via MACE",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

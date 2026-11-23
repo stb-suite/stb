@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """stb-mlelastic (7.4): elastic constants from a MACE potential, by the stress-strain method.
@@ -1034,7 +1034,7 @@ def main():
     if args.intro:
         show_intro(["Siesta ToolBox Suite - ML Elastic Constants",
                     "Stress-strain stiffness tensor, driven entirely by a MACE potential",
-                    f"Version {VERSION} | University of Brasilia - 2026",
+                    f"Version {VERSION} | 2026",
                     "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)

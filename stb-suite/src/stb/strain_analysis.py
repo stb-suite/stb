@@ -4,7 +4,7 @@
 #     Siesta Tool Box - Suite                   #
 #     Mechanical Properties Analyzer            #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Stage 2 of 2: reads back the finished SIESTA runs from stb-strain's own
@@ -696,7 +696,7 @@ def main():
         show_intro([
             f"Siesta Tool Box - Mechanical Analysis v{VERSION}",
             "Developed by the STB-SUITE team",
-            "bastoscmo.github.io"
+            "stb-suite.github.io/stb"
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)

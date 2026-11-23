@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Stage 2 of the Hirshfeld-I (iterative) charge-partitioning workflow.
@@ -214,7 +214,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Hirshfeld-I Ions (Stage 2/3)",
             "Write BOTH cation and anion references, per species",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

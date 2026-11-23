@@ -1800,7 +1800,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Elastic Analyzer",
             "Elastic Constants & Stability Calculator",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Integrated Style Refactoring"
         ])
 

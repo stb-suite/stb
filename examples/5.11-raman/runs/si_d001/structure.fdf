@@ -5,7 +5,7 @@
 # Cubic Fd-3m => the dielectric tensor is a scalar (eps_xx = eps_yy = eps_zz, eps_ij = 0):
 # the example uses that as a built-in consistency check of the whole workflow.
 # The ~1e-5 Ang noise in the lattice vectors and positions is the relaxation's own.
-# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)
+# automatic create using stb-translate (https://github.com/stb-suite/stb)
 
 NumberOfSpecies    1
 NumberofAtoms      2

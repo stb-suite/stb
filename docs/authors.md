@@ -1,7 +1,5 @@
 # Authors
 
-STB-SUITE is developed at the University of Brasília (UnB), Brazil.
-
 ## Project lead
 
 <div class="stb-authors">

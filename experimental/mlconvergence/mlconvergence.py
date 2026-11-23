@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Model-size convergence check for MACE-MP-0 -- the sixth tool in the ML
@@ -182,7 +182,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - ML Model-Size Convergence",
             "Compares MACE-MP-0 model sizes on the same reference calculation",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

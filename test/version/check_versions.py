@@ -101,7 +101,7 @@ def check_sources():
     (fail if own else ok)(f"no tool defines its own VERSION literal" + (f": {own}" if own else ""))
     years = set()
     for p in SRC.glob("*.py"):
-        years |= set(re.findall(r"University of Brasilia - (\d{4})", p.read_text(encoding="utf-8")))
+        years |= set(re.findall(r"Version \{VERSION\} \| (\d{4})", p.read_text(encoding="utf-8")))
     (ok if len(years) == 1 else fail)(f"the banners carry one year ({sorted(years)})")
 
 

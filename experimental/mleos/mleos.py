@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Standalone equation-of-state (E vs V) calculation driven entirely by a
@@ -224,7 +224,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - ML Equation of State",
             "E vs V curve + equation-of-state fit, driven entirely by a MACE potential",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

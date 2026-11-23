@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 from stb import __version__ as VERSION
@@ -217,7 +217,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - AIMD Trajectory Converter",
             "Adds back the lattice SIESTA's own .ANI file doesn't carry",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

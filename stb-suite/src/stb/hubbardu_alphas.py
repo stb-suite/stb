@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 # 1.3.0: numbered-section report (matching stage 1/stb-hubbardu and the other
@@ -118,7 +118,7 @@ stb-hubbarduAnalysis.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

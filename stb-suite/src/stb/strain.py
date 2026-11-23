@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Stage 1 of 2: applies a uniaxial/biaxial Cartesian strain to a SIESTA
@@ -463,7 +463,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

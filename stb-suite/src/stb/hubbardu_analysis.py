@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 # 2.0.0: numbered-section report (matching stages 1/2's convention); --save-report;
@@ -271,7 +271,7 @@ visually instead of trusting R^2 alone.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

@@ -573,8 +573,8 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 seen_groups = {}  # id(ModeSymmetry) -> representative k
                 for k, freq, band_idx in selected:
                     ms = band_to_symmetry.get(band_idx)
-                    if ms is None or len(ms.band_indices) <= 1:
-                        continue
+                    if ms is None or len(ms.band_indices) <= 1 or not ms.is_real_irrep:
+                        continue     # an accidental degeneracy has no common activity: every band runs
                     group_key = id(ms)
                     if group_key not in seen_groups:
                         seen_groups[group_key] = k

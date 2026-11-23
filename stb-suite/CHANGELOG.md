@@ -438,6 +438,10 @@ version before) and **Added** (new options and tools).
 - `stb-mlmd`: the `Empty space` line is written for every cell with vacuum. It was missing when one gap
   reached `--vacuum-gap`, so an O2 molecule in a 10 Ang box was described only as "2D (slab)".
 
+- `stb-ramanModes --skip-degenerate`: only the partners of one irreducible representation share a result.
+  Two different irreps that happen to have the same frequency were treated as partners, and the second mode
+  received the first one's activity; each now runs.
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

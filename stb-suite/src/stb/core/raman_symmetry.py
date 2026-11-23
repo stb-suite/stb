@@ -69,8 +69,9 @@ class ModeSymmetry:
     mode).
     """
 
-    def __init__(self, band_indices, label, is_raman_active):
+    def __init__(self, band_indices, label, is_raman_active, is_real_irrep=True):
         self.band_indices = list(band_indices)
+        self.is_real_irrep = is_real_irrep   # False: an accidental degeneracy of different irreps
         self.label = label
         self.is_raman_active = is_raman_active
 
@@ -146,9 +147,20 @@ def _classify_from_irreps(irreps):
         n_i = reduction_multiplicity(chi_quad, characters[i], n_elem)
         is_active = bool(abs(n_i.real) > RAMAN_ACTIVE_TOL)
         label = labels[i] if labels else None
-        mode_symmetries.append(ModeSymmetry(bset, label, is_active))
+        mode_symmetries.append(ModeSymmetry(bset, label, is_active,
+                                            is_real_irreducible(characters[i], sq_index)))
 
     return mode_symmetries
+
+
+def is_real_irreducible(chi, sq_index):
+    """Whether a band group's character is ONE irrep over the reals: <chi|chi> = 1 with Frobenius-Schur indicator 1,
+    or a complex-conjugate pair (E of C3: <chi|chi> = 2, indicator 0). Only then is a rotational invariant of the Raman
+    tensor the same for every partner (Schur); two different irreps that happen to share a frequency fail this."""
+    chi = np.asarray(chi)
+    norm = float(np.sum(np.abs(chi) ** 2).real) / len(chi)
+    indicator = float(np.sum(chi[sq_index]).real) / len(chi)
+    return (abs(norm - 1) < 0.1 and abs(indicator - 1) < 0.1) or (abs(norm - 2) < 0.1 and abs(indicator) < 0.1)
 
 
 # --- Component-level tensor-form reduction (stb-ramanModes --reduce-components) ---

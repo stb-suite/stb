@@ -696,6 +696,13 @@ version before) and **Added** (new options and tools).
   spin-orbit.
 - `stb-phononsPos --thermal-displacements` next to soft or imaginary modes: phonopy can refuse the
   sum; section [3c] says so and the rest of the analysis is written. Relax the structure first.
+- Stored example results not regenerated for this release candidate: 2.7 and 2.12 still use the
+  nc-sr-05 S that 2.1.0 refuses; the S behind the 2.11 `siesta.LDOS` is unconfirmed; 5.11, 5.16 and
+  7.3 predate the last fixes. Their pages say so. Thermal values stored in 5.4 and 5.8 also predate
+  the 0.01 THz cutoff of the phonon thermal properties. A new run can differ from all of these.
+- Not validated end to end for this release candidate: the corrected example 5.11, the complete
+  example and test suites from a clean install on Python 3.11 and 3.12, and the effect of the
+  0.01 THz cutoff on the `stb-adsorbGibbs` entropy of a real case. Check these results independently.
 
 ## 2.0.0 (2026-10-31) -- first stable release
 

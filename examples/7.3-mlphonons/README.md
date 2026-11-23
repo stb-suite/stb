@@ -1,5 +1,7 @@
 # 7.3 — ML Phonons (`stb-mlphonons`)
 
+> **Release candidate note.** The stored results and the numbers on this page were generated before 2.1.0 left modes below 0.01 THz out of the thermal properties and have not been regenerated yet. A new `--qha` run gives different thermal-expansion values (MACE-MP-0 medium Si: alpha_L(300 K) = 9.46e-6 1/K).
+
 `stb-mlphonons` computes the **phonons** of a crystal — its vibrational normal modes — with a MACE machine-learned
 potential: either the MACE-MP-0 foundation model, or a model you fine-tuned on your own SIESTA calculations with the
 MLFF workflow (`7.1`), which always comes with its **model card**. It uses the finite-displacement method through

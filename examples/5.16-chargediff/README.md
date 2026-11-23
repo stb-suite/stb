@@ -1,5 +1,7 @@
 # 5.16 — Workflow: Charge Density Difference (`stb-chargediffPrep` / `stb-chargediffAnalysis`)
 
+> **Release candidate note.** The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+
 This workflow has 2 stages: **Stage 1** (`stb-chargediffPrep`, code `5.16.1`) takes a
 **combined structure** — two molecules, a molecule on a surface, two layers, any system made
 of `N ≥ 2` fragments — and a fragment split, and writes `N + 1` ready-to-run SIESTA folders:

@@ -7893,6 +7893,10 @@ Usage examples:
 \textbf{Summary:} Calculate Work Function from electrostatic potential (.VT).
 \end{toolinfo}
 
+\begin{quote}
+\textbf{Release candidate note.} The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
+\end{quote}
+
 \subsection{Guide}
 \label{guide-2.7}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}2.\allowbreak{}7-\allowbreak{}stb-\allowbreak{}workfunction/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
 
@@ -9541,6 +9545,10 @@ Example usage:
 \textbf{Summary:} Simulate an STM image (Tersoff-Hamann approximation) from a SIESTA .LDOS grid.
 \end{toolinfo}
 
+\begin{quote}
+\textbf{Release candidate note.} The sulfur pseudopotential behind the stored \texttt{siesta.LDOS} could not be confirmed (the folder has no log), and the file has not been regenerated for 2.1.0. A new run can differ from this page.
+\end{quote}
+
 \subsection{Guide}
 \label{guide-2.11}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}2.\allowbreak{}11-\allowbreak{}stm/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
 
@@ -9958,6 +9966,10 @@ Example usage:
 
 \textbf{Summary:} Real-space \textbar{}psi\textbar{}\textasciicircum{}2 of a single (k, band) eigenstate from .WFSX -\textgreater{} Gaussian cube.
 \end{toolinfo}
+
+\begin{quote}
+\textbf{Release candidate note.} The stored runs use the nc-sr-05 sulfur pseudopotential, which 2.1.0 refuses, and have not been regenerated yet. A new run uses nc-sr-04, so its numbers can differ from this page.
+\end{quote}
 
 \subsection{Guide}
 \label{guide-2.12}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}2.\allowbreak{}12-\allowbreak{}wfdensity/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
@@ -33171,6 +33183,10 @@ Usage examples:
 \textbf{Summary:} Self-contained: computes its own phonons, then the +/-delta optical (dielectric-response) displacements along each mode, then the Raman tensor (diagonal, or full with \opt{--full-tensor}), the activities, depolarization ratios and the spectrum.
 \end{toolinfo}
 
+\begin{quote}
+\textbf{Release candidate note.} The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+\end{quote}
+
 \subsection{Guide}
 \label{guide-5.11}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}5.\allowbreak{}11-\allowbreak{}raman/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
 
@@ -39295,6 +39311,10 @@ Example usage:
 
 \textbf{Summary:} Generate ghosted fragment folders for an already-relaxed combined system (bilayer, molecule-on-slab, or any N-fragment system), then compute Delta rho = rho\_combined - sum(rho\_fragment\_i) to visualize charge accumulation/depletion regions.
 \end{toolinfo}
+
+\begin{quote}
+\textbf{Release candidate note.} The stored results on this page were generated before the last fixes of 2.1.0 and have not been regenerated yet, so a new run can differ from them.
+\end{quote}
 
 \subsection{Guide}
 \label{guide-5.16}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}5.\allowbreak{}16-\allowbreak{}chargediff/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
@@ -46171,6 +46191,10 @@ Example usage:
 \textbf{Summary:} Phonons from a MACE potential by finite displacements -- the foundation model or your own fine-tuned one, always with its model card: band structure with symmetry labels, sound velocities, DOS, quantum thermodynamics; with \opt{--qha} the thermal expansion, $B(T)$ and Gr\"uneisen parameters; with \opt{--check-convergence} the supercell, q-point by q-point.
 \end{toolinfo}
 
+\begin{quote}
+\textbf{Release candidate note.} The stored results and the numbers on this page were generated before 2.1.0 left modes below 0.01 THz out of the thermal properties and have not been regenerated yet. A new \texttt{-\/-qha} run gives different thermal-expansion values (MACE-MP-0 medium Si: alpha\_L(300 K) = 9.46e-6 1/K).
+\end{quote}
+
 \subsection{Overview}
 \label{overview-5.2}
 
@@ -52999,6 +53023,29 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   root. \texttt{stb-\allowbreak{}suite/README.md} and \texttt{stb-\allowbreak{}suite/LICENSE} are now links to them. The conda recipe
   lacked \texttt{pyxtal} (stb-xrd, stb-xrdsearch), pinned \texttt{scipy==1.13.1} where \texttt{pyproject.toml} does not
   (the suite is tested with scipy 1.18), and pointed \texttt{home} to an old account.
+\item
+  \texttt{stb-\allowbreak{}2Dstacking}: \texttt{-\allowbreak{}i\ -\allowbreak{}id\ 0} is refused on every Python. Up to Python 3.11, argparse let an option
+  through when its value equalled its default, so the run entered the interactive mode despite \texttt{-\allowbreak{}id\ 0}.
+\item
+  \texttt{stb-\allowbreak{}suite} and \texttt{stb-\allowbreak{}2Dstacking\ -\allowbreak{}i} no longer end in a traceback when the input runs out (a script or
+  a job). At a menu or at "Press Enter" this is a normal exit; in the middle of a tool\textquotesingle s questions it is
+  a one-line \texttt{{[}ERROR{]}} with exit code 1, so a script with outdated answers still fails.
+\item
+  Phonon free energy, entropy and heat capacity (\texttt{stb-\allowbreak{}mlphonons}, \texttt{-\/-\allowbreak{}qha} too, \texttt{stb-\allowbreak{}phononsPos}, \texttt{stb-\allowbreak{}adsorbGibbs}):
+  on a Gamma-centred mesh the three acoustic modes at Gamma come out as +-1e-7 THz, and the positive ones entered
+  ln(1 - exp(-hf/kT)). F moved by an amount that changed at random from one volume to the next, and was -inf at some
+  temperatures, which stopped \texttt{-\/-\allowbreak{}qha}. Modes below 0.01 THz are now left out. \textbf{Thermal values and the QHA expansion
+  change}: for MACE-MP-0 Si, V(T) no longer jumps and alpha\_L(300 K) is 9.46e-6 1/K.
+\item
+  \texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha}: the summary said "Negative expansion: below 420 K" because of one such point, for a region
+  that is 10-60 K. It now names the low-temperature region, and any other temperature with alpha \textless{} 0 is a warning.
+\item
+  \texttt{stb-\allowbreak{}mlmd}: the \texttt{Empty\ space} line is written for every cell with vacuum. It was missing when one gap
+  reached \texttt{-\/-\allowbreak{}vacuum-\allowbreak{}gap}, so an O2 molecule in a 10 Ang box was described only as "2D (slab)".
+\item
+  \texttt{stb-\allowbreak{}ramanModes} and \texttt{stb-\allowbreak{}irModes\ -\/-\allowbreak{}skip-\allowbreak{}degenerate}: only the partners of one irreducible representation
+  share a result. Two different irreps that happen to have the same frequency were treated as partners, and
+  the second mode received the first one\textquotesingle s activity or intensity; each now runs.
 \end{itemize}
 
 \section{Changed}
@@ -53107,9 +53154,17 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   analysis (DOS, PDOS, thermal properties, report) is written -\/- before, the whole run stopped with
   an AssertionError traceback.
 \item
-  Supported Python versions are 3.10 to 3.12 (\texttt{requires-\allowbreak{}python} now says so). 3.9 was listed but never
+  Supported Python versions are 3.11 and 3.12 (\texttt{requires-\allowbreak{}python} now says so). 3.9 was listed but never
   worked: phonopy does not build there, so \texttt{pip\ install} failed late with an unrelated-looking build
-  error; pip now refuses at once with the reason.
+  error; pip now refuses at once with the reason. 3.10 is dropped: it reached its end of life in
+  October 2026 and cannot install a pymatgen newer than 2025.10.7, with which \texttt{stb-\allowbreak{}sqs} stops (no
+  support for icet 4) and \texttt{stb-\allowbreak{}symmetry} reports wrong distortions for planar molecules.
+\item
+  \texttt{phonopy\textgreater{}=4.7.1} is now required: with an older one, \texttt{stb-\allowbreak{}phononsPos\ -\/-\allowbreak{}thermal-\allowbreak{}displacements} stopped with
+  a \texttt{TypeError} (the option that leaves the Gamma acoustic modes out of the sums does not exist there).
+\item
+  \texttt{pymatgen\textgreater{}=2026.9.24} is now required, for the same two reasons (2026.9.23 and older return a wrong
+  mirror plane for a planar molecule of low symmetry).
 \item
   \textbf{Elastic constants (5.2) are relaxed-ion by default.} \texttt{stb-\allowbreak{}elasticInputs} used to force a single
   point in every folder, so the workflow could only give clamped-ion constants, while \texttt{stb-\allowbreak{}mlelastic}
@@ -53307,8 +53362,16 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
 \item
   \texttt{stb-\allowbreak{}phononsPos\ -\/-\allowbreak{}thermal-\allowbreak{}displacements} next to soft or imaginary modes: phonopy can refuse the
   sum; section {[}3c{]} says so and the rest of the analysis is written. Relax the structure first.
+\item
+  Stored example results not regenerated for this release candidate: 2.7 and 2.12 still use the
+  nc-sr-05 S that 2.1.0 refuses; the S behind the 2.11 \texttt{siesta.LDOS} is unconfirmed; 5.11, 5.16 and
+  7.3 predate the last fixes. Their pages say so. Thermal values stored in 5.4 and 5.8 also predate
+  the 0.01 THz cutoff of the phonon thermal properties. A new run can differ from all of these.
+\item
+  Not validated end to end for this release candidate: the corrected example 5.11, the complete
+  example and test suites from a clean install on Python 3.11 and 3.12, and the effect of the
+  0.01 THz cutoff on the \texttt{stb-\allowbreak{}adsorbGibbs} entropy of a real case. Check these results independently.
 \end{itemize}
-
 
 \chapter{Units and conversion factors}\label{app-units}
 \begin{center}\small

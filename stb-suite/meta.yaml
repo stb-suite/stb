@@ -21,17 +21,17 @@ channels:
 
 requirements:
   host:
-    - python>=3.10,<3.13
+    - python>=3.11,<3.13
     - pip
     - build
   run:
-    - python>=3.10,<3.13
+    - python>=3.11,<3.13
     - numpy
     - matplotlib
     - pip
   pip:
     - ase
-    - pymatgen
+    - pymatgen >=2026.9.24
     - spglib>=2.2.0
     - sisl
     - pybader

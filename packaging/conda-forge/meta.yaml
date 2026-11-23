@@ -1,6 +1,6 @@
 {% set name = "stb-suite" %}
 {% set version = "2.1.0" %}
-{% set python_min = "3.10" %}
+{% set python_min = "3.11" %}
 
 # conda-forge recipe of STB-SUITE, for a pull request to github.com/conda-forge/staged-recipes
 # (copy this file to recipes/stb-suite/meta.yaml there). Built from the sdist on PyPI, so the
@@ -131,7 +131,7 @@ requirements:
     - numpy
     - ase
     - matplotlib-base
-    - pymatgen
+    - pymatgen >=2026.9.24
     - spglib >=2.2.0
     - sisl
     - pybader

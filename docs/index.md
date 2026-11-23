@@ -40,7 +40,7 @@ cd stb/stb-suite
 pip install .
 ```
 
-Python 3.10 to 3.12. The ML Simulations tools additionally need PyTorch and `mace-torch`,
+Python 3.11 and 3.12. The ML Simulations tools additionally need PyTorch and `mace-torch`,
 which the optional `ml` extra installs:
 
 ```bash

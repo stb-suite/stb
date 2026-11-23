@@ -21,19 +21,18 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
 ]
 # 3.9 is out: phonopy does not build there (pip failed late, inside its build).
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy",
     "ase",
     "matplotlib",
-    "pymatgen",
+    "pymatgen>=2026.9.24",  # older: wrong mirror planes for planar molecules (stb-symmetry); icet 4 API (stb-sqs)
     "spglib>=2.2.0",  # >=2.1.0 for get_layergroup(), >=2.2.0 for its Hall-number fixes (stb-symmetry)
     "sisl",
     "pybader",

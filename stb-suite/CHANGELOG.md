@@ -509,9 +509,13 @@ version before) and **Added** (new options and tools).
   analysis (DOS, PDOS, thermal properties, report) is written -- before, the whole run stopped with
   an AssertionError traceback.
 
-- Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never
+- Supported Python versions are 3.11 and 3.12 (`requires-python` now says so). 3.9 was listed but never
   worked: phonopy does not build there, so `pip install` failed late with an unrelated-looking build
-  error; pip now refuses at once with the reason.
+  error; pip now refuses at once with the reason. 3.10 is dropped: it reached its end of life in
+  October 2026 and cannot install a pymatgen newer than 2025.10.7, with which `stb-sqs` stops (no
+  support for icet 4) and `stb-symmetry` reports wrong distortions for planar molecules.
+- `pymatgen>=2026.9.24` is now required, for the same two reasons (2026.9.23 and older return a wrong
+  mirror plane for a planar molecule of low symmetry).
 
 - **Elastic constants (5.2) are relaxed-ion by default.** `stb-elasticInputs` used to force a single
   point in every folder, so the workflow could only give clamped-ion constants, while `stb-mlelastic`

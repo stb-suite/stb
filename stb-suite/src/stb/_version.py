@@ -31,9 +31,9 @@ import subprocess
 from importlib import metadata
 from pathlib import Path
 
-RELEASE = "2.1.0"
+RELEASE = "2.1.1"
 DEV = True
-BASE_TAG = "v2.0.0"
+BASE_TAG = "v2.1.0"
 
 _HERE = Path(__file__).resolve()
 _REPO = _HERE.parents[3] if len(_HERE.parents) > 3 else None
